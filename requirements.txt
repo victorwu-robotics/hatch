@@ -1,0 +1,15 @@
+# Hatch (孵) Core Dependencies
+
+numpy>=1.24.0,<2.3.0
+scipy>=1.10.0,<1.16.0
+vtk>=9.2.0,<9.3.0
+PyQt5>=5.15.0,<5.16.0
+trimesh>=4.0.0,<5.0.0
+
+# Optional: DAE mesh support (trimesh already handles this)
+# No extra package needed
+
+# Optional: Hardware drivers (uncomment when needed)
+# ur_rtde>=1.6.0
+# pyrealsense2>=2.56.0
+# pyorbbecsdk2>=2.0.0

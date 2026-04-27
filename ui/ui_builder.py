@@ -67,7 +67,7 @@ class UIBuilder:
             file_menu.addAction(action)
         
         # View Menu
-        self.view_menu = ViewMenu(self.parent, self.state_channel, self.camera_manager, self.engine)
+        self.view_menu = ViewMenu(self.parent, self.camera_manager, self.engine)
         view_menu = menubar.addMenu("&View")
         for action in self.view_menu.get_actions():
             view_menu.addAction(action)

@@ -1,469 +1,469 @@
 """
-Robot Arm Manager - Facade for robot control.
-Now delegates to CommandHandler and StateHandler.
+Robot Manager - Pure Python service for robot lifecycle management.
+
+Owns the RealRobot and SimulatedRobot instances.
+Handles robot loading, connection management, and mode switching.
+Publishes all state changes via StateChannel events.
+Does NOT emit Qt signals. Does NOT inherit from QObject.
+
+Principle #4: Everything in URDF.
+Principle #8: Pure Python (no Qt in core services).
+Principle #9: UI Separate from Services.
+Principle #10: One Robot Per Session.
 """
 
 from typing import Optional, Dict, Any
-
-from PyQt5.QtCore import QObject, pyqtSignal
+from pathlib import Path
+import numpy as np
+import logging
 
 from core.world_state.state_channel import StateChannel
 from core.world_state.transform_registry import TransformRegistry
 from core.world_state.event_types import EventType
 from core.mode import Mode
-from core.command_handler import CommandHandler
-from core.state_handler import StateHandler
-from drivers.robot_arm.ur_rtde_bridge import URRobotDriver
-from drivers.robot_arm.real_robot import RealRobot
-from drivers.robot_arm.simulated_robot import SimulatedRobot
+
+logger = logging.getLogger(__name__)
 
 
-class RobotManager(QObject):
+class RobotManager:
     """
-    Manages robot arm connection and mode switching.
-    Now delegates to CommandHandler and StateHandler internally.
-    
-    Signals are kept for backward compatibility with existing UI.
+    Manages robot lifecycle: loading, connection, and mode switching.
+
+    Owns the RealRobot and SimulatedRobot instances.
+    Publishes events to StateChannel for all components to consume.
+    UI panels subscribe to StateChannel directly — no Qt signals needed.
+
+    Responsibilities:
+    - Load robots from URDF files
+    - Manage robot instances (simulated and real)
+    - Handle connection/disconnection to hardware
+    - Manage operating mode (simulate / real)
+    - Know which frame is the Cartesian base for each asset
+
+    Does NOT:
+    - Handle commands (that's CommandHandler)
+    - Update kinematic models on state changes (that's StateHandler)
+    - Emit Qt signals (UI subscribes to StateChannel directly)
+    - Hold business logic for joint/Cartesian control
     """
-    
-    # Signals for UI updates (kept for compatibility)
-    state_received = pyqtSignal(dict)           # New robot state received
-    connection_changed = pyqtSignal(bool, str)  # Connected status, message
-    error_occurred = pyqtSignal(str)            # Error message
-    mode_changed = pyqtSignal(str)              # "simulate" or "real"
-    
-    def __init__(self, 
+
+    def __init__(self,
                  transform_registry: TransformRegistry,
                  state_channel: StateChannel,
-                 engine,  # VisualizerEngine (for status updates)
-                 parent: Optional[QObject] = None):
-        super().__init__(parent)
-        
+                 engine):  # VisualizerEngine for display registration
+        """
+        Initialize RobotManager.
+
+        Args:
+            transform_registry: Central transform registry
+            state_channel: Application event bus
+            engine: VisualizerEngine for registering kinematic displays
+        """
         self.transform_registry = transform_registry
         self.state_channel = state_channel
         self.engine = engine
-        
-        # Will be set when asset is loaded
+
+        # Robot instances (injected by MainWindow)
+        self._simulated_robot = None
+        self._real_robot = None
+
+        # Current robot state
         self.current_asset_id: Optional[str] = None
         self.current_kinematic_model = None
-        
-        # Internal components (created when asset is set)
-        self._real_robot: Optional[RealRobot] = None
-        self._simulated_robot: Optional[SimulatedRobot] = None
-        self._state_handler: Optional[StateHandler] = None
-        
-        # Connection status
-        self.is_connected = False
-        self.robot_ip = None
-        
-        # Subscribe to state channel events (for UI signals)
-        self._setup_subscriptions()
-    
-        # For tracking loaded robots
-        self._loaded_robots = {}
-        self.current_asset_id = None
-        self.current_kinematic_model = None
-
         self.current_mode = Mode.SIMULATE_LOCAL
         self.is_connected = False
+        self.robot_ip: Optional[str] = None
+
+        # Asset base frame mapping: asset_id -> base_frame_name
+        # The base frame is the true kinematic root for Cartesian control.
+        self._asset_bases: Dict[str, str] = {}
+
+        # Registry of loaded robots (one at a time per Principle #10)
+        self._loaded_robots: Dict[str, Dict[str, Any]] = {}
+
+        # Subscribe to events that RobotManager handles
+        self._setup_subscriptions()
+
+        logger.info("RobotManager initialized")
+
+    # =================================================================
+    # Robot Instance Injection (called by MainWindow)
+    # =================================================================
+
+    def set_simulated_robot(self, simulated_robot):
+        """Inject the SimulatedRobot instance."""
+        self._simulated_robot = simulated_robot
+
+    def set_real_robot(self, real_robot):
+        """Inject the RealRobot instance."""
+        self._real_robot = real_robot
+
+    # =================================================================
+    # Event Subscriptions
+    # =================================================================
 
     def _setup_subscriptions(self):
-        """Subscribe to state channel events to emit Qt signals."""
-        self.state_channel.subscribe(EventType.ROBOT_STATE, self._on_state_for_ui)
-        self.state_channel.subscribe(EventType.ROBOT_CONNECTED, self._on_connected_for_ui)
-        self.state_channel.subscribe(EventType.ROBOT_DISCONNECTED, self._on_disconnected_for_ui)
-        self.state_channel.subscribe(EventType.ROBOT_ERROR, self._on_error_for_ui)
-        self.state_channel.subscribe(EventType.ROBOT_MODE_CHANGED, self._on_mode_changed_for_ui)
+        """Subscribe to StateChannel events."""
         self.state_channel.subscribe(EventType.ROBOT_LOAD_REQUEST, self._on_load_request)
 
-        self.state_channel.subscribe(EventType.JOINT_COMMAND, self._on_joint_command)
-
-    def connect_robot(self, ip: str, **kwargs) -> bool:
-        """Connect to real robot."""
-        if not self._real_robot:
-            return False
-        
-        success = self._real_robot.connect(ip, **kwargs)
-        if success:
-            self.is_connected = True
-            self.robot_ip = ip
-        return success
-    
-    def disconnect_robot(self):
-        """Disconnect from real robot."""
-        if self._real_robot:
-            self._real_robot.disconnect()
-        self.is_connected = False
-        self.robot_ip = None
-        
-    def set_mode(self, mode: str):
-        """
-        Switch between modes.
-        
-        Args:
-            mode: "simulate_local", "simulate_real_ik", or "real"
-        """
-        if mode not in ["simulate_local", "simulate_real_ik", "real"]:
-            return
-        
-        # For real mode, ensure we're connected
-        if mode == "real" and not self.is_connected:
-            self.error_occurred.emit(
-                "Cannot switch to real mode: Not connected to robot."
-            )
-            return
-        
-        # Publish mode switch event (CommandHandler will handle it)
-        self.state_channel.publish(
-            EventType.MODE_SWITCH,
-            data={'mode': mode},
-            source="robot_manager"
-        )
-    
-    # ===== Signal forwarders (for backward compatibility) =====
-    
-    def _on_state_for_ui(self, event):
-        """Forward ROBOT_STATE to Qt signal."""
-        self.state_received.emit(event.data)
-    
-    def _on_connected_for_ui(self, event):
-        """Forward ROBOT_CONNECTED to Qt signal."""
-        self.connection_changed.emit(True, event.data.get('message', 'Connected'))
-    
-    def _on_disconnected_for_ui(self, event):
-        """Forward ROBOT_DISCONNECTED to Qt signal."""
-        self.connection_changed.emit(False, event.data.get('message', 'Disconnected'))
-    
-    def _on_error_for_ui(self, event):
-        """Forward ROBOT_ERROR to Qt signal."""
-        self.error_occurred.emit(event.data.get('error', 'Unknown error'))
-    
-    def _on_mode_changed_for_ui(self, event):
-        """Forward ROBOT_MODE_CHANGED to Qt signal."""
-        mode = event.data.get('mode', 'simulate_local')
-        # Convert to simple "simulate" or "real" for backward compatibility
-        simple_mode = "real" if mode == "real" else "simulate"
-        self.mode_changed.emit(simple_mode)
-
-    def _register_robot_transforms(self, asset_id: str, model):
-        """
-        Register robot transforms with correct parent-relative transforms.
-        TCP is set directly to wrist_3_link (no extra ROS-Industrial frames).
-        
-        This method is adapted from the original AssetManager.
-        """
-        from core.world_state.transform_registry import FrameStatus
-        import numpy as np
-        
-        if not hasattr(model, 'link_transforms'):
-            return
-        
-        # Get the true root from the model
-        true_root = model.get_true_root()
-        print(f"\n--- Registering transforms for {asset_id} ---")
-        print(f"  True kinematic base: {true_root}")
-        
-        # First, collect all frames with their parent relationships
-        frames_info = []
-        
-        for link_name in model.link_transforms.keys():
-            frame_name = f"{asset_id}_{link_name}"
-            
-            # Determine parent frame
-            if link_name == true_root:
-                parent = "world"
-            elif link_name in model.link_parents:
-                parent_link = model.link_parents.get(link_name)
-                if parent_link:
-                    parent = f"{asset_id}_{parent_link}"
-                else:
-                    parent = "world"
-            else:
-                parent = "world"
-            
-            frames_info.append({
-                'name': frame_name,
-                'original_name': link_name,
-                'parent': parent,
-                'is_true_root': (link_name == true_root)
-            })
-        
-        # Sort frames by depth (parents before children)
-        def get_depth(frame_name, frames_dict, visited=None):
-            if visited is None:
-                visited = set()
-            
-            if frame_name in visited:
-                return 0
-            
-            visited.add(frame_name)
-            
-            frame = frames_dict.get(frame_name)
-            if not frame or frame['parent'] == 'world':
-                return 0
-            
-            return get_depth(frame['parent'], frames_dict, visited) + 1
-        
-        # Create lookup dict
-        frames_dict = {f['name']: f for f in frames_info}
-        
-        # Calculate depths
-        depth_cache = {}
-        for frame in frames_info:
-            depth_cache[frame['name']] = get_depth(frame['name'], frames_dict)
-        
-        # Sort by depth (parents first)
-        frames_info.sort(key=lambda f: depth_cache[f['name']])
-        
-        # Register frames in order, computing parent-relative transforms
-        registered_count = 0
-        
-        for frame in frames_info:
-            frame_name = frame['name']
-            parent = frame['parent']
-            link_name = frame['original_name']
-            
-            # Get world transform from model
-            T_world = model.link_transforms[link_name]
-            
-            # Compute transform RELATIVE to parent
-            if parent == "world":
-                # Parent is world, so transform is world → frame
-                T_rel = T_world
-            else:
-                # Parent is another frame, compute relative transform
-                parent_link = parent.replace(f"{asset_id}_", "")
-                if parent_link in model.link_transforms:
-                    T_parent_world = model.link_transforms[parent_link]
-                    # T_rel = inv(T_parent_world) @ T_world
-                    T_rel = np.linalg.inv(T_parent_world) @ T_world
-                else:
-                    print(f"  Warning: Parent {parent} not found in model transforms")
-                    T_rel = T_world
-            
-            try:
-                if frame_name in self.transform_registry.list_frames():
-                    self.transform_registry.update(frame_name, T_rel)
-                    print(f"  Updated: {frame_name} (parent: {parent})")
-                else:
-                    self.transform_registry.set(
-                        frame_name,
-                        T_rel,
-                        status=FrameStatus.DYNAMIC,
-                        parent=parent,
-                        description=f"Link: {link_name}"
-                    )
-                    print(f"  Created: {frame_name} (parent: {parent})")
-                registered_count += 1
-            except ValueError as e:
-                print(f"  Warning: Failed to register {frame_name}: {e}")
-                # Fallback: register with world parent
-                if parent != 'world':
-                    print(f"    Retrying with world parent...")
-                    try:
-                        self.transform_registry.set(
-                            frame_name,
-                            T_world,
-                            status=FrameStatus.DYNAMIC,
-                            parent='world',
-                            description=f"Link: {link_name} (fallback)"
-                        )
-                        registered_count += 1
-                        print(f"    Created with world parent")
-                    except Exception as e2:
-                        print(f"    Still failed: {e2}")
-        
-        # ===== TCP REGISTRATION =====
-        # TCP is directly at wrist_3_link (standard for UR robots)
-        tcp_frame = f"{asset_id}_tcp"
-        mount_link = "wrist_3_link"  # Direct mount point
-        parent_frame = f"{asset_id}_{mount_link}"
-        
-        # TCP is exactly at the mount link, so transform is identity
-        T_tcp_parent = np.eye(4)
-        
-        try:
-            if tcp_frame in self.transform_registry.list_frames():
-                self.transform_registry.update(tcp_frame, T_tcp_parent)
-                print(f"  Updated TCP frame: {tcp_frame} (parent: {parent_frame})")
-            else:
-                self.transform_registry.set(
-                    tcp_frame,
-                    T_tcp_parent,
-                    status=FrameStatus.DYNAMIC,
-                    parent=parent_frame,
-                    description="Tool Center Point (wrist_3_link)"
-                )
-                print(f"  Created TCP frame: {tcp_frame} (parent: {parent_frame})")
-        except ValueError as e:
-            print(f"  Warning: Could not create TCP frame: {e}")
-        
-        # Set the asset base in TransformRegistry
-        true_root_frame_name = f"{asset_id}_{true_root}"
-        self.transform_registry.set_asset_base(asset_id, true_root_frame_name)
-        print(f"  Set asset base: {asset_id} -> {true_root_frame_name}")
-        
-        # Debug: Verify transforms
-        try:
-            tcp_frame = f"{asset_id}_tcp"
-            T = self.transform_registry.get_transform(tcp_frame, true_root_frame_name)
-            print(f"\n  Verification: TCP in true_root coordinates:")
-            print(f"    Position: ({T[0,3]:.3f}, {T[1,3]:.3f}, {T[2,3]:.3f})")
-            
-            T = self.transform_registry.get_transform(true_root_frame_name, "world")
-            print(f"  World → true_root position: ({T[0,3]:.3f}, {T[1,3]:.3f}, {T[2,3]:.3f})")
-        except Exception as e:
-            print(f"  Verification failed: {e}")
-        
-        print(f"\nFinished registering {registered_count} frames for {asset_id}\n")
-
     def _on_load_request(self, event):
-        """Handle ROBOT_LOAD_REQUEST event."""
+        """Handle ROBOT_LOAD_REQUEST from UI (File → Load URDF)."""
         urdf_path = event.data.get('urdf_path')
         robot_id = event.data.get('robot_id')
-        
+
         if not urdf_path:
-            print("[RobotManager] Load request missing urdf_path")
+            logger.warning("Load request missing urdf_path")
             return
 
-        print(f"[RobotManager] Received load request for: {robot_id} from {urdf_path}")
-
-        # Load the new robot
+        logger.info(f"Loading robot: {robot_id} from {urdf_path}")
         self.load_robot(urdf_path, robot_id)
 
-    def _on_joint_command(self, event):
-        """Handle JOINT_COMMAND event."""
-        positions = event.data.get('positions')
-        if positions and self.current_kinematic_model:
-            print(f"[RobotManager] Received JOINT_COMMAND: {positions}")
-            # Update kinematic model
-            self.current_kinematic_model.update_state(positions)
-            # Also send to real robot if connected and in real mode
-
-    # ===== Public methods for UI (kept for compatibility) =====
+    # =================================================================
+    # Robot Loading
+    # =================================================================
 
     def load_robot(self, urdf_path: str, asset_id: str = None) -> Optional[str]:
         """
         Load a robot from URDF file.
-        
+
+        Parses URDF, creates kinematic model and display,
+        registers transforms, publishes ROBOT_LOADED.
+
         Args:
             urdf_path: Path to URDF file
-            asset_id: Optional asset ID (auto-generated from filename if not provided)
-        
+            asset_id: Optional ID (auto-generated from filename)
+
         Returns:
-            asset_id (str) if successful, None otherwise
+            asset_id if successful, None otherwise
         """
-        from pathlib import Path
         from core.kinematics.kinematic_model import KinematicModel
         from displays.kinematic_display import KinematicDisplay
-        
+
         try:
-            # Generate asset ID from filename if not provided
             if asset_id is None:
                 asset_id = Path(urdf_path).stem
-            
-            # Handle duplicate asset IDs
+
+            # Handle duplicate IDs
             if asset_id in self._loaded_robots:
-                original_id = asset_id
+                original = asset_id
                 asset_id = f"{asset_id}_{len(self._loaded_robots)}"
-                print(f"Note: Asset ID '{original_id}' already exists. Using '{asset_id}'")
-            
+                logger.info(f"Asset ID '{original}' exists, using '{asset_id}'")
+
             # Package directories for mesh resolution
             package_dirs = [
                 str(Path(urdf_path).parent),
                 str(Path(urdf_path).parent / "meshes"),
                 str(Path(urdf_path).parent / "visual"),
-                str(Path(urdf_path).parent / "meshes/visual"),
+                str(Path(urdf_path).parent / "meshes" / "visual"),
                 str(Path.home() / ".cache" / "robot_descriptions"),
             ]
-            
-            print(f"Loading robot from: {urdf_path}")
-            
+
+            logger.info(f"Parsing URDF: {urdf_path}")
+
             # Create kinematic model
             model = KinematicModel(
                 urdf_path=str(urdf_path),
                 package_dirs=package_dirs,
                 transform_registry=self.transform_registry,
                 asset_id=asset_id,
-                update_registry_on_state_change=False
+                update_registry_on_state_change=False  # StateHandler manages this
             )
             model.load()
-            print(f"✅ Kinematic model loaded: {asset_id}")
-            
+            logger.info(f"Kinematic model loaded: {asset_id}")
+
             # Attach IK solver
-            try:
-                from core.kinematics.ik_solver import IKSolver
-                ik_solver = IKSolver(model)
-                model.set_ik_solver(ik_solver)
-                print(f"✅ IK solver attached")
-            except ImportError as e:
-                print(f"Note: IK solver not available: {e}")
-            except Exception as e:
-                print(f"Note: Could not attach IK solver: {e}")
-            
-            # Register transforms
-            self._register_robot_transforms(asset_id, model)
-            
+            self._attach_ik_solver(model)
+
+            # Register initial transforms
+            self._register_initial_transforms(asset_id, model)
+
+            # Store asset base frame (true kinematic root)
+            true_root = model.get_true_root()
+            self._asset_bases[asset_id] = f"{asset_id}_{true_root}"
+            logger.info(f"Asset base frame: {self._asset_bases[asset_id]}")
+
             # Create visual display
             display = KinematicDisplay(
-                model, 
-                self.transform_registry, 
+                model,
+                self.transform_registry,
                 asset_id=asset_id
             )
             display.attach(self.engine.get_renderer())
             self.engine.register_display(display)
-            print(f"✅ Visual display created")
-            
-            # Store in asset registry
+
+            # Store in registry
             self._loaded_robots[asset_id] = {
                 'model': model,
                 'display': display,
                 'urdf_path': str(urdf_path)
             }
-            
-            # Set as current asset
+
+            # Set as current
             self.current_asset_id = asset_id
             self.current_kinematic_model = model
-            
-            # Publish robot loaded event
-            print(f"[DEBUG] Publishing ROBOT_LOADED with robot_id={asset_id}, urdf_path={urdf_path}")
+
+            # Update simulated robot
+            if self._simulated_robot:
+                self._simulated_robot.set_kinematic_model(model)
+
+            # Publish ROBOT_LOADED
             self.state_channel.publish(
                 EventType.ROBOT_LOADED,
-                data={'asset_id': asset_id,
-                      'urdf_path': str(urdf_path),
-                      'kinematic_model': model},
+                data={
+                    'asset_id': asset_id,
+                    'urdf_path': str(urdf_path),
+                    'kinematic_model': model
+                },
                 source="robot_manager",
                 description=f"Robot {asset_id} loaded"
             )
-            
-            print(f"✅ Robot loaded successfully: {asset_id}")
+
+            logger.info(f"Robot loaded successfully: {asset_id}")
             return asset_id
-            
+
         except Exception as e:
-            print(f"❌ Failed to load robot: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Failed to load robot: {e}", exc_info=True)
+
+            self.state_channel.publish(
+                EventType.ERROR_OCCURRED,
+                data={'error': f"Failed to load robot: {e}"},
+                source="robot_manager"
+            )
             return None
 
+    def _attach_ik_solver(self, model):
+        """Attach IK solver to the kinematic model."""
+        try:
+            from core.kinematics.ik_solver import IKSolver
+            ik_solver = IKSolver(model)
+            model.set_ik_solver(ik_solver)
+            logger.info("IK solver attached")
+        except ImportError:
+            logger.info("IK solver not available (missing dependencies)")
+        except Exception as e:
+            logger.warning(f"Could not attach IK solver: {e}")
+
+    def _register_initial_transforms(self, asset_id: str, model):
+        """
+        Register all robot frames in TransformRegistry on initial load.
+
+        Computes parent-relative transforms for each link.
+        Uses the true kinematic root (parent of first moving joint)
+        as the reference. Fixed joints between world and true root
+        are preserved in the transform chain for visualization.
+        """
+        from core.world_state.transform_registry import FrameStatus
+
+        if not hasattr(model, 'link_transforms'):
+            return
+
+        true_root = model.get_true_root()
+        logger.info(f"Registering transforms for {asset_id} "
+                   f"(true root: {true_root})")
+
+        # Collect frames with parent relationships
+        frames_info = []
+        for link_name in model.link_transforms.keys():
+            frame_name = f"{asset_id}_{link_name}"
+
+            if link_name == true_root:
+                parent = "world"
+            elif link_name in model.link_parents:
+                parent_link = model.link_parents.get(link_name)
+                parent = f"{asset_id}_{parent_link}" if parent_link else "world"
+            else:
+                parent = "world"
+
+            frames_info.append({
+                'name': frame_name,
+                'original_name': link_name,
+                'parent': parent,
+                'is_true_root': (link_name == true_root)
+            })
+
+        # Sort by depth: parents before children
+        frames_info.sort(key=lambda f: self._frame_depth(f, frames_info))
+
+        # Register each frame
+        registered = 0
+        for frame in frames_info:
+            frame_name = frame['name']
+            parent = frame['parent']
+            link_name = frame['original_name']
+            T_world = model.link_transforms[link_name]
+
+            if parent == "world":
+                T_rel = T_world
+            else:
+                parent_link = parent.replace(f"{asset_id}_", "")
+                if parent_link in model.link_transforms:
+                    T_parent_world = model.link_transforms[parent_link]
+                    T_rel = np.linalg.inv(T_parent_world) @ T_world
+                else:
+                    logger.warning(f"Parent {parent} not found, using world")
+                    T_rel = T_world
+
+            try:
+                self.transform_registry.register_frame(
+                    frame_name,
+                    T_rel,
+                    parent=parent,
+                    status=FrameStatus.DYNAMIC,
+                    description=f"Link: {link_name}"
+                )
+                registered += 1
+            except ValueError as e:
+                logger.warning(f"Failed to register {frame_name}: {e}")
+
+        # Register TCP frame
+        tcp_frame = f"{asset_id}_tcp"
+        mount_link = "wrist_3_link"
+        parent_frame = f"{asset_id}_{mount_link}"
+
+        try:
+            self.transform_registry.register_frame(
+                tcp_frame,
+                np.eye(4),  # TCP at mount point by default
+                parent=parent_frame,
+                status=FrameStatus.DYNAMIC,
+                description="Tool Center Point"
+            )
+            registered += 1
+        except ValueError as e:
+            logger.warning(f"Could not register TCP frame: {e}")
+
+        logger.info(f"Registered {registered} frames for {asset_id}")
+
+    def _frame_depth(self, frame, frames_info):
+        """Calculate depth of a frame in the tree (world = depth 0)."""
+        depth = 0
+        current = frame
+        visited = set()
+        while current['parent'] != 'world' and depth < 100:
+            if current['name'] in visited:
+                break
+            visited.add(current['name'])
+            parent_name = current['parent']
+            parent = next((f for f in frames_info if f['name'] == parent_name), None)
+            if parent is None:
+                break
+            current = parent
+            depth += 1
+        return depth
+
+    # =================================================================
+    # Connection Management
+    # =================================================================
+
+    def connect_robot(self, ip: str, **kwargs) -> bool:
+        """Connect to real robot."""
+        if not self._real_robot:
+            logger.warning("No RealRobot instance available")
+            return False
+
+        success = self._real_robot.connect(ip, **kwargs)
+        if success:
+            self.is_connected = True
+            self.robot_ip = ip
+            logger.info(f"Connected to robot at {ip}")
+        return success
+
+    def disconnect_robot(self):
+        """Disconnect from real robot."""
+        if self._real_robot:
+            self._real_robot.disconnect()
+        self.is_connected = False
+        self.robot_ip = None
+        logger.info("Disconnected from robot")
+
+    # =================================================================
+    # Mode Management
+    # =================================================================
+
+    def set_mode(self, mode: str):
+        """
+        Request a mode switch.
+
+        Valid modes: "simulate_local", "simulate_real_ik", "real"
+
+        Publishes MODE_SWITCH_REQUEST. CommandHandler processes it
+        and publishes MODE_SWITCHED on completion.
+        """
+        valid_modes = ["simulate_local", "simulate_real_ik", "real"]
+        if mode not in valid_modes:
+            logger.warning(f"Invalid mode: {mode}")
+            return
+
+        if mode == "real" and not self.is_connected:
+            self.state_channel.publish(
+                EventType.ERROR_OCCURRED,
+                data={'error': "Cannot switch to real mode: Not connected"},
+                source="robot_manager"
+            )
+            return
+
+        self.state_channel.publish(
+            EventType.MODE_SWITCH_REQUEST,
+            data={'mode': mode},
+            source="robot_manager"
+        )
+
+    # =================================================================
+    # Asset Base Frame Queries (for Cartesian control)
+    # =================================================================
+
+    def get_asset_base_frame(self, asset_id: str) -> str:
+        """
+        Get the base frame for Cartesian control.
+
+        Returns the true kinematic root frame name for the asset.
+        Defaults to "world" if asset not found.
+
+        Args:
+            asset_id: Unique asset identifier
+
+        Returns:
+            Frame name for Cartesian base
+        """
+        return self._asset_bases.get(asset_id, "world")
+
+    def get_asset_base_transform(self, asset_id: str) -> np.ndarray:
+        """
+        Get the transform from world to the asset's Cartesian base.
+
+        Args:
+            asset_id: Unique asset identifier
+
+        Returns:
+            4x4 homogeneous transform matrix
+        """
+        base_frame = self.get_asset_base_frame(asset_id)
+        return self.transform_registry.get_transform(base_frame, "world")
+
+    # =================================================================
+    # Public Query Methods
+    # =================================================================
+
     def get_current_joint_positions(self) -> Optional[Dict[str, float]]:
-        """Get current joint positions as dict (for UI display)."""
+        """Get current joint positions from simulated robot."""
         if not self._simulated_robot:
             return None
-        
+
         state = self._simulated_robot.get_state()
-        if state and 'joint_positions' in state:
+        if state and 'joint_positions' in state and self.current_kinematic_model:
             positions = state['joint_positions']
             joint_names = self.current_kinematic_model.get_joint_info()['names']
             return dict(zip(joint_names, positions))
-        
+
         return None
-    
+
     def stop_robot(self):
         """Emergency stop."""
         if self._real_robot:
             self._real_robot.stop()
-    
+
     def cleanup(self):
-        """Clean up resources."""
+        """Clean up resources on shutdown."""
         if self.is_connected:
             self.disconnect_robot()
+        logger.info("RobotManager cleanup complete")

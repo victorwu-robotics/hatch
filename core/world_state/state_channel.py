@@ -1,184 +1,195 @@
 """
-State Channel - Generic publish/subscribe for application events.
-Used for notifications that aren't transform-related.
-Examples: joint slider moved, camera started, UI updated.
+State Handler - Updates kinematic model and transform registry from robot state.
+
+Subscribes to ROBOT_STATE events.
+This is the ONLY place that modifies the kinematic model and transform registry
+in response to state changes.
+
+Principle #7: Movements as Models. State updates flow through here.
+Principle #5: Space = TransformRegistry. Single owner of registry updates.
 """
 
-from typing import Dict, List, Callable, Any, Optional
-from collections import defaultdict
-from enum import Enum
-from dataclasses import dataclass
-from .event_types import EventType
-import time
+import numpy as np
+import logging
+from typing import Set
 
-@dataclass
-class Event:
-    """An event with metadata."""
-    type: EventType
-    data: Any
-    source: str
-    timestamp: float
-    description: str = ""
+from core.world_state.state_channel import StateChannel
+from core.world_state.event_types import EventType
+from core.world_state.transform_registry import TransformRegistry, FrameStatus
+from core.kinematics.kinematic_model import KinematicModel
 
-    def __post_init__(self):
-        if self.timestamp is None:
-            self.timestamp = time.time()
+logger = logging.getLogger(__name__)
 
 
-    def __str__(self):
-        return f"[{self.timestamp:.2f}] {self.source}: {self.type.value} - {self.description}"
-
-
-class StateChannel:
+class StateHandler:
     """
-    Generic publish/subscribe system for application events.
+    Subscribes to ROBOT_STATE events.
+    Updates KinematicModel and TransformRegistry.
 
-    Usage:
-        channel = StateChannel()
-
-        # Subscribe to events
-        def on_joint_update(event):
-            print(f"Joint moved: {event.data}")
-
-        channel.subscribe(EventType.JOINT_UPDATE, on_joint_update)
-
-        # Publish events
-        channel.publish(
-            EventType.JOINT_UPDATE,
-            data={"joint": "shoulder", "position": 1.5},
-            source="joint_control_panel"
-        )
+    This is the SINGLE owner of model and registry updates during operation.
+    Initial registration is done by RobotManager on load.
+    Runtime updates are done here on each ROBOT_STATE event.
     """
 
-    def __init__(self, enable_history: bool = False, max_history: int = 100):
+    def __init__(self,
+                 state_channel: StateChannel,
+                 kinematic_model: KinematicModel,
+                 transform_registry: TransformRegistry,
+                 asset_id: str):
         """
-        Initialize state channel.
+        Initialize state handler.
 
         Args:
-            enable_history: Whether to store event history
-            max_history: Maximum number of events to keep in history
+            state_channel: Application event bus.
+            kinematic_model: Model to update with joint positions.
+            transform_registry: Registry to update with new transforms.
+            asset_id: Unique ID for frame namespacing.
         """
-        self._subscribers: Dict[EventType, List[Callable[[Event], None]]] = defaultdict(list)
-        self._wildcard_subscribers: List[Callable[[Event], None]] = []
-        self._history: List[Event] = []
-        self._enable_history = enable_history
-        self._max_history = max_history
+        self._channel = state_channel
+        self._model = kinematic_model
+        self._registry = transform_registry
+        self._asset_id = asset_id
 
-    def subscribe(self, event_type: EventType, callback: Callable[[Event], None]) -> None:
+        # Build set of links in the main kinematic chain
+        # (excludes camera frames, tool attachments not in the chain)
+        self._arm_chain_links = self._build_arm_chain_links()
+
+        # Subscribe to robot state events
+        self._channel.subscribe(EventType.ROBOT_STATE, self._on_robot_state)
+
+        logger.info(f"StateHandler initialized for asset: {asset_id} "
+                   f"({len(self._arm_chain_links)} links in arm chain)")
+
+    # =================================================================
+    # Arm Chain Detection
+    # =================================================================
+
+    def _build_arm_chain_links(self) -> Set[str]:
         """
-        Subscribe to a specific event type.
+        Build the set of link names in the main kinematic chain.
 
-        Args:
-            event_type: Type of event to subscribe to
-            callback: Function that takes an Event object
+        Excludes fixed-joint intermediaries, camera frames,
+        laser scanners, and tool attachments that are not part
+        of the moving chain.
         """
-        if callback not in self._subscribers[event_type]:
-            self._subscribers[event_type].append(callback)
-            print(f"StateChannel: Subscribed to {event_type.value}")
+        arm_links = set()
 
-    def subscribe_all(self, callback: Callable[[Event], None]) -> None:
+        try:
+            arm_joints = self._model.get_arm_chain()
+
+            for joint_name in arm_joints:
+                joint = self._model.joints.get(joint_name)
+                if joint:
+                    arm_links.add(joint['parent'])
+                    arm_links.add(joint['child'])
+
+            true_root = self._model.get_true_root()
+            arm_links.add(true_root)
+
+        except Exception as e:
+            logger.warning(f"Could not build arm chain: {e}. "
+                          "Using all links as fallback.")
+            arm_links = set(self._model.link_transforms.keys())
+
+        return arm_links
+
+    # =================================================================
+    # Event Handling
+    # =================================================================
+
+    def _on_robot_state(self, event):
         """
-        Subscribe to ALL events.
+        Handle ROBOT_STATE event.
 
-        Args:
-            callback: Function that takes an Event object
+        This is the ONLY place that updates the kinematic model and
+        transform registry during operation.
+
+        Flow:
+            1. Update kinematic model with new joint positions
+            2. Model recomputes forward kinematics internally
+            3. Update transform registry with new link transforms
+            4. Registry notifies callbacks (KinematicDisplay, etc.)
         """
-        if callback not in self._wildcard_subscribers:
-            self._wildcard_subscribers.append(callback)
-            print("StateChannel: Subscribed to ALL events")
+        joint_positions = event.data.get('joint_positions')
+        if joint_positions is None:
+            return
 
-    def unsubscribe(self, event_type: EventType, callback: Callable[[Event], None]) -> None:
-        """Unsubscribe from a specific event type."""
-        if callback in self._subscribers[event_type]:
-            self._subscribers[event_type].remove(callback)
+        # 1. Update kinematic model (recomputes FK internally)
+        self._model.update_state(joint_positions)
 
-    def unsubscribe_all(self, callback: Callable[[Event], None]) -> None:
-        """Unsubscribe from all events."""
-        if callback in self._wildcard_subscribers:
-            self._wildcard_subscribers.remove(callback)
+        # 2. Update transform registry from model's new transforms
+        self._update_transform_registry()
 
-    def publish(self,
-                event_type: EventType,
-                data: Any = None,
-                source: str = "unknown",
-                description: str = "") -> None:
+    def _update_transform_registry(self):
         """
-        Publish an event to all subscribers.
+        Update all robot frames in TransformRegistry.
 
-        Args:
-            event_type: Type of event
-            data: Event data (any Python object)
-            source: Name of the component publishing the event
-            description: Human-readable description
+        Only updates links in the main kinematic chain.
+        Computes parent-relative transforms from world transforms.
         """
-        event = Event(
-            type=event_type,
-            data=data,
-            source=source,
-            timestamp=time.time(),
-            description=description or f"{source} published {event_type.value}"
-        )
+        if not hasattr(self._model, 'link_transforms'):
+            return
 
-        # Store in history if enabled
-        if self._enable_history:
-            self._history.append(event)
-            # Trim history if needed
-            if len(self._history) > self._max_history:
-                self._history.pop(0)
+        true_root = self._model.get_true_root()
 
-        # Notify wildcard subscribers (subscribed to all)
-        for callback in self._wildcard_subscribers:
+        for link_name, T_world in self._model.link_transforms.items():
+            # Skip links not in the main kinematic chain
+            if link_name not in self._arm_chain_links:
+                continue
+
+            frame_name = f"{self._asset_id}_{link_name}"
+
+            # Compute parent-relative transform
+            if link_name == true_root:
+                parent_frame = "world"
+                T_rel = T_world
+            else:
+                parent_link = self._model.link_parents.get(link_name)
+                if parent_link:
+                    parent_frame = f"{self._asset_id}_{parent_link}"
+                    T_parent_world = self._model.link_transforms.get(
+                        parent_link, np.eye(4)
+                    )
+                    T_rel = np.linalg.inv(T_parent_world) @ T_world
+                else:
+                    parent_frame = "world"
+                    T_rel = T_world
+
+            # Update existing frame or register if new
             try:
-                callback(event)
-            except Exception as e:
-                print(f"Error in wildcard subscriber: {e}")
+                self._registry.update_frame(frame_name, T_rel)
+            except ValueError:
+                # Frame doesn't exist yet — register it
+                try:
+                    self._registry.register_frame(
+                        frame_name,
+                        T_rel,
+                        status=FrameStatus.DYNAMIC,
+                        parent=parent_frame,
+                        description=f"Link: {link_name}"
+                    )
+                except ValueError:
+                    # Parent frame not found — skip
+                    continue
 
-        # Notify type-specific subscribers
-        for callback in self._subscribers[event_type]:
+        # Update TCP frame
+        tcp_frame = f"{self._asset_id}_tcp"
+        mount_link = "wrist_3_link"
+
+        if mount_link in self._arm_chain_links:
+            parent_frame = f"{self._asset_id}_{mount_link}"
+            T_tcp_parent = np.eye(4)  # TCP at mount point by default
+
             try:
-                callback(event)
-            except Exception as e:
-                print(f"Error in subscriber for {event_type.value}: {e}")
-
-        # Print debug for important events
-        if event_type in [EventType.ERROR_OCCURRED, EventType.CAMERA_STARTED, EventType.CAMERA_STOPPED]:
-            print(f"📢 {event}")
-
-    def get_history(self, event_type: Optional[EventType] = None, limit: int = 10) -> List[Event]:
-        """
-        Get recent event history.
-
-        Args:
-            event_type: Filter by event type (None for all)
-            limit: Maximum number of events to return
-
-        Returns:
-            List of recent events
-        """
-        if not self._enable_history:
-            return []
-
-        if event_type is None:
-            return self._history[-limit:]
-
-        filtered = [e for e in self._history if e.type == event_type]
-        return filtered[-limit:]
-
-    def clear_history(self) -> None:
-        """Clear event history."""
-        self._history.clear()
-
-    def get_subscriber_count(self, event_type: Optional[EventType] = None) -> int:
-        """Get number of subscribers for an event type."""
-        if event_type is None:
-            return len(self._wildcard_subscribers)
-        return len(self._subscribers[event_type])
-
-
-# Convenience decorator for subscribing
-def on_event(event_type: EventType):
-    """Decorator for subscribing to events."""
-    def decorator(func):
-        func._event_subscription = event_type
-        return func
-    return decorator
+                self._registry.update_frame(tcp_frame, T_tcp_parent)
+            except ValueError:
+                try:
+                    self._registry.register_frame(
+                        tcp_frame,
+                        T_tcp_parent,
+                        status=FrameStatus.DYNAMIC,
+                        parent=parent_frame,
+                        description="Tool Center Point"
+                    )
+                except ValueError:
+                    pass

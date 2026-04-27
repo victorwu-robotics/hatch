@@ -1,24 +1,16 @@
 """
-AssetManager - Pure mesh loading service
-Following Principle #3 (visualizer) + Principle #9 (services)
+Mesh Loader - Pure mesh loading service.
 
-No UI, no domain managers, no event publishing, no transform registration.
-Returns raw vtkPolyData only - no VTK actors.
+Loads 3D mesh files (STL, OBJ, PLY, DAE) and returns vtkPolyData.
+Manages caching and retrieval. No UI, no transforms, no events.
+Returns raw vtkPolyData only — no VTK actors.
 
-PUBLIC API:
-- load_mesh(filepath) -> MeshHandle
-- get_mesh_data(handle) -> vtk.vtkPolyData (shallow copy, read-only)
-- get_mesh_data_copy(handle) -> vtk.vtkPolyData (deep copy, modifiable)
-- unload(handle) -> None
-- list_loaded() -> List[MeshHandle]
-- is_loaded(filepath) -> bool
-- get_handle_for_file(filepath) -> Optional[MeshHandle]
-- clear_all() -> None
-- get_cache_info() -> dict
-- get_supported_formats() -> List[str]
+Principle #3: Visualizer as Mind-Prying Tool. Loading is a service.
+Principle #9: UI Separate from Services. Pure data loading, no presentation.
 """
 
 import hashlib
+import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Union
 import numpy as np
@@ -26,38 +18,40 @@ import numpy as np
 import vtk
 from vtk.util import numpy_support
 
-# Optional trimesh for DAE support
 try:
     import trimesh
     TRIMESH_AVAILABLE = True
 except ImportError:
     TRIMESH_AVAILABLE = False
 
+logger = logging.getLogger(__name__)
+
 
 class MeshHandle:
     """
     Opaque handle for loaded meshes.
-    
+
     Users should treat this as an opaque identifier.
     Do not access internal attributes directly.
     """
+
     def __init__(self, identifier: str):
         self._id = identifier
-    
+
     def __str__(self) -> str:
         return self._id
-    
+
     def __repr__(self) -> str:
         return f"MeshHandle('{self._id}')"
-    
+
     def __eq__(self, other) -> bool:
         if isinstance(other, MeshHandle):
             return self._id == other._id
         return False
-    
+
     def __hash__(self) -> int:
         return hash(self._id)
-    
+
     @property
     def id(self) -> str:
         """Get the internal identifier string (for debugging only)."""
@@ -67,168 +61,232 @@ class MeshHandle:
 class MeshLoader:
     """
     Pure mesh loading service.
-    
+
     Manages loading, caching, and retrieval of 3D mesh data.
     Returns raw VTK PolyData for visualization pipelines.
     Supports STL, OBJ, PLY, and DAE (via trimesh conversion).
-    
+
     Usage:
-        manager = AssetManager()
-        handle = manager.load_mesh("robot_arm.stl")
-        polydata = manager.get_mesh_data(handle)
+        loader = MeshLoader()
+        handle = loader.load_mesh("robot_arm.stl")
+        polydata = loader.get_mesh_data(handle)
         # Use polydata in VTK pipeline
-        manager.unload(handle)
+        loader.unload(handle)
     """
-    
-    # Supported file extensions and their VTK readers
+
     _SUPPORTED_EXTENSIONS = {'.stl', '.obj', '.ply', '.dae'}
-    
+
     def __init__(self, enable_color_extraction: bool = True):
         """
-        Initialize AssetManager with empty cache.
-        
+        Initialize MeshLoader with empty cache.
+
         Args:
-            enable_color_extraction: If True, extract vertex colors from DAE files
+            enable_color_extraction: If True, extract vertex colors from DAE files.
         """
         self._cache: Dict[str, vtk.vtkPolyData] = {}
         self._handle_to_path: Dict[MeshHandle, str] = {}
         self._path_to_handle: Dict[str, MeshHandle] = {}
         self._enable_color_extraction = enable_color_extraction
-        
-        # Warn about missing trimesh if DAE support is needed
+
         if not TRIMESH_AVAILABLE:
-            print("Warning: trimesh not installed. DAE files will not be supported.")
-            print("Install with: pip install trimesh")
-    
+            logger.info("trimesh not installed — DAE files not supported")
+
+    # =================================================================
+    # Public API
+    # =================================================================
+
     @classmethod
     def get_supported_formats(cls) -> List[str]:
-        """
-        Get list of supported file extensions.
-        
-        Returns:
-            List of supported extensions (e.g., ['.stl', '.obj', '.ply', '.dae'])
-        """
+        """Get list of supported file extensions."""
         return list(cls._SUPPORTED_EXTENSIONS)
-    
+
     def load_mesh(self, filepath: Union[str, Path]) -> MeshHandle:
         """
         Load a mesh from file and return a handle.
-        
+
         Args:
-            filepath: Path to mesh file (STL, OBJ, PLY, DAE)
-            
+            filepath: Path to mesh file (STL, OBJ, PLY, DAE).
+
         Returns:
-            MeshHandle for accessing the loaded mesh data
-            
+            MeshHandle for accessing the loaded mesh data.
+
         Raises:
-            FileNotFoundError: If file doesn't exist
-            ValueError: If file extension is not supported or file is invalid
-            RuntimeError: If VTK or trimesh fails to load the mesh
-            ImportError: If DAE file and trimesh not installed
+            FileNotFoundError: If file doesn't exist.
+            ValueError: If file extension is not supported.
+            RuntimeError: If loading fails.
         """
         filepath = Path(filepath).resolve()
-        
-        # Validate file exists
+
         if not filepath.exists():
             raise FileNotFoundError(f"Mesh file not found: {filepath}")
-        
-        # Validate extension
+
         ext = filepath.suffix.lower()
         if ext not in self._SUPPORTED_EXTENSIONS:
             raise ValueError(
-                f"Unsupported file format: {ext}. "
+                f"Unsupported format: {ext}. "
                 f"Supported: {', '.join(self._SUPPORTED_EXTENSIONS)}"
             )
-        
-        # Check cache
+
+        # Return cached if already loaded
         cache_key = str(filepath)
         if cache_key in self._cache:
             return self._path_to_handle[cache_key]
-        
+
         # Load the mesh
         try:
             polydata = self._load_mesh_file(filepath, ext)
-            
-            # Validate loaded data
+
             if polydata is None or polydata.GetNumberOfPoints() == 0:
                 raise RuntimeError(f"Loaded mesh has no points: {filepath}")
-            
-            # Cache the polydata
+
             self._cache[cache_key] = polydata
-            
-            # Create handle
+
             handle = MeshHandle(cache_key)
             self._handle_to_path[handle] = cache_key
             self._path_to_handle[cache_key] = handle
-            
+
+            logger.debug(f"Loaded: {filepath.name} "
+                        f"({polydata.GetNumberOfPoints()} points)")
             return handle
-            
+
         except Exception as e:
-            raise RuntimeError(f"Failed to load mesh {filepath}: {str(e)}") from e
-    
+            raise RuntimeError(f"Failed to load mesh {filepath}: {e}") from e
+
+    def get_mesh_data(self, handle: MeshHandle) -> vtk.vtkPolyData:
+        """
+        Get VTK PolyData for a loaded mesh (shallow copy, read-only).
+
+        Args:
+            handle: MeshHandle from load_mesh().
+
+        Returns:
+            vtkPolyData — do not modify.
+
+        Raises:
+            KeyError: If handle is invalid or mesh was unloaded.
+        """
+        if handle not in self._handle_to_path:
+            raise KeyError(f"Invalid or unloaded mesh handle: {handle}")
+
+        filepath = self._handle_to_path[handle]
+        polydata = self._cache.get(filepath)
+
+        if polydata is None:
+            raise KeyError(f"Mesh data missing from cache: {handle}")
+
+        return polydata
+
+    def get_mesh_data_copy(self, handle: MeshHandle) -> vtk.vtkPolyData:
+        """
+        Get a deep copy of VTK PolyData (safe to modify).
+
+        Use this if you need to modify the mesh data.
+        For read-only visualization, use get_mesh_data().
+
+        Args:
+            handle: MeshHandle from load_mesh().
+
+        Returns:
+            Deep copy of vtkPolyData.
+
+        Raises:
+            KeyError: If handle is invalid or mesh was unloaded.
+        """
+        original = self.get_mesh_data(handle)
+        copy = vtk.vtkPolyData()
+        copy.DeepCopy(original)
+        return copy
+
+    def unload(self, handle: MeshHandle) -> None:
+        """
+        Unload a mesh and free resources.
+
+        Args:
+            handle: MeshHandle to unload.
+
+        Raises:
+            KeyError: If handle is invalid.
+        """
+        if handle not in self._handle_to_path:
+            raise KeyError(f"Cannot unload invalid handle: {handle}")
+
+        filepath = self._handle_to_path[handle]
+
+        if filepath in self._cache:
+            del self._cache[filepath]
+
+        del self._handle_to_path[handle]
+        del self._path_to_handle[filepath]
+
+    def list_loaded(self) -> List[MeshHandle]:
+        """List all currently loaded mesh handles."""
+        return list(self._handle_to_path.keys())
+
+    def is_loaded(self, filepath: Union[str, Path]) -> bool:
+        """Check if a mesh file is currently loaded."""
+        filepath = str(Path(filepath).resolve())
+        return filepath in self._cache
+
+    def get_handle_for_file(self, filepath: Union[str, Path]) -> Optional[MeshHandle]:
+        """Get the handle for a loaded mesh file, or None."""
+        filepath = str(Path(filepath).resolve())
+        return self._path_to_handle.get(filepath)
+
+    def clear_all(self) -> None:
+        """Clear all loaded meshes from cache."""
+        self._cache.clear()
+        self._handle_to_path.clear()
+        self._path_to_handle.clear()
+
+    def get_cache_info(self) -> dict:
+        """Get cache statistics."""
+        return {
+            'num_loaded': len(self._cache),
+            'handles': [str(h) for h in self._handle_to_path.keys()],
+            'filepaths': list(self._cache.keys())
+        }
+
+    # =================================================================
+    # Internal Loading Methods
+    # =================================================================
+
     def _load_mesh_file(self, filepath: Path, ext: str) -> vtk.vtkPolyData:
-        """Internal method to load mesh using appropriate reader."""
+        """Route to the appropriate loader based on extension."""
         if ext == '.stl':
-            return self._load_stl(filepath)
+            return self._load_with_reader(filepath, vtk.vtkSTLReader())
         elif ext == '.obj':
-            return self._load_obj(filepath)
+            return self._load_with_reader(filepath, vtk.vtkOBJReader())
         elif ext == '.ply':
-            return self._load_ply(filepath)
+            return self._load_with_reader(filepath, vtk.vtkPLYReader())
         elif ext == '.dae':
-            if not TRIMESH_AVAILABLE:
-                raise ImportError(
-                    "DAE files require trimesh. Install with: pip install trimesh"
-                )
             return self._load_dae(filepath)
         else:
             raise ValueError(f"Unsupported extension: {ext}")
-    
-    def _load_stl(self, filepath: Path) -> vtk.vtkPolyData:
-        """Load STL file using VTK STL reader."""
-        reader = vtk.vtkSTLReader()
+
+    @staticmethod
+    def _load_with_reader(filepath: Path, reader) -> vtk.vtkPolyData:
+        """Load a mesh using a VTK reader."""
         reader.SetFileName(str(filepath))
         reader.Update()
-        
         polydata = reader.GetOutput()
         if polydata is None:
-            raise RuntimeError("VTK STL reader returned None")
-        
+            raise RuntimeError(f"VTK reader returned None for {filepath}")
         return polydata
-    
-    def _load_obj(self, filepath: Path) -> vtk.vtkPolyData:
-        """Load OBJ file using VTK OBJ reader."""
-        reader = vtk.vtkOBJReader()
-        reader.SetFileName(str(filepath))
-        reader.Update()
-        
-        polydata = reader.GetOutput()
-        if polydata is None:
-            raise RuntimeError("VTK OBJ reader returned None")
-        
-        return polydata
-    
-    def _load_ply(self, filepath: Path) -> vtk.vtkPolyData:
-        """Load PLY file using VTK PLY reader."""
-        reader = vtk.vtkPLYReader()
-        reader.SetFileName(str(filepath))
-        reader.Update()
-        
-        polydata = reader.GetOutput()
-        if polydata is None:
-            raise RuntimeError("VTK PLY reader returned None")
-        
-        return polydata
-    
+
     def _load_dae(self, filepath: Path) -> vtk.vtkPolyData:
         """
-        Load DAE (Collada) file using trimesh and convert to VTK PolyData.
-        
+        Load DAE (Collada) file using trimesh and convert to vtkPolyData.
+
+        Combines all geometry from the scene into a single polydata.
         Extracts vertex colors if enable_color_extraction is True.
-        Combines all geometry from the scene into a single vtkPolyData.
         """
+        if not TRIMESH_AVAILABLE:
+            raise ImportError(
+                "DAE files require trimesh. Install with: pip install trimesh"
+            )
+
         scene = trimesh.load(str(filepath))
-        
-        # Extract all meshes from scene
+
         meshes = []
         if isinstance(scene, trimesh.Scene):
             for geometry in scene.geometry.values():
@@ -237,93 +295,56 @@ class MeshLoader:
         elif isinstance(scene, trimesh.Trimesh):
             meshes.append(scene)
         else:
-            raise RuntimeError(f"Unsupported DAE content type: {type(scene)}")
-        
+            raise RuntimeError(f"Unsupported DAE content: {type(scene)}")
+
         if not meshes:
             raise RuntimeError("No mesh geometry found in DAE file")
-        
-        # Combine all meshes into one
-        if len(meshes) == 1:
-            combined = meshes[0]
-        else:
-            combined = trimesh.util.concatenate(meshes)
-        
-        # Convert to VTK PolyData
-        return self._trimesh_to_vtk_polydata(combined)
-    
-    def _trimesh_to_vtk_polydata(self, mesh: trimesh.Trimesh) -> vtk.vtkPolyData:
-        """
-        Convert trimesh object to vtkPolyData with OPTIMIZED numpy conversion.
-        
-        Args:
-            mesh: trimesh.Trimesh object
-            
-        Returns:
-            vtkPolyData containing vertices, faces, and optionally colors
-        """
-        # Get vertices and faces
-        vertices = mesh.vertices
-        faces = mesh.faces
-        
-        if len(vertices) == 0:
+
+        combined = meshes[0] if len(meshes) == 1 else trimesh.util.concatenate(meshes)
+        return self._trimesh_to_vtk(combined)
+
+    def _trimesh_to_vtk(self, mesh) -> vtk.vtkPolyData:
+        """Convert trimesh object to vtkPolyData."""
+        if len(mesh.vertices) == 0:
             raise RuntimeError("Trimesh has no vertices")
-        
-        # ===== OPTIMIZED: Convert vertices using numpy_support =====
+
+        # Vertices
         points = vtk.vtkPoints()
         vtk_vertices = numpy_support.numpy_to_vtk(
-            vertices.astype(np.float32),
+            mesh.vertices.astype(np.float32),
             deep=True,
             array_type=vtk.VTK_FLOAT
         )
         points.SetData(vtk_vertices)
-        
-        # ===== OPTIMIZED: Convert faces using numpy_support =====
-        # VTK expects cells as flat array: [n, i1, i2, i3, n, i1, i2, i3, ...]
-        # For triangles, each cell has 4 elements (3 indices + count)
+
+        # Faces
         cell_data = np.column_stack([
-            np.full(len(faces), 3, dtype=np.int64),  # cell size (triangle = 3)
-            faces
+            np.full(len(mesh.faces), 3, dtype=np.int64),
+            mesh.faces
         ]).flatten()
-        
+
         cells = vtk.vtkCellArray()
         vtk_cells = numpy_support.numpy_to_vtk(
             cell_data,
             deep=True,
             array_type=vtk.VTK_ID_TYPE
         )
-        cells.SetCells(len(faces), vtk_cells)
-        
-        # Create polydata
+        cells.SetCells(len(mesh.faces), vtk_cells)
+
         polydata = vtk.vtkPolyData()
         polydata.SetPoints(points)
         polydata.SetPolys(cells)
-        
-        # ===== VERTEX COLORS (if available and enabled) =====
+
+        # Vertex colors
         if self._enable_color_extraction and hasattr(mesh, 'visual'):
             colors = None
-            
-            # Try vertex colors first
+
             if hasattr(mesh.visual, 'vertex_colors') and mesh.visual.vertex_colors is not None:
                 colors = mesh.visual.vertex_colors
                 if colors.shape[1] >= 3:
-                    # Convert to RGB (drop alpha if present)
-                    if colors.shape[1] == 4:
-                        colors = colors[:, :3]
+                    colors = colors[:, :3] if colors.shape[1] == 4 else colors[:, :3]
                     colors = colors.astype(np.uint8)
-            
-            # Fall back to face colors if no vertex colors
-            elif hasattr(mesh.visual, 'face_colors') and mesh.visual.face_colors is not None:
-                colors = mesh.visual.face_colors
-                if colors.shape[1] >= 3:
-                    if colors.shape[1] == 4:
-                        colors = colors[:, :3]
-                    colors = colors.astype(np.uint8)
-                    # Face colors need to be repeated for each vertex in the face
-                    # This is complex; skip for now, log warning
-                    print(f"  Note: Face colors found but not yet supported. "
-                          f"Vertex colors are preferred for DAE files.")
-                    colors = None
-            
+
             if colors is not None:
                 vtk_colors = numpy_support.numpy_to_vtk(
                     colors,
@@ -333,8 +354,8 @@ class MeshLoader:
                 vtk_colors.SetNumberOfComponents(3)
                 vtk_colors.SetName("Colors")
                 polydata.GetPointData().SetScalars(vtk_colors)
-        
-        # ===== NORMALS (optional, improves lighting) =====
+
+        # Normals (improves lighting)
         if hasattr(mesh, 'vertex_normals') and mesh.vertex_normals is not None:
             normals = mesh.vertex_normals.astype(np.float32)
             vtk_normals = numpy_support.numpy_to_vtk(
@@ -345,150 +366,5 @@ class MeshLoader:
             vtk_normals.SetNumberOfComponents(3)
             vtk_normals.SetName("Normals")
             polydata.GetPointData().SetNormals(vtk_normals)
-        
-        return polydata
-    
-    def get_mesh_data(self, handle: MeshHandle) -> vtk.vtkPolyData:
-        """
-        Retrieve the VTK PolyData for a loaded mesh (shallow copy, read-only).
-        
-        Args:
-            handle: MeshHandle returned from load_mesh()
-            
-        Returns:
-            vtkPolyData object (shallow copy - do not modify)
-            
-        Raises:
-            KeyError: If handle is invalid or mesh has been unloaded
-        """
-        if handle not in self._handle_to_path:
-            raise KeyError(f"Invalid or unloaded mesh handle: {handle}")
-        
-        filepath = self._handle_to_path[handle]
-        polydata = self._cache.get(filepath)
-        
-        if polydata is None:
-            raise KeyError(f"Mesh data missing from cache for handle: {handle}")
-        
-        # Return shallow copy to prevent modification of cached data
-        return polydata
-    
-    def get_mesh_data_copy(self, handle: MeshHandle) -> vtk.vtkPolyData:
-        """
-        Retrieve a DEEP COPY of the VTK PolyData for modification.
-        
-        Use this if you need to modify the mesh data (e.g., transform vertices).
-        For read-only visualization, use get_mesh_data() instead.
-        
-        Args:
-            handle: MeshHandle returned from load_mesh()
-            
-        Returns:
-            Deep copy of vtkPolyData (safe to modify)
-            
-        Raises:
-            KeyError: If handle is invalid or mesh has been unloaded
-        """
-        original = self.get_mesh_data(handle)
-        
-        # Create deep copy
-        copy_filter = vtk.vtkPolyDataAlgorithm()
-        # Use a simple pass-through filter to create a new copy
-        copy = vtk.vtkPolyData()
-        copy.DeepCopy(original)
-        
-        return copy
-    
-    def unload(self, handle: MeshHandle) -> None:
-        """
-        Unload a mesh and free its resources.
-        
-        Args:
-            handle: MeshHandle to unload
-            
-        Raises:
-            KeyError: If handle is invalid
-        """
-        if handle not in self._handle_to_path:
-            raise KeyError(f"Cannot unload invalid handle: {handle}")
-        
-        filepath = self._handle_to_path[handle]
-        
-        # Remove from cache
-        if filepath in self._cache:
-            del self._cache[filepath]
-        
-        # Remove mappings
-        del self._handle_to_path[handle]
-        del self._path_to_handle[filepath]
-    
-    def list_loaded(self) -> List[MeshHandle]:
-        """
-        List all currently loaded mesh handles.
-        
-        Returns:
-            List of MeshHandle objects for loaded meshes
-        """
-        return list(self._handle_to_path.keys())
-    
-    def is_loaded(self, filepath: Union[str, Path]) -> bool:
-        """
-        Check if a mesh file is currently loaded.
-        
-        Args:
-            filepath: Path to check
-            
-        Returns:
-            True if mesh is loaded, False otherwise
-        """
-        filepath = str(Path(filepath).resolve())
-        return filepath in self._cache
-    
-    def get_handle_for_file(self, filepath: Union[str, Path]) -> Optional[MeshHandle]:
-        """
-        Get the handle for a loaded mesh file.
-        
-        Args:
-            filepath: Path to mesh file
-            
-        Returns:
-            MeshHandle if loaded, None otherwise
-        """
-        filepath = str(Path(filepath).resolve())
-        return self._path_to_handle.get(filepath)
-    
-    def clear_all(self) -> None:
-        """Clear all loaded meshes from cache."""
-        self._cache.clear()
-        self._handle_to_path.clear()
-        self._path_to_handle.clear()
-    
-    def get_cache_info(self) -> dict:
-        """
-        Get information about current cache state.
-        
-        Returns:
-            Dictionary with cache statistics
-        """
-        return {
-            'num_loaded': len(self._cache),
-            'handles': [str(h) for h in self._handle_to_path.keys()],
-            'filepaths': list(self._cache.keys())
-        }
 
-
-# Example usage (for testing only)
-if __name__ == "__main__":
-    import sys
-    
-    manager = AssetManager(enable_color_extraction=True)
-    
-    print("=" * 50)
-    print("AssetManager - Pure Mesh Loading Service")
-    print("=" * 50)
-    print(f"Supported formats: {manager.get_supported_formats()}")
-    print(f"Color extraction: {manager._enable_color_extraction}")
-    print(f"Trimesh available: {TRIMESH_AVAILABLE}")
-    print(f"Initial cache: {manager.get_cache_info()}")
-    print("=" * 50)
-    print("Ready to load meshes.")
+        return polydata

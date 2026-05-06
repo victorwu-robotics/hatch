@@ -71,7 +71,19 @@ class StateHandler:
             print(f"[StateHandler] Warning: Could not build arm chain: {e}")
             # Fallback: use all links (may include cameras)
             arm_links = set(self._model.link_transforms.keys())
-        
+
+        # Also include the tool mount link if it is a fixed child of the last link
+        tool_mount = self._model.tool_mount_link
+        if tool_mount and tool_mount not in arm_links:
+            # Check if it's connected by a fixed joint to a link already in the chain
+            parent = self._model.link_parents.get(tool_mount)
+            if parent and parent in arm_links:
+                # Verify the joint is fixed
+                for j in self._model.joints.values():
+                    if j['parent'] == parent and j['child'] == tool_mount and j['type'] == 'fixed':
+                        arm_links.add(tool_mount)
+                        break
+
         return arm_links
     
     def _on_robot_state(self, event):

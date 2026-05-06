@@ -222,6 +222,15 @@ class MainWindow(QMainWindow):
         # Update simulated robot with the kinematic model
         self.simulated_robot.set_kinematic_model(model)
 
+        # Create joint frame control panel
+        if hasattr(self.robot_manager, '_joint_display'):
+            from ui.panels.joint_frame_panel import JointFramePanel
+            frame_panel = JointFramePanel(self.robot_manager._joint_display)
+            
+            dock = QDockWidget("Joint Frames", self)
+            dock.setWidget(frame_panel)
+            self.addDockWidget(Qt.LeftDockWidgetArea, dock)
+
     def _on_error(self, event):
         """Show error dialog for ERROR_OCCURRED events."""
         error_data = event.data

@@ -84,7 +84,7 @@ class KinematicModel:
 
         # Tool configuration
         self._tool_transform = np.eye(4)
-        self.tool_mount_link = None
+        self.tool_mount_link = None     # will be set in _find_true_root()
 
         # Parse and build
         self._parse_urdf()
@@ -287,6 +287,28 @@ class KinematicModel:
                     last_joint = self.joints.get(last_joint_name)
                     if last_joint:
                         self.tool_mount_link = last_joint['child']
+
+                        # Follow any fixed joints to reach the actual tool mounting point
+                        current_link = self.tool_mount_link
+                        while current_link in self.link_children:
+                            children = self.link_children[current_link]
+                            if len(children) != 1:
+                                break
+                            child = children[0]
+                            # Check that the child is connected by a fixed joint
+                            is_fixed = False
+                            for j in self.joints.values():
+                                if (j['parent'] == current_link and
+                                    j['child'] == child and
+                                    j['type'] == 'fixed'):
+                                    is_fixed = True
+                                    break
+                            if is_fixed:
+                                current_link = child
+                            else:
+                                break
+                        self.tool_mount_link = current_link
+
                         logger.info(f"Tool mount link: {self.tool_mount_link}")
             except Exception as e:
                 self.tool_mount_link = "wrist_3_link"  # fallback

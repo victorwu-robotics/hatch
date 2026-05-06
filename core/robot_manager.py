@@ -230,6 +230,9 @@ class RobotManager:
                                             asset_id=asset_id, scale=0.3)
             joint_display.attach(self.engine.get_renderer())
 
+            # Store reference for cleanup
+            self._joint_display = joint_display
+
             # Store in registry
             self._loaded_robots[asset_id] = {
                 'model': model,

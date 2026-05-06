@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 class ViewMenu:
     """View menu with camera views, grid controls, and fullscreen."""
 
-    def __init__(self, parent_window, camera_manager, engine):
+    # def __init__(self, parent_window, camera_manager, engine):
+    def __init__(self, parent_window, engine):
         """
         Initialize view menu.
 
@@ -25,7 +26,7 @@ class ViewMenu:
             engine: VisualizerEngine for view and grid control.
         """
         self.parent = parent_window
-        self.camera_manager = camera_manager
+        # self.camera_manager = camera_manager
         self.engine = engine
 
         self.actions = []

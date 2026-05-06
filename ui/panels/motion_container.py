@@ -139,6 +139,12 @@ class MotionContainer(QWidget):
             self.stacked.setCurrentWidget(self.joint_panel)
         else:
             self.stacked.setCurrentWidget(self.cartesian_panel)
+            # Force Cartesian panel to sync with current robot state
+            if hasattr(self, 'cartesian_panel'):
+                # self.cartesian_panel._update_current_display()
+                # if self.cartesian_panel.target_pose is None:
+                self.cartesian_panel._reset_target()
+
 
     def get_widget(self):
         """Return self for docking."""

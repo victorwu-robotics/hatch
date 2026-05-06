@@ -21,6 +21,7 @@ from core.world_state.state_channel import StateChannel
 from core.world_state.transform_registry import TransformRegistry
 from core.world_state.event_types import EventType
 from core.mode import Mode
+from displays.joint_frame_display import JointFrameDisplay
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,8 @@ class RobotManager:
         # Robot instances (injected by MainWindow)
         self._simulated_robot = None
         self._real_robot = None
+
+        self.mesh_loader = None # Set by MainWindow if available
 
         # Current robot state
         self.current_asset_id: Optional[str] = None
@@ -124,24 +127,28 @@ class RobotManager:
 
     def load_robot(self, urdf_path: str, asset_id: str = None) -> Optional[str]:
         """
-        Load a robot from URDF file.
+        Load a robot from URDF or xacro file.
 
-        Parses URDF, creates kinematic model and display,
-        registers transforms, publishes ROBOT_LOADED.
+        Parses the file (preprocessing xacro if needed), creates kinematic
+        model and display, registers transforms, publishes ROBOT_LOADED.
 
         Args:
-            urdf_path: Path to URDF file
-            asset_id: Optional ID (auto-generated from filename)
+            urdf_path: Path to .urdf or .xacro file.
+            asset_id: Optional ID (auto-generated from filename).
 
         Returns:
-            asset_id if successful, None otherwise
+            asset_id if successful, None otherwise.
         """
+        from pathlib import Path
+        import tempfile
         from core.kinematics.kinematic_model import KinematicModel
         from displays.kinematic_display import KinematicDisplay
 
+        urdf_path = Path(urdf_path).expanduser().resolve()
+
         try:
             if asset_id is None:
-                asset_id = Path(urdf_path).stem
+                asset_id = urdf_path.stem
 
             # Handle duplicate IDs
             if asset_id in self._loaded_robots:
@@ -149,25 +156,51 @@ class RobotManager:
                 asset_id = f"{asset_id}_{len(self._loaded_robots)}"
                 logger.info(f"Asset ID '{original}' exists, using '{asset_id}'")
 
-            # Package directories for mesh resolution
+            # Package directories for resolving package:// paths
             package_dirs = [
-                str(Path(urdf_path).parent),
-                str(Path(urdf_path).parent / "meshes"),
-                str(Path(urdf_path).parent / "visual"),
-                str(Path(urdf_path).parent / "meshes" / "visual"),
+                str(urdf_path.parent),                          # URDF's directory
+                str(urdf_path.parent.parent),                   # Package root
+                str(urdf_path.parent.parent.parent),            # Category
+                str(Path.home() / "hatch" / "assets"),           # Top-level assets
+                str(Path.home() / "hatch" / "assets" / "scenes"),
+                str(Path.home() / "hatch" / "assets" / "robots"),
+                str(Path.home() / "hatch" / "assets" / "sensors"),
+                str(Path.home() / "hatch" / "assets" / "ugv"),
+                str(Path.home() / "hatch" / "assets" / "tools"),
                 str(Path.home() / ".cache" / "robot_descriptions"),
             ]
 
-            logger.info(f"Parsing URDF: {urdf_path}")
+            logger.info(f"Loading: {urdf_path}")
 
-            # Create kinematic model
-            model = KinematicModel(
-                urdf_path=str(urdf_path),
-                package_dirs=package_dirs,
-                transform_registry=self.transform_registry,
-                asset_id=asset_id,
-                update_registry_on_state_change=False  # StateHandler manages this
-            )
+            # Preprocess xacro files, or load URDF directly
+            if urdf_path.suffix == '.xacro':
+                from core.urdf_preprocessor import URDFPreprocessor
+                preprocessor = URDFPreprocessor(package_dirs)
+                urdf_xml = preprocessor.process(str(urdf_path))
+
+                # Write preprocessed URDF to temp file for KinematicModel
+                with tempfile.NamedTemporaryFile(
+                    mode='w', suffix='.urdf', delete=False
+                ) as f:
+                    f.write(urdf_xml)
+                    temp_path = f.name
+
+                model = KinematicModel(
+                    urdf_path=temp_path,
+                    package_dirs=package_dirs,
+                    transform_registry=self.transform_registry,
+                    asset_id=asset_id,
+                    update_registry_on_state_change=False
+                )
+            else:
+                model = KinematicModel(
+                    urdf_path=str(urdf_path),
+                    package_dirs=package_dirs,
+                    transform_registry=self.transform_registry,
+                    asset_id=asset_id,
+                    update_registry_on_state_change=False
+                )
+
             model.load()
             logger.info(f"Kinematic model loaded: {asset_id}")
 
@@ -177,7 +210,7 @@ class RobotManager:
             # Register initial transforms
             self._register_initial_transforms(asset_id, model)
 
-            # Store asset base frame (true kinematic root)
+            # Store asset base frame (true kinematic root for Cartesian control)
             true_root = model.get_true_root()
             self._asset_bases[asset_id] = f"{asset_id}_{true_root}"
             logger.info(f"Asset base frame: {self._asset_bases[asset_id]}")
@@ -186,10 +219,16 @@ class RobotManager:
             display = KinematicDisplay(
                 model,
                 self.transform_registry,
+                mesh_loader=self.mesh_loader,  # Pass mesh_loader if available
                 asset_id=asset_id
             )
             display.attach(self.engine.get_renderer())
             self.engine.register_display(display)
+
+            # Add joint frame display
+            joint_display = JointFrameDisplay(model, self.transform_registry, 
+                                            asset_id=asset_id, scale=0.3)
+            joint_display.attach(self.engine.get_renderer())
 
             # Store in registry
             self._loaded_robots[asset_id] = {
@@ -237,7 +276,11 @@ class RobotManager:
             from core.kinematics.ik_solver import IKSolver
             ik_solver = IKSolver(model)
             model.set_ik_solver(ik_solver)
-            logger.info("IK solver attached")
+            if ik_solver is not None:
+                print("[ROB MANAGER]ik_solver is not None.")
+                logger.info("IK solver attached")
+            else:
+                print("[ROB MANAGER]ik_solver is None.")
         except ImportError:
             logger.info("IK solver not available (missing dependencies)")
         except Exception as e:
@@ -317,7 +360,7 @@ class RobotManager:
 
         # Register TCP frame
         tcp_frame = f"{asset_id}_tcp"
-        mount_link = "wrist_3_link"
+        mount_link = model.tool_mount_link or "wrist_3_link"
         parent_frame = f"{asset_id}_{mount_link}"
 
         try:

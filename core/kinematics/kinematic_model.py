@@ -84,7 +84,7 @@ class KinematicModel:
 
         # Tool configuration
         self._tool_transform = np.eye(4)
-        self.tool_mount_link = "wrist_3_link"
+        self.tool_mount_link = None
 
         # Parse and build
         self._parse_urdf()
@@ -224,21 +224,19 @@ class KinematicModel:
             return path if path.exists() else None
 
         if filename.startswith('package://'):
-            package_path = filename[10:]
-            parts = package_path.split('/')
+            package_path = filename[10:]  # e.g., "ur10/meshes/base_link.stl"
+            parts = package_path.split('/', 1)  # ["ur10", "meshes/base_link.stl"]
 
-            for pkg_dir in self.package_dirs:
-                candidate = pkg_dir / '/'.join(parts)
-                if candidate.exists():
-                    return candidate
-                if len(parts) > 0:
-                    candidate = pkg_dir / parts[0] / '/'.join(parts[1:])
+            if len(parts) == 2:
+                package_name, relative_path = parts
+
+                for pkg_dir in self.package_dirs:
+                    # Look for pkg_dir/package_name/relative_path
+                    candidate = Path(pkg_dir) / package_name / relative_path
                     if candidate.exists():
                         return candidate
 
-            cache_dir = Path.home() / ".cache" / "robot_descriptions"
-            candidate = cache_dir / '/'.join(parts)
-            return candidate if candidate.exists() else None
+            return None
 
         # Relative path
         mesh_path = self.urdf_path.parent / filename
@@ -280,6 +278,20 @@ class KinematicModel:
             self.true_root = self.joints[self.first_moving_joint]['parent']
             logger.info(f"True root: {self.true_root} "
                        f"(first moving joint: {self.first_moving_joint})")
+
+            # Detect tool mount link (last link in the kinematic chain)
+            try:
+                arm_chain = self.get_arm_chain(base_link_name=self.true_root)
+                if arm_chain:
+                    last_joint_name = arm_chain[-1]
+                    last_joint = self.joints.get(last_joint_name)
+                    if last_joint:
+                        self.tool_mount_link = last_joint['child']
+                        logger.info(f"Tool mount link: {self.tool_mount_link}")
+            except Exception as e:
+                self.tool_mount_link = "wrist_3_link"  # fallback
+                logger.info(f"Tool mount link (fallback): {self.tool_mount_link} ({e})")
+
         else:
             if self.root_links:
                 self.true_root = self.root_links[0]
@@ -531,7 +543,9 @@ class KinematicModel:
                          target_pose: np.ndarray,
                          q_guess: np.ndarray = None) -> Optional[np.ndarray]:
         """Solve IK for target TCP pose using attached solver."""
+        print(f"[KINEMATIC] going to call ik_solver")
         if not hasattr(self, '_ik_solver') or self._ik_solver is None:
+            print(f"[KINEMATIC] Call set_ik_solver() first.")
             raise RuntimeError("IK solver not configured. Call set_ik_solver() first.")
         return self._ik_solver.solve_ik_for_tcp(target_pose, q_guess)
 
@@ -549,7 +563,7 @@ class KinematicModel:
         Traverses through fixed joints to reach the first revolute joint,
         then collects all subsequent revolute joints in order.
         """
-        if base_link_name not in self.link_transforms:
+        if base_link_name not in self.links:
             raise ValueError(
                 f"Base link '{base_link_name}' not found. "
                 f"Available: {list(self.link_transforms.keys())[:10]}..."

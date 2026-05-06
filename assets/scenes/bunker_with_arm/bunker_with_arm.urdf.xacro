@@ -1,0 +1,77 @@
+<?xml version="1.0"?>
+<robot name="bunker_with_arm" xmlns:xacro="http://ros.org/wiki/xacro">
+
+  <!-- ===== PACKAGE PATH DEFINITIONS ===== -->
+  <!-- Define paths as xacro properties for easy modification -->
+  <xacro:property name="bunker_pro_path" value="$(find bunker_pro_description)"/>
+  <xacro:property name="ur_path" value="$(find ur_description)"/>
+  <xacro:property name="mwa_path" value="$(find mobile_arm_holder)"/>
+  <xacro:property name="keyence_path" value="$(find keyence_experimental)"/>
+  <xacro:property name="orbbec_path" value="$(find orbbec_camera)"/>
+
+
+  <!-- Import the Bunker Pro (as URDF since you already converted it) -->
+  <xacro:include filename="urdf/bunker_pro.urdf"/>
+
+  <!-- Import the calibrated UR10 
+  <xacro:include filename="calibrated/calibrated_ur10.urdf"/>-->
+  <!-- Import the nominal UR10 -->
+  <xacro:include filename="urdf/ur10_nominal.urdf"/>
+
+  <!-- ===== Connect them with a fixed joint ===== -->
+  <joint name="bunker_to_ur10" type="fixed">
+    <!-- Adjust this transform based on your mounting plate -->
+    <!-- xyz: position relative to bunker base -->
+    <!-- rpy: orientation (usually UR10 mounted upright) -->
+    <origin xyz="0.1235 0 0.015" rpy="0 0 ${pi}"/>
+    <parent link="bunker_pro_base_link"/>     <!-- Use your bunker's base link name -->
+    <child link="base_link"/>                  <!-- UR10's base link -->
+  </joint>
+
+  <!-- ===== WELDING TORCH HOLDER ===== -->
+  <link name="torch">  
+    <visual>
+      <geometry>
+        <!-- Use property-based path -->
+        <mesh filename="${mwa_path}/meshes/02-100-00-Assy_reduction.stl"
+              scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="LightRed">
+        <color rgba="1.0 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="${mwa_path}/meshes/02-100-00-Assy_reduction.stl"
+              scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="wrist_3_link_torch_fixed_joint" type="fixed">
+    <origin xyz="0.0 0.0 0.0" rpy="0 ${pi} ${pi}"/>
+    <parent link="wrist_3_link"/>
+    <child link="torch"/>
+  </joint>
+
+  <!-- ===== KEYENCE LASER SCANNER ===== -->
+  <joint name="wrist_3_link_lj_v7200_frame" type="fixed">
+    <origin xyz="0.062 -0.105 0.3667" rpy="0 ${pi} ${-pi/2}"/>
+    <parent link="wrist_3_link" />
+    <child  link="lj_v7200_optical_frame" />
+  </joint>
+
+  <xacro:include filename="${keyence_path}/urdf/lj_v7200_macro.xacro"/>
+  <xacro:lj_v7200 prefix=""/>
+
+  <!-- ===== ORBBEC RGB-D CAMERA ===== -->
+  <joint name="wrist_3_link_orbbec_camera_joint" type="fixed">
+    <origin xyz="-0.0225 -0.035 0.20685" rpy="0.0 ${-pi/2.0} ${pi/2.0}"/>
+    <parent link="wrist_3_link"/>
+    <child link="camera_link"/> <!-- Direct reference to Orbbec's link -->
+  </joint>
+
+  <xacro:include filename="${orbbec_path}/urdf/gemini_335_336.urdf.xacro" />
+
+
+</robot>

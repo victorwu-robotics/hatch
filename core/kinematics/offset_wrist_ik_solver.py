@@ -7,7 +7,7 @@ from math import pi
 from core.kinematics.ur_ik_solver import URIKSolver
 
 
-class IKSolver:
+class OffsetWristIKSolver:
     """IK solver wrapper that creates a parameterized UR IK solver."""
     
     def __init__(self, kinematic_model=None):

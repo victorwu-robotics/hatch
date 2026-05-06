@@ -14,7 +14,7 @@ import numpy as np
 import logging
 from typing import List, Dict, Optional
 
-from drivers.robot_arm.robot_interface import RobotInterface
+from drivers.robot_interface import RobotInterface
 from core.world_state.state_channel import StateChannel
 from core.world_state.event_types import EventType
 from core.mode import Mode

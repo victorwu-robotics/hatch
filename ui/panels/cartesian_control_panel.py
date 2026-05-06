@@ -61,6 +61,11 @@ class CartesianControlPanel(QWidget):
 
         self._setup_ui()
 
+        # Check if IK is available for this robot
+        self._ik_available = self._check_ik_available()
+        if not self._ik_available:
+            self._show_no_ik_message()
+
         # Install event filters for wheel events
         for slider in self.sliders:
             slider.installEventFilter(self)
@@ -371,10 +376,25 @@ class CartesianControlPanel(QWidget):
         Updates the display labels to show current TCP pose.
         Does NOT update the kinematic model — that is StateHandler's job.
         """
+
+        # Re-check IK if panels were disabled
+        if hasattr(self, '_ik_available') and not self._ik_available:
+            self._ik_available = self._check_ik_available()
+            if self._ik_available:
+                self._enable_controls()
+
         # Do NOT call kinematic_model.update_state() here.
         # StateHandler already updated the model.
         # We just refresh our display.
         self._update_current_display()
+
+    def _enable_controls(self):
+        """Re-enable sliders and buttons after IK becomes available."""
+        for slider in self.sliders:
+            slider.setEnabled(True)
+        self.reset_btn.setEnabled(True)
+        self.status_label.setText("Auto-move enabled (scroll or drag slider)")
+        self.status_label.setStyleSheet("QLabel { color: #666; }")
 
     def _update_current_display(self):
         """Refresh the current pose display from the kinematic model."""
@@ -411,20 +431,24 @@ class CartesianControlPanel(QWidget):
         Pure query — no mutation.
         """
         if self.kinematic_model is None:
+            print("[CARTESIAN] _get_tcp_pose_in_base: kinematic_model is None")
             return None
 
         try:
             tcp_world = self.kinematic_model.get_tcp_pose()
 
-            if self.transform_registry and self.asset_id:
-                base_frame = self.transform_registry.get_asset_base_frame(self.asset_id)
-                return self.transform_registry.transform_pose(
+            if self.robot_manager and self.asset_id:
+                base_frame = self.robot_manager.get_asset_base_frame(self.asset_id)
+                result = self.transform_registry.transform_frame_pose(
                     tcp_world,
                     from_frame="world",
                     to_frame=base_frame
                 )
+                # print(f"[CARTESIAN] _get_tcp_pose_in_base: success, pos=({result[0,3]:.4f}, {result[1,3]:.4f}, {result[2,3]:.4f})")
+                return result
             return tcp_world
-        except Exception:
+        except Exception as e:
+            print(f"[CARTESIAN] _get_tcp_pose_in_base: exception {e}")
             return None
 
     @staticmethod
@@ -453,6 +477,40 @@ class CartesianControlPanel(QWidget):
         self.step_mm.setChecked(abs(value - 0.001) < 0.0001)
         self.step_cm.setChecked(abs(value - 0.01) < 0.001)
         self.step_deg.setChecked(abs(value - 0.01745) < 0.001)
+
+    # ==================================================================
+
+    def _check_ik_available(self) -> bool:
+        """Check if the kinematic model has a working IK solver."""
+        if self.kinematic_model is None:
+            return False
+        try:
+            # Try a simple IK call at current position
+            current_pose = self.kinematic_model.get_tcp_pose()
+            print(f"[CARTESIAN] current pose: {current_pose}")
+            result = self.kinematic_model.solve_ik_for_tcp(
+                current_pose, 
+                self.kinematic_model.get_current_joint_positions()
+            )
+            print(f"[CARTESIAN] result: {result}")
+            return result is not None
+        except Exception:
+            return False
+
+    def _show_no_ik_message(self):
+        """Show a message that IK is not available for this robot."""
+        # Replace the slider area with a message
+        for slider in self.sliders:
+            slider.setEnabled(False)
+        
+        self.status_label.setText(
+            "Inverse kinematics not available for this robot.\n"
+            "Joint control is still available."
+        )
+        self.status_label.setStyleSheet(
+            "QLabel { color: #e67e22; font-weight: bold; padding: 20px; }"
+        )
+        self.reset_btn.setEnabled(False)
 
     # =================================================================
     # Wheel Event Handling

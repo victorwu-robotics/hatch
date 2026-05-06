@@ -103,11 +103,27 @@ class KinematicDisplay:
         logger.info(f"Loaded {loaded_count} visual geometries")
 
         # Force initial transform update
+
+        '''
+        if self.asset_id:
+            print(f"\n=== Transform Debug for {self.asset_id} ===")
+            for link_name in self.kinematic_model.link_transforms.keys():
+                frame_name = f"{self.asset_id}_{link_name}"
+                try:
+                    T_world = self.registry.get_transform(frame_name, "world")
+                    pos = T_world[:3, 3]
+                    print(f"  {link_name}: world pos = ({pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f})")
+                except ValueError:
+                    print(f"  {link_name}: NOT IN REGISTRY")
+            print("=" * 40)
+        '''
+
         if self.asset_id:
             for link_name in self.kinematic_model.link_transforms.keys():
                 frame_name = f"{self.asset_id}_{link_name}"
                 T_world = self.registry.get_transform(frame_name, "world")
-                self._update_link_transforms(link_name, T_world)
+                # self._update_link_transforms(link_name, T_world)
+
 
     def detach(self):
         """Clean up resources when display is removed from renderer."""
@@ -339,19 +355,32 @@ class KinematicDisplay:
         if scale != [1, 1, 1]:
             base_transform.Scale(scale)
 
+        # Compare model FK vs registry transform
+        if self.asset_id and link_name == self.kinematic_model.get_true_root():
+            frame_name = f"{self.asset_id}_{link_name}"
+            T_registry = self.registry.get_transform(frame_name, "world")
+            T_model = self.kinematic_model.link_transforms.get(link_name)
+            print(f"[CREATE {link_name}]")
+            print(f"  model FK pos:    ({T_model[0,3]:.4f}, {T_model[1,3]:.4f}, {T_model[2,3]:.4f})")
+            print(f"  registry pos:    ({T_registry[0,3]:.4f}, {T_registry[1,3]:.4f}, {T_registry[2,3]:.4f})")
+            print(f"  model == registry: {np.allclose(T_model, T_registry)}")
+
         origin_matrix = geom.get('origin_transform', np.eye(4))
         origin_transform = self._numpy_to_vtk_transform(origin_matrix)
         if origin_transform:
             base_transform.Concatenate(origin_transform)
 
-        # Chained transform: kinematic + base (updated each frame)
+        # Chained transform: world kinematic + base (set once at creation)
         transform_key = f"{link_name}_{index}"
         chained_transform = vtk.vtkTransform()
 
-        kinematic_transform = self.kinematic_model.get_vtk_transform(link_name)
-        if kinematic_transform:
-            chained_transform.DeepCopy(kinematic_transform)
-            chained_transform.Concatenate(base_transform)
+        # Use model FK for initial position (authoritative)
+        T_world = self.kinematic_model.link_transforms.get(link_name)
+        if T_world is not None:
+            world_vtk = self._numpy_to_vtk_transform(T_world)
+            chained_transform.DeepCopy(world_vtk)
+
+        chained_transform.Concatenate(base_transform)
 
         transform_filter.SetTransform(chained_transform)
         transform_filter.Update()
@@ -432,12 +461,23 @@ class KinematicDisplay:
 
         # Get world transform from registry
         try:
-            T_world = self.registry.get_transform(frame_name, "world")
+            # T_world = self.registry.get_transform(frame_name, "world")
+            T_world = self.registry.get_transform("world", frame_name)
         except Exception as e:
             logger.warning(f"Could not get world transform for {frame_name}: {e}")
             return
 
         self._update_link_transforms(link_name, T_world)
+
+        # Also update all descendant links
+        for child_link in self.kinematic_model.link_children.get(link_name, []):
+            child_frame = f"{self.asset_id}_{child_link}"
+            try:
+                T_world = self.registry.get_transform("world", child_frame)
+                self._update_link_transforms(child_link, T_world)
+            except ValueError:
+                pass
+
         self._needs_render = True
 
     def _update_link_transforms(self, link_name: str, T_world: np.ndarray):

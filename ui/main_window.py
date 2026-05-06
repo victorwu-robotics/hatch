@@ -27,12 +27,12 @@ from viz.visualizer_engine import VisualizerEngine, RenderConfig
 # Robot components
 from core.robot_manager import RobotManager
 from core.command_handler import CommandHandler
-from drivers.robot_arm.simulated_robot import SimulatedRobot
-from drivers.robot_arm.real_robot import RealRobot
+from drivers.simulated_robot import SimulatedRobot
+from drivers.real_robot import RealRobot
 
 # UI
 from ui.ui_builder import UIBuilder
-from ui.managers.camera_manager import CameraManager
+#from ui.managers.camera_manager import CameraManager
 from ui.panels.motion_container import MotionContainer
 
 logger = logging.getLogger(__name__)
@@ -78,24 +78,23 @@ class MainWindow(QMainWindow):
         self._setup_robot_components()
 
         # ===== 5. Camera Manager =====
+        '''
         self.camera_manager = CameraManager(
             self.transform_registry,
             self.state_channel,
             self.engine,
             self
         )
+        '''
 
         # ===== 6. UI Builder (menus, toolbars, docks) =====
         self.ui_builder = UIBuilder(
             self,
             self.state_channel,
             self.robot_manager,
-            self.camera_manager,
+            # self.camera_manager,
             self.engine
         )
-
-        # ===== 7. Motion Container =====
-        self._setup_motion_container()
 
         # ===== 8. Window-Level Event Handlers =====
         self._setup_event_handlers()
@@ -140,6 +139,8 @@ class MainWindow(QMainWindow):
             self.engine
         )
 
+        self.robot_manager.mesh_loader = self.mesh_loader
+
         # Create robot instances
         self.simulated_robot = SimulatedRobot(
             kinematic_model=None,  # Set when robot loads
@@ -163,14 +164,14 @@ class MainWindow(QMainWindow):
             real_robot=self.real_robot
         )
 
-    def _setup_motion_container(self):
+    def _setup_motion_container(self, kinematic_model, asset_id):
         """Create the motion control container as a dock widget."""
         self.motion_container = MotionContainer(
-            kinematic_model=None,  # Set when robot loads
+            kinematic_model=kinematic_model,
             state_channel=self.state_channel,
             robot_manager=self.robot_manager,
             transform_registry=self.transform_registry,
-            asset_id=None,
+            asset_id=asset_id,
             parent=self
         )
 
@@ -206,10 +207,17 @@ class MainWindow(QMainWindow):
         if model is None:
             return
 
-        # Update motion container
-        self.motion_container.kinematic_model = model
-        self.motion_container.asset_id = asset_id
-        self.motion_container._set_panels_enabled(True)
+        # Create StateHandler (single owner of model + registry updates)
+        from core.state_handler import StateHandler
+        self.state_handler = StateHandler(
+            state_channel=self.state_channel,
+            kinematic_model=model,
+            transform_registry=self.transform_registry,
+            asset_id=asset_id
+        )
+
+        # Create motion container (only when we have a model)
+        self._setup_motion_container(model, asset_id)
 
         # Update simulated robot with the kinematic model
         self.simulated_robot.set_kinematic_model(model)
@@ -245,6 +253,9 @@ def main():
         level=logging.INFO,
         format='%(name)s: %(message)s'
     )
+
+    print(f"Logging level: {logging.getLogger().getEffectiveLevel()}")
+    print(f"Geometric solver logger level: {logging.getLogger('core.kinematics.geom_sph_ik_solver').getEffectiveLevel()}")
 
     app = QApplication(sys.argv)
     app.setStyle('Fusion')

@@ -55,7 +55,7 @@ class StateHandler:
         
         try:
             # Get the arm chain (list of joint names from base to TCP)
-            arm_joints = self._model.get_arm_chain()
+            arm_joints = self._model.get_arm_chain(base_link_name=self._model.get_true_root())
             
             for joint_name in arm_joints:
                 joint = self._model.joints.get(joint_name)
@@ -97,77 +97,89 @@ class StateHandler:
     
     def _update_transform_registry(self):
         """
-        Update all robot frames in transform registry.
-        Only registers links in the main kinematic chain.
-        Skips camera frames, laser scanners, and tool attachments.
+        Update TransformRegistry with current link transforms from the model.
+
+        Computes parent-relative transforms for each link in the arm chain
+        and updates the registry. Links are updated in depth order (parents
+        before children) so that when a child's transform change triggers
+        callbacks, the parent's world transform is already up to date in
+        the registry cache.
+
+        Also updates the TCP frame at the tool mount link.
+
+        This is called by _on_robot_state every time a ROBOT_STATE event
+        arrives. It is the single owner of runtime registry updates.
         """
-        print(f"[SH] === Updating transform registry ===")
+
         if not hasattr(self._model, 'link_transforms'):
             return
-        
+
         true_root = self._model.get_true_root()
-        print(f"[SH] True root: {true_root}")
+
+        # Collect frames with their parent info
+        updates = []
         for link_name, T_world in self._model.link_transforms.items():
-            # Skip links not in the main kinematic chain
             if link_name not in self._arm_chain_links:
                 continue
-            
-            frame_name = f"{self._asset_id}_{link_name}"
-            
-            # Determine parent frame and compute relative transform
+
             if link_name == true_root:
                 parent_frame = "world"
                 T_rel = T_world
-                print(f"[SH] {link_name}: parent=world, pos=({T_world[0,3]:.3f}, {T_world[1,3]:.3f}, {T_world[2,3]:.3f})")
+                depth = 0
             else:
                 parent_link = self._model.link_parents.get(link_name)
                 if parent_link:
-                    # Use parent as-is, even if not in arm chain
                     parent_frame = f"{self._asset_id}_{parent_link}"
                     T_parent_world = self._model.link_transforms.get(parent_link, np.eye(4))
                     T_rel = np.linalg.inv(T_parent_world) @ T_world
                 else:
                     parent_frame = "world"
                     T_rel = T_world
-            
-            # Update or create frame with error handling
+
+            # Compute depth by walking up to root
+            depth = 0
+            current = link_name
+            while current != true_root and depth < 100:
+                current = self._model.link_parents.get(current)
+                if current is None:
+                    break
+                depth += 1
+
+            updates.append((depth, link_name, T_rel, parent_frame))
+
+        # Sort by depth: parents before children
+        updates.sort(key=lambda x: x[0])
+
+        for depth, link_name, T_rel, parent_frame in updates:
+            frame_name = f"{self._asset_id}_{link_name}"
+
             try:
-                self._registry.update(frame_name, T_rel)
+                self._registry.update_frame(frame_name, T_rel)
             except ValueError:
-                # Frame doesn't exist yet - create it
                 try:
-                    self._registry.set(
-                        frame_name,
-                        T_rel,
+                    self._registry.register_frame(
+                        frame_name, T_rel,
                         status=FrameStatus.DYNAMIC,
                         parent=parent_frame,
                         description=f"Link: {link_name}"
                     )
-                except ValueError as e:
-                    # Parent frame not found - skip this frame
-                    # This happens for camera frames, laser scanners, etc.
+                except ValueError:
                     continue
-        
-        # Special case: TCP frame (Tool Center Point)
-        tcp_frame = f"{self._asset_id}_tcp"
-        mount_link = "wrist_3_link"
-        
-        # Only register TCP if mount link is in arm chain
+
+        # Update TCP frame
+        mount_link = self._model.tool_mount_link or "wrist_3_link"
         if mount_link in self._arm_chain_links:
+            tcp_frame = f"{self._asset_id}_tcp"
             parent_frame = f"{self._asset_id}_{mount_link}"
-            T_tcp_parent = np.eye(4)  # TCP is exactly at mount point by default
-            
             try:
-                self._registry.update(tcp_frame, T_tcp_parent)
+                self._registry.update_frame(tcp_frame, np.eye(4))
             except ValueError:
                 try:
-                    self._registry.set(
-                        tcp_frame,
-                        T_tcp_parent,
+                    self._registry.register_frame(
+                        tcp_frame, np.eye(4),
                         status=FrameStatus.DYNAMIC,
                         parent=parent_frame,
-                        description="Tool Center Point (at wrist_3_link)"
+                        description="Tool Center Point"
                     )
                 except ValueError:
-                    # Parent frame not found - skip TCP registration
                     pass

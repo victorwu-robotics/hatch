@@ -8,9 +8,9 @@ import numpy as np
 from core.world_state.state_channel import StateChannel
 from core.world_state.event_types import EventType
 from core.mode import Mode
-from drivers.robot_arm.robot_interface import RobotInterface
-from drivers.robot_arm.simulated_robot import SimulatedRobot
-from drivers.robot_arm.real_robot import RealRobot
+from drivers.robot_interface import RobotInterface
+from drivers.simulated_robot import SimulatedRobot
+from drivers.real_robot import RealRobot
 
 
 class CommandHandler:

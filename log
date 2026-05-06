@@ -1,0 +1,146 @@
+(venv) victor@PolyU-victor:~/hatch$ python -m ui.main_window
+Logging level: 20
+Geometric solver logger level: 20
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-victor'
+VisualizerEngine: Camera distance preserved: 1.00m
+VisualizerEngine: Set view to ISOMETRIC (preserving distance)
+VisualizerEngine: VTK renderer created
+VisualizerEngine: Grid size: 0.1m, extent: ±2.0m
+VisualizerEngine: Embedded VTK widget in Qt container
+core.robot_manager: RobotManager initialized
+drivers.simulated_robot: SimulatedRobot initialized
+drivers.ur_rtde_bridge: RTDE not available — operating in mock mode
+drivers.real_robot: RealRobot initialized
+drivers.simulated_robot: Mode set to SIMULATE_LOCAL (use_real_ik=False)
+[CommandHandler] Initialized in mode: SIMULATE_LOCAL
+UIBuilder: Initialized
+__main__: MainWindow initialized
+core.robot_manager: Loading: /home/victor/hatch/assets/robots/E15_Pro/urdf/E15_Pro.urdf
+core.kinematics.kinematic_model: True root: elfin_base (first moving joint: elfin_joint1)
+core.kinematics.kinematic_model: Tool mount link: elfin_link6
+core.robot_manager: Kinematic model loaded: E15_Pro
+core.kinematics.geom_sph_ik_solver: Module loaded
+core.kinematics.geom_sph_ik_solver: TCP offset from wrist center: [3.23117427e-27 0.00000000e+00 5.70000000e-01]
+core.kinematics.geom_sph_ik_solver: Upper arm: 0.7300m, Forearm: 0.5700m, Shoulder height: 0.2620m
+core.kinematics.ik_solver: Using geometric IK solver (spherical wrist, model-queried)
+core.kinematics.ik_solver: Numerical IK solver available as fallback
+core.kinematics.kinematic_model: IK solver attached to model
+[ROB MANAGER]ik_solver is not None.
+core.robot_manager: IK solver attached
+core.robot_manager: Registering transforms for E15_Pro (true root: elfin_base)
+core.robot_manager: Registered 9 frames for E15_Pro
+core.robot_manager: Asset base frame: E15_Pro_elfin_base
+displays.kinematic_display: KinematicDisplay created for asset: E15_Pro
+displays.kinematic_display: Attaching to VTK renderer...
+[CREATE elfin_base]
+  model FK pos:    (0.0000, 0.0000, 0.0000)
+  registry pos:    (0.0000, 0.0000, 0.0000)
+  model == registry: True
+displays.kinematic_display: Loaded 8 visual geometries
+drivers.simulated_robot: Kinematic model set, joints initialized to [0. 0. 0. 0. 0. 0.]
+ui.menus.robots_menu: RobotsMenu: robot loaded - E15_Pro
+[StateHandler] Initialized for asset: E15_Pro
+[StateHandler] Arm chain has 7 links
+[CARTESIAN] current pose: [[ 1.00000000e+00 -7.34641021e-06  2.69847723e-11  1.53813202e-11]
+ [ 7.34641021e-06  1.00000000e+00 -7.34638322e-06 -6.86887816e-06]
+ [ 2.69847723e-11  7.34638322e-06  1.00000000e+00  1.56200000e+00]
+ [ 0.00000000e+00  0.00000000e+00  0.00000000e+00  1.00000000e+00]]
+[KINEMATIC] going to call ik_solver
+core.kinematics.ik_solver: [IKSolver] Solved by: Numerical fallback
+[CARTESIAN] result: [0. 0. 0. 0. 0. 0.]
+drivers.simulated_robot: Kinematic model set, joints initialized to [0. 0. 0. 0. 0. 0.]
+core.robot_manager: Robot loaded successfully: E15_Pro
+[CH] Received JOINT_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[CH] Calling move_joints with [0.0, -0.16449999999999987, 0.0, 0.0, 0.0, 0.0]
+[SH] joint_positions from event: [0.0, -0.16449999999999987, 0.0, 0.0, 0.0, 0.0]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [0.0, -0.16449999999999987, 0.0]...
+[CH] Received JOINT_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[CH] Calling move_joints with [0.0, -0.22560000000000002, 0.0, 0.0, 0.0, 0.0]
+[SH] joint_positions from event: [0.0, -0.22560000000000002, 0.0, 0.0, 0.0, 0.0]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [0.0, -0.22560000000000002, 0.0]...
+[CH] Received JOINT_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[CH] Calling move_joints with [0.0, -0.2585000000000002, 0.0, 0.0, 0.0, 0.0]
+[SH] joint_positions from event: [0.0, -0.2585000000000002, 0.0, 0.0, 0.0, 0.0]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [0.0, -0.2585000000000002, 0.0]...
+[CH] Received JOINT_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[CH] Calling move_joints with [0.0, -0.3195999999999999, 0.0, 0.0, 0.0, 0.0]
+[SH] joint_positions from event: [0.0, -0.3195999999999999, 0.0, 0.0, 0.0, 0.0]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [0.0, -0.3195999999999999, 0.0]...
+[CH] Received JOINT_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[CH] Calling move_joints with [0.0, -0.3477999999999999, 0.0, 0.0, 0.0, 0.0]
+[SH] joint_positions from event: [0.0, -0.3477999999999999, 0.0, 0.0, 0.0, 0.0]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [0.0, -0.3477999999999999, 0.0]...
+[CH] Received JOINT_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[CH] Calling move_joints with [0.0, -0.38070000000000004, 0.0, 0.0, 0.0, 0.0]
+[SH] joint_positions from event: [0.0, -0.38070000000000004, 0.0, 0.0, 0.0, 0.0]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [0.0, -0.38070000000000004, 0.0]...
+[CH] Received JOINT_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[CH] Calling move_joints with [0.0, -0.40890000000000004, 0.0, 0.0, 0.0, 0.0]
+[SH] joint_positions from event: [0.0, -0.40890000000000004, 0.0, 0.0, 0.0, 0.0]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [0.0, -0.40890000000000004, 0.0]...
+[CH] Received JOINT_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[CH] Calling move_joints with [0.0, -0.40890000000000004, 0.2505600000000001, 0.0, 0.0, 0.0]
+[SH] joint_positions from event: [0.0, -0.40890000000000004, 0.2505600000000001, 0.0, 0.0, 0.0]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [0.0, -0.40890000000000004, 0.2505600000000001]...
+[CH] Received JOINT_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[CH] Calling move_joints with [0.0, -0.40890000000000004, 0.38627999999999973, 0.0, 0.0, 0.0]
+[SH] joint_positions from event: [0.0, -0.40890000000000004, 0.38627999999999973, 0.0, 0.0, 0.0]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [0.0, -0.40890000000000004, 0.38627999999999973]...
+[CH] Received JOINT_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[CH] Calling move_joints with [0.0, -0.40890000000000004, 0.42281999999999975, 0.0, 0.0, 0.0]
+[SH] joint_positions from event: [0.0, -0.40890000000000004, 0.42281999999999975, 0.0, 0.0, 0.0]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [0.0, -0.40890000000000004, 0.42281999999999975]...
+[CH] Received JOINT_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[CH] Calling move_joints with [0.0, -0.40890000000000004, 0.45413999999999977, 0.0, 0.0, 0.0]
+[SH] joint_positions from event: [0.0, -0.40890000000000004, 0.45413999999999977, 0.0, 0.0, 0.0]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [0.0, -0.40890000000000004, 0.45413999999999977]...
+[CH] Received JOINT_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[CH] Calling move_joints with [0.0, -0.40890000000000004, 0.5219999999999998, 0.0, 0.0, 0.0]
+[SH] joint_positions from event: [0.0, -0.40890000000000004, 0.5219999999999998, 0.0, 0.0, 0.0]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [0.0, -0.40890000000000004, 0.5219999999999998]...
+[CH] Received JOINT_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[CH] Calling move_joints with [0.0, -0.40890000000000004, 0.5533199999999998, 0.0, 0.0, 0.0]
+[SH] joint_positions from event: [0.0, -0.40890000000000004, 0.5533199999999998, 0.0, 0.0, 0.0]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [0.0, -0.40890000000000004, 0.5533199999999998]...
+[CH] Received JOINT_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[CH] Calling move_joints with [0.0, -0.40890000000000004, 0.5898599999999998, 0.0, 0.0, 0.0]
+[SH] joint_positions from event: [0.0, -0.40890000000000004, 0.5898599999999998, 0.0, 0.0, 0.0]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [0.0, -0.40890000000000004, 0.5898599999999998]...
+[CH] Received JOINT_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[CH] Calling move_joints with [0.0, -0.40890000000000004, 0.6211799999999998, 0.0, 0.0, 0.0]
+[SH] joint_positions from event: [0.0, -0.40890000000000004, 0.6211799999999998, 0.0, 0.0, 0.0]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [0.0, -0.40890000000000004, 0.6211799999999998]...
+[CH] Received JOINT_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[CH] Calling move_joints with [0.0, -0.40890000000000004, 0.6577199999999999, 0.0, 0.0, 0.0]
+[SH] joint_positions from event: [0.0, -0.40890000000000004, 0.6577199999999999, 0.0, 0.0, 0.0]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [0.0, -0.40890000000000004, 0.6577199999999999]...
+[CH] Received CARTESIAN_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[KINEMATIC] going to call ik_solver
+core.kinematics.ik_solver: [IKSolver] Solved by: Numerical fallback
+[SH] joint_positions from event: [-3.938246123400715e-06, -0.3343812358667134, 1.503733133777487, -4.341694710806686e-06, -0.7714928443484786, 5.365106125841589e-06]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [-3.938246123400715e-06, -0.3343812358667134, 1.503733133777487]...
+[CH] Received CARTESIAN_COMMAND, active_robot=<drivers.simulated_robot.SimulatedRobot object at 0x73a58e7bcee0>
+[KINEMATIC] going to call ik_solver
+core.kinematics.ik_solver: [IKSolver] Solved by: Numerical fallback
+[SH] joint_positions from event: [-3.938246123400715e-06, -0.3343812358667134, 1.503733133777487, -4.341694710806686e-06, -0.7714928443484786, 5.365106125841589e-06]
+[SH] Type: <class 'list'>, length: 6
+[SH] Updating model with [-3.938246123400715e-06, -0.3343812358667134, 1.503733133777487]...
+
+

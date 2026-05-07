@@ -1,7 +1,11 @@
 import numpy as np
 import math
 import random
-from my_ik_solver import HanE15ProIK_Simple
+from elf_ik import GeometricIKSolver
+from kinematic_model import KinematicModel
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path.home() / "hatch"))
 
 def test_ik_validation(solver, num_tests=100):
     """
@@ -73,8 +77,25 @@ def run_complete_test_suite():
     """
     Run all tests to validate the IK solver.
     """
+    urdf_path = Path.home() / "hatch/assets/robots/E15_Pro/urdf/E15_Pro.urdf"
+    package_dirs = [
+        str(urdf_path.parent),
+        str(urdf_path.parent.parent),
+        str(Path.home() / "hatch" / "assets"),
+        str(Path.home() / "hatch" / "assets" / "robots"),
+    ]
+
+    print("Loading URDF...")
+    model = KinematicModel(
+        urdf_path=str(urdf_path),
+        package_dirs=package_dirs,
+        asset_id="E15_Pro"
+    )
+    model.load()
+
+
     # Initialize your solver
-    solver = HanE15ProIK_Simple()
+    solver = GeometricIKSolver(model)
     
     print("\n" + "█" * 60)
     print("  HAN'S E15-PRO IK SOLVER TEST SUITE")

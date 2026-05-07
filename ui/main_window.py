@@ -12,7 +12,7 @@ Principle #2: Event-Driven, No Polling.
 import sys
 import logging
 
-from PyQt5.QtWidgets import QMainWindow, QApplication, QDockWidget, QMessageBox
+from PyQt5.QtWidgets import QMainWindow, QApplication, QDockWidget, QMessageBox, QSizePolicy
 from PyQt5.QtCore import Qt
 
 # Core services
@@ -229,6 +229,8 @@ class MainWindow(QMainWindow):
             
             dock = QDockWidget("Joint Frames", self)
             dock.setWidget(frame_panel)
+            dock.setMinimumWidth(250)
+            dock.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
             self.addDockWidget(Qt.LeftDockWidgetArea, dock)
 
     def _on_error(self, event):

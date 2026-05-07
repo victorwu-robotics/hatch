@@ -166,6 +166,26 @@ class JointFrameDisplay:
         transform.SetMatrix(T_world.flatten())
         axes.SetUserTransform(transform)
 
+    def get_frame_poses(self):
+        """Return world transforms of all joint frames."""
+        poses = {}
+        for joint_name, info in self.joint_axes.items():
+            try:
+                T = self.registry.get_transform("world", info['frame_name'])
+                poses[joint_name] = T
+            except ValueError:
+                pass
+        return poses
+
+    def get_tcp_pose(self):
+        """Return world transform of the TCP frame."""
+        if hasattr(self, 'tcp_frame_name'):
+            try:
+                return self.registry.get_transform("world", self.tcp_frame_name)
+            except ValueError:
+                pass
+        return None
+
     def detach(self):
         """Remove all actors."""
         if self.renderer:

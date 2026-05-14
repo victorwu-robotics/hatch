@@ -1,18 +1,13 @@
 """
-Analytical IK Solver for spherical wrist robots.
+Pure Analytical IK Solver for 6-DOF spherical wrist robot.
 
-Uses Pieper decoupling: position the wrist center with joints 1-3,
-then orient the tool with joints 4-6.
-
-All geometric parameters measured from the model's FK at init.
-No D-H parameters. No numerical iteration for the arm.
-
-Principle #7: Movements as Models.
+Uses geometric decoupling: arm (position) + wrist (orientation).
+No numerical optimization — purely closed-form analytical solutions.
 """
 
 import numpy as np
-from math import pi, sin, cos, atan2, acos, sqrt
 from typing import Optional, List, Tuple
+from scipy.spatial.transform import Rotation as R
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,288 +15,250 @@ logger = logging.getLogger(__name__)
 
 class AnalyticalIKSolver:
     """
-    Analytical IK for spherical wrist robots.
-
-    Measures link lengths and tool offset from the model at startup.
-    Solves joints 1-3 geometrically (law of cosines).
-    Solves joints 4-6 by decomposing the remaining rotation.
+    Pure analytical IK solver for 6-DOF robot with spherical wrist.
+    
+    Decomposes into arm (θ1,θ2,θ3) positioning the wrist center,
+    and wrist (θ4,θ5,θ6) achieving the desired orientation.
+    Provides all 8 solutions in closed form.
     """
-
-    def __init__(self, kinematic_model):
-        self.model = kinematic_model
-
-        # Measure all geometry from the model at zero configuration
-        self._measure_geometry()
-
-        logger.info(f"Analytical IK: upper arm={self.l_upper:.4f}m, "
-                   f"forearm={self.l_forearm:.4f}m, "
-                   f"shoulder={self.shoulder_height:.4f}m, "
-                   f"tool_offset={self.tool_offset:.4f}m")
-
-    def _measure_geometry(self):
-        """Measure all geometric parameters from the model."""
-        q_zero = np.zeros(6)
-        self.model.update_state(q_zero)
-
-        # Identify key frames from the arm chain
-        arm_chain = self.model.get_arm_chain(self.model.get_true_root())
-
-        # Start from the true base (before any moving joints)
-        true_root = self.model.get_true_root()
-        T_base = self.model.link_transforms[true_root]
-        base_pos = T_base[:3, 3]
-
-        # Joint positions at zero configuration, starting from the true base
-        positions = [base_pos]  # Position 0 = true base
-        
-        current_link = true_root
-        for joint_name in arm_chain:
-            joint = self.model.joints[joint_name]
-            child_link = joint['child']
-            T = self.model.link_transforms[child_link]
-            positions.append(T[:3, 3])
-            current_link = child_link
-
-        # Now positions[0] = base, positions[1] = J1 child, positions[2] = J2 child, ...
-        # Joint i's position is positions[i+1] (since positions[0] is base)
-        
-        self.shoulder_height = np.linalg.norm(positions[2] - positions[0])  # J2 - base
-        self.l_upper = np.linalg.norm(positions[3] - positions[2])          # J3 - J2
-        self.l_forearm = np.linalg.norm(positions[6] - positions[3])        # J6 - J3
-
-        # Tool offset: TCP to wrist center distance
-        T_tcp = self.model.get_tcp_pose()
-        T_wrist = self.model.link_transforms[self.model.joints[arm_chain[5]]['child']]
-        offset_world = T_tcp[:3, 3] - T_wrist[:3, 3]
-        self.tool_offset = np.linalg.norm(offset_world)
-
-        # Wrist center link
-        self.wrist_center_link = self.model.joints[arm_chain[5]]['child']
-
-    def solve_ik_for_tcp(self,
-                         target_pose: np.ndarray,
-                         q_guess: np.ndarray = None) -> Optional[np.ndarray]:
+    
+    def __init__(self, kinematic_mdel, d1: float, a2: float, a3: float, d6: float):
         """
-        Solve IK for target TCP pose.
-
         Args:
-            target_pose: 4x4 desired TCP pose in base frame.
-            q_guess: Initial joint guess for solution selection.
-
-        Returns:
-            6 joint angles, or None if no solution.
+            d1: Shoulder height offset (base to J2 along Z, at zero)
+            a2: Upper arm length (J2 to J3)
+            a3: Forearm length (J3 to wrist center = J5/J6 origin)
+            d6: Tool offset from wrist center to TCP (along tool Z-axis)
         """
-        # Step 1: Compute wrist center from target TCP
-        p_tcp = target_pose[:3, 3]
-        R_tcp = target_pose[:3, :3]
-        tool_dir = R_tcp[:, 2]  # Z-axis = tool direction
-        p_wrist = p_tcp - tool_dir * self.tool_offset
-
-        print(f"[Analytical] TCP=({p_tcp[0]:.4f},{p_tcp[1]:.4f},{p_tcp[2]:.4f})")
-        print(f"[Analytical] tool_dir=({tool_dir[0]:.4f},{tool_dir[1]:.4f},{tool_dir[2]:.4f})")
-        print(f"[Analytical] tool_offset={self.tool_offset:.4f}")
-        print(f"[Analytical] wrist=({p_wrist[0]:.4f},{p_wrist[1]:.4f},{p_wrist[2]:.4f})")
-        print(f"[Analytical] shoulder={self.shoulder_height:.4f}, upper={self.l_upper:.4f}, forearm={self.l_forearm:.4f}")
-
-        # Step 2: Solve joints 1-3 geometrically
-        q123_solutions = self._solve_arm(p_wrist)
-
-        if arm_sols:
-            q1, q2, q3 = arm_sols[0]
-            q_test = np.array([q1, q2, q3, 0, 0, 0])
-            self.model.update_state(q_test)
-            
-            # Get actual link5 position from FK
-            T_link5 = self.model.link_transforms['elfin_link5']
-            p_wrist_achieved = T_link5[:3, 3]
-            
-            print(f"\n=== ARM SOLUTION VERIFICATION ===")
-            print(f"Arm solution: q1={q1:.4f}, q2={q2:.4f}, q3={q3:.4f}")
-            print(f"Target wrist centre: {p_wrist}")
-            print(f"Achieved link5 position: {p_wrist_achieved}")
-            print(f"Wrist position error: {np.linalg.norm(p_wrist_achieved - p_wrist):.6f}")
-            
-            # Also check link3 (forearm) to understand the arm plane
-            T_link3 = self.model.link_transforms['elfin_link3']
-            print(f"Link3 (forearm) position: {T_link3[:3, 3]}")
-            print(f"Link3 Z-axis: {T_link3[:3, 2]}")
-            
-            # And TCP
-            T_tcp = self.model.get_tcp_pose()
-            print(f"TCP position (J4-J6=0): {T_tcp[:3, 3]}")
-            print(f"TCP Z-axis (J4-J6=0): {T_tcp[:3, 2]}")
-            print(f"===================================\n")
-
-        print(f"[Analytical] Arm solutions: {len(q123_solutions)}")
-        if not q123_solutions:
-            return None
-
-        # Step 3: Solve joints 4-6 for each arm solution
-        best_solution = None
-        best_dist = float('inf')
-
-        for q1, q2, q3 in q123_solutions:
-            q_wrist_solutions = self._solve_wrist(
-                target_pose, np.array([q1, q2, q3])
-            )
-            for q4, q5, q6 in q_wrist_solutions:
-                q = np.array([q1, q2, q3, q4, q5, q6])
-                q = self._wrap_angles(q)
-
-                # Verify against model FK
-                self.model.update_state(q)
-                T_check = self.model.get_tcp_pose()
-                pos_err = np.linalg.norm(T_check[:3, 3] - target_pose[:3, 3])
-                print(f"[Verify] q=({q[0]:.4f},{q[1]:.4f},{q[2]:.4f},{q[3]:.4f},{q[4]:.4f},{q[5]:.4f}) pos_err={pos_err:.6f}")
-
-                if pos_err < 1e-3:
-                    if q_guess is not None:
-                        diff = q - q_guess
-                        diff = (diff + pi) % (2*pi) - pi
-                        dist = np.sum(np.abs(diff))
-                        if dist < best_dist:
-                            best_dist = dist
-                            best_solution = q.copy()
-                    else:
-                        return q
-
-        return best_solution
-
-    def _solve_arm(self,
-                   wrist_center: np.ndarray) -> List[Tuple[float, float, float]]:
+        self.model = kinematic_mdel
+        self.d1 = d1
+        self.a2 = a2
+        self.a3 = a3
+        self.d6 = d6
+    
+    def solve_ik(self, target_pose: np.ndarray) -> List[np.ndarray]:
         """
-        Solve joints 1-3 to position the wrist center.
-
-        Joint 1: rotate the arm plane.
-        Joints 2-3: law of cosines in the arm plane.
-        """
-        x, y, z = wrist_center
-
-        # Joint 1: base rotation
-        r_xy = sqrt(x**2 + y**2)
-        q1 = -atan2(y, x) if r_xy > 1e-6 else 0.0
-        q1_candidates = [q1, q1 + pi] if r_xy > 1e-6 else [0.0]
-
-        solutions = []
-
-        for q1_val in q1_candidates:
-            dz = z - self.shoulder_height
-            d = sqrt(r_xy**2 + dz**2)
-
-            if d > self.l_upper + self.l_forearm or d < abs(self.l_upper - self.l_forearm):
-                continue
-
-            cos_q3 = (self.l_upper**2 + self.l_forearm**2 - d**2) / (
-                2 * self.l_upper * self.l_forearm
-            )
-            cos_q3 = np.clip(cos_q3, -1.0, 1.0)
-
-            for q3 in [acos(cos_q3), -acos(cos_q3)]:
-                beta = atan2(r_xy, dz)
-                gamma = atan2(
-                    self.l_forearm * sin(q3),
-                    self.l_upper + self.l_forearm * cos(q3)
-                )
-                q2 = beta - gamma
-
-                solutions.append((q1_val, q2, q3))
-
-        return solutions
-
-    def numeric_solve_wrist(self, T_target, q123):
-        from scipy.optimize import least_squares
-        from scipy.spatial.transform import Rotation as R
-
-        pos_target = T_target[:3, 3]
-        rot_target = R.from_matrix(T_target[:3, :3])
-
-        def wrist_error(q_wrist):
-            q_full = np.concatenate([q123, q_wrist])
-            self.model.update_state(q_full)
-            T = self.model.get_tcp_pose()
-            pos_err = pos_target - T[:3, 3]
-            rot_err = (rot_target * R.from_matrix(T[:3, :3]).inv()).as_rotvec()
-            return np.concatenate([pos_err, rot_err])
-
-        q_wrist_guess = np.zeros(3)
+        Solve IK analytically. Returns all valid solutions.
         
-        res = least_squares(
-            wrist_error,
-            q_wrist_guess,
-            method='lm',
-            max_nfev=50,
-            xtol=1e-10,
-            ftol=1e-10,
-        )
-
-        print(f"[Wrist] success={res.success}, nfev={res.nfev}, "
-            f"cost={res.cost:.6f}, optimality={res.optimality:.6f}")
-        print(f"[Wrist] q_wrist={res.x}")
-
-        # Verify
-        q_full = np.concatenate([q123, res.x])
-        self.model.update_state(q_full)
-        T_check = self.model.get_tcp_pose()
-        pos_err = np.linalg.norm(T_check[:3, 3] - pos_target)
-        print(f"[Wrist] Final pos_err={pos_err:.6f}")
-
-        q4, q5, q6 = res.x
-        return [(q4, q5, q6), (q4 + np.pi, -q5, q6 + np.pi)]
-
-    def _solve_wrist(self,
-                     T_target: np.ndarray,
-                     q123: np.ndarray) -> List[Tuple[float, float, float]]:
+        Args:
+            target_pose: 4x4 homogeneous transformation matrix
+            
+        Returns:
+            List of 6-element joint angle arrays (up to 8 solutions)
         """
-        Solve wrist joints 4-6 for orientation.
-
-        With the arm fixed, the remaining rotation from wrist frame
-        to target TCP is decomposed into the three wrist joint angles.
-        Uses the model's FK to get the wrist frame orientation.
+        pos_target = target_pose[:3, 3]
+        rot_target = target_pose[:3, :3]
+        
+        return self._solve_all(pos_target, rot_target)
+    
+    def solve_ik_closest(self, target_pose: np.ndarray, 
+                         q_current: np.ndarray) -> Optional[np.ndarray]:
         """
-        from scipy.spatial.transform import Rotation as R
-
-        # Set arm joints, zero wrist
-        q_full = np.concatenate([q123, np.zeros(3)])
-        self.model.update_state(q_full)
-
-        # Get wrist frame orientation (at J6)
-        T_wrist = self.model.link_transforms[self.wrist_center_link]
-        R_wrist = T_wrist[:3, :3]
-        R_target = T_target[:3, :3]
-
-        # Remaining rotation: R_wrist @ R_wrist_joints = R_target
-        R_needed = R_wrist.T @ R_target
-
-        # Decompose into ZYZ Euler angles
-        r = R.from_matrix(R_needed)
-        euler = r.as_euler('ZYZ', degrees=False)
-        # euler = r.as_euler('ZXZ', degrees=False)
-
-        q4, q5, q6 = euler[0], -euler[1], euler[2]
-
-        # Two solutions: elbow equivalent for the wrist
-        solutions = [
-            (q4, q5, q6),
-            (q4 + pi, -q5, q6 + pi)
-        ]
-
-        for label, (q4_val, q5_val, q6_val) in [
-            ("sol1", solutions[0]), ("sol2", solutions[1])
-        ]:
-            q_full = np.concatenate([q123, [q4_val, q5_val, q6_val]])
-            self.model.update_state(q_full)
-            T_check = self.model.get_tcp_pose()
-            pos_err = np.linalg.norm(T_check[:3, 3] - T_target[:3, 3])
-            print(f"[Wrist {label}] q=({q4_val:.4f},{q5_val:.4f},{q6_val:.4f}) pos_err={pos_err:.4f}")
-
+        Solve IK and return solution closest to current joint positions.
+        
+        Args:
+            target_pose: 4x4 homogeneous transformation matrix
+            q_current: Current joint positions (for selecting closest solution)
+            
+        Returns:
+            6-element joint angle array, or None if no solution
+        """
+        solutions = self.solve_ik(target_pose)
+        if not solutions:
+            return None
+        return self._select_closest(solutions, q_current)
+    
+    def _solve_all(self, pos_target: np.ndarray, 
+                   rot_target: np.ndarray) -> List[np.ndarray]:
+        """Generate all analytical IK solutions."""
+        # Wrist center position
+        a_vec = rot_target[:, 2]
+        P_wrist = pos_target - self.d6 * a_vec
+        
+        # Solve arm (up to 4 solutions)
+        arm_solutions = self._solve_arm(P_wrist)
+        
+        # Solve wrist for each arm solution
+        all_solutions = []
+        for θ1, θ2, θ3 in arm_solutions:
+            wrist_sols = self._solve_wrist(θ1, θ2, θ3, rot_target)
+            for θ4, θ5, θ6 in wrist_sols:
+                q = np.array([θ1, θ2, θ3, θ4, θ5, θ6])
+                all_solutions.append(q)
+        
+        return all_solutions
+    
+    def _solve_arm(self, P_wrist: np.ndarray) -> List[Tuple[float, float, float]]:
+        """Solve arm joints analytically. Returns up to 4 solutions."""
+        x, y, z = P_wrist
+        
+        r_xy = np.sqrt(x**2 + y**2)
+        
+        # Shoulder: two solutions
+        if r_xy > 1e-10:
+            θ1_options = [np.arctan2(y, x), np.arctan2(-y, -x)]
+        else:
+            θ1_options = [0.0]
+        
+        solutions = []
+        
+        for θ1 in θ1_options:
+            # Project wrist into arm plane
+            r_proj = x * np.cos(θ1) + y * np.sin(θ1)
+            z_rel = z - self.d1
+            
+            D_sq = r_proj**2 + z_rel**2
+            
+            # Law of cosines for θ3
+            cos_θ3 = (D_sq - self.a2**2 - self.a3**2) / (2 * self.a2 * self.a3)
+            
+            # Check reachability
+            if cos_θ3 > 1.0 + 1e-9 or cos_θ3 < -1.0 - 1e-9:
+                continue
+            
+            cos_θ3 = np.clip(cos_θ3, -1.0, 1.0)
+            
+            # Two elbow solutions
+            for sign in [+1, -1]:
+                sin_θ3 = sign * np.sqrt(1.0 - cos_θ3**2)
+                θ3 = np.arctan2(sin_θ3, cos_θ3)
+                
+                # θ2 from linear equations
+                K1 = self.a2 + self.a3 * cos_θ3
+                K2 = self.a3 * sin_θ3
+                
+                sin_θ2 = (-K1 * r_proj + K2 * z_rel) / D_sq
+                cos_θ2 = ( K2 * r_proj + K1 * z_rel) / D_sq
+                θ2 = np.arctan2(sin_θ2, cos_θ2)
+                
+                solutions.append((θ1, θ2, θ3))
+        
+        return self._deduplicate(solutions)
+    
+    def _compute_R03(self, θ1: float, θ2: float, θ3: float) -> np.ndarray:
+        """
+        Compute R₀₃: orientation of frame 3.
+        
+        J1: Rz(θ1), J2: Ry(-θ2), J3: Ry(θ3)
+        """
+        R01 = R.from_rotvec([0, 0, θ1]).as_matrix()
+        R12 = R.from_rotvec([0, -θ2, 0]).as_matrix()
+        R23 = R.from_rotvec([0, θ3, 0]).as_matrix()
+        return R01 @ R12 @ R23
+    
+    def _solve_wrist(self, θ1: float, θ2: float, θ3: float,
+                     R_des: np.ndarray) -> List[Tuple[float, float, float]]:
+        """
+        Solve wrist joints analytically.
+        
+        R_des = R₀₃ @ Rz(θ4) @ Ry(θ5) @ Rz(θ6)
+        => R_target = R₀₃ᵀ @ R_des = Rz(θ4) @ Ry(θ5) @ Rz(θ6)
+        """
+        R03 = self._compute_R03(θ1, θ2, θ3)
+        R_target = R03.T @ R_des
+        
+        # return self._extract_zyz_euler(R_target)
+        return self._extract_zyz_euler(R_target)
+    
+    def _extract_zyz_euler(self, R_mat: np.ndarray) -> List[Tuple[float, float, float]]:
+        """Extract Z-Y-Z Euler angles from rotation matrix."""
+        r13 = R_mat[0, 2]
+        r23 = R_mat[1, 2]
+        r33 = R_mat[2, 2]
+        r31 = R_mat[2, 0]
+        r32 = R_mat[2, 1]
+        
+        solutions = []
+        
+        for sign in [+1, -1]:
+            sin_θ5 = sign * np.sqrt(max(0.0, 1.0 - r33**2))
+            θ5 = np.arctan2(sin_θ5, r33)
+            
+            if abs(sin_θ5) > 1e-6:
+                θ4 = np.arctan2(r23 / sin_θ5, r13 / sin_θ5)
+                θ6 = np.arctan2(r32 / sin_θ5, -r31 / sin_θ5)
+            else:
+                # Singularity: θ5 = 0 or π
+                θ4 = 0.0
+                if r33 > 0:
+                    # θ5 = 0 → R_target = Rz(θ4 + θ6)
+                    θ6 = np.arctan2(R_mat[1, 0], R_mat[0, 0])
+                else:
+                    # θ5 = π
+                    θ6 = np.arctan2(-R_mat[1, 0], R_mat[0, 0])
+            
+            solutions.append((θ4, θ5, θ6))
+        
         return solutions
+
+    def _extract_xzx_euler(self, R_mat):
+        """Extract X-Z-X Euler angles from rotation matrix."""
+        r11 = R_mat[0, 0]
+        r12 = R_mat[0, 1]
+        r13 = R_mat[0, 2]
+        r21 = R_mat[1, 0]
+        r31 = R_mat[2, 0]
+        
+        solutions = []
+        
+        for sign in [+1, -1]:
+            sin_θ5 = sign * np.sqrt(max(0.0, 1.0 - r11**2))
+            θ5 = np.arctan2(sin_θ5, r11)
+            
+            if abs(sin_θ5) > 1e-6:
+                θ4 = np.arctan2(r31 / sin_θ5, r21 / sin_θ5)
+                θ6 = np.arctan2(r13 / sin_θ5, -r12 / sin_θ5)
+            else:
+                # Singularity: θ5 = 0 or π
+                θ4 = 0.0
+                if r11 > 0:  # θ5 = 0
+                    # R = Rx(θ4 + θ6)
+                    θ6 = np.arctan2(R_mat[2, 1], R_mat[1, 1])
+                else:  # θ5 = π
+                    θ6 = np.arctan2(-R_mat[2, 1], R_mat[1, 1])
+            
+            solutions.append((θ4, θ5, θ6))
+        
+        return solutions
+
+    def _deduplicate(self, solutions: List[Tuple[float, ...]], 
+                     tol: float = 1e-3) -> List[Tuple[float, ...]]:
+        """Remove duplicate solutions."""
+        unique = []
+        for sol in solutions:
+            is_dup = False
+            for existing in unique:
+                diff = np.abs(np.array(sol) - np.array(existing))
+                diff = np.minimum(diff, 2*np.pi - diff)
+                if np.all(diff < tol):
+                    is_dup = True
+                    break
+            if not is_dup:
+                unique.append(sol)
+        return unique
+    
+    def _select_closest(self, solutions: List[np.ndarray], 
+                        q_current: np.ndarray) -> np.ndarray:
+        """Select solution closest to current joint positions."""
+        best_q = None
+        best_dist = float('inf')
+        
+        for q in solutions:
+            diff = q - q_current
+            # Account for circular angle wrap
+            diff = np.arctan2(np.sin(diff), np.cos(diff))
+            dist = np.linalg.norm(diff)
+            
+            if dist < best_dist:
+                best_dist = dist
+                best_q = q
+        
+        return best_q
 
     def forward_kinematics(self, q: np.ndarray) -> np.ndarray:
-        """Forward kinematics using the model."""
+        """Forward kinematics using the model's native FK."""
         self.model.update_state(q)
         return self.model.get_tcp_pose()
 
-    @staticmethod
-    def _wrap_angles(q: np.ndarray) -> np.ndarray:
-        """Wrap angles to [-π, π]."""
-        return (q + pi) % (2*pi) - pi
+
+

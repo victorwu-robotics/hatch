@@ -47,8 +47,8 @@ class IKSolver:
 
             if all_a_zero:
                 self._wrist_type = "spherical"
-                self._create_numerical()
-                logger.info("Detected spherical wrist — using numerical IK solver")
+                self._create_analytical()
+                logger.info("Detected spherical wrist — using analytical IK solver")
             else:
                 self._wrist_type = "offset"
                 self._create_offset_wrist()
@@ -64,6 +64,16 @@ class IKSolver:
             self._solver = OffsetWristIKSolver(self.model)
         except ImportError:
             logger.warning("Offset wrist solver not available, falling back to numerical")
+            self._create_numerical()
+
+    def _create_analytical(self):
+        """Create analytical solver for spherical wrist (official D-H)."""
+        try:
+            from core.kinematics.analytical_ik_solver import AnalyticalIKSolver
+            self._solver = AnalyticalIKSolver(self.model)
+            logger.info("Using analytical IK solver (Elfin spherical wrist)")
+        except ImportError:
+            logger.warning("Analytical solver not available, falling back to numerical")
             self._create_numerical()
 
     def _create_numerical(self):

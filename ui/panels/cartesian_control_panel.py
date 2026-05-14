@@ -400,8 +400,14 @@ class CartesianControlPanel(QWidget):
         """Refresh the current pose display from the kinematic model."""
         try:
             tcp_pose = self._get_tcp_pose_in_base()
+            '''
             if tcp_pose is None:
                 return
+            '''
+
+            if not self._initialized and self.target_pose is None:
+                self.target_pose = tcp_pose.copy()
+                self._initialized = True
 
             # Position
             self.current_values[0].setText(f"{tcp_pose[0, 3]:.3f}")

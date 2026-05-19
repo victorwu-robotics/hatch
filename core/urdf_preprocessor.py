@@ -113,8 +113,10 @@ class URDFPreprocessor:
 
         self._substitute_attributes(element)
 
+        # Track parent for each child
         children = list(element)
         for child in children:
+            child.set('_parent', element)
             self._process_element(child, current_dir)
 
     def _handle_include(self, element: ET.Element, current_dir: Path):
@@ -124,10 +126,9 @@ class URDFPreprocessor:
             logger.warning("<xacro:include> missing filename attribute")
             return
 
-        # Substitute any remaining properties in the filename
         filename = self._substitute_string(filename)
-
         resolved = self._resolve_path(filename, current_dir)
+        
         if resolved is None:
             logger.warning(f"Could not resolve include: {filename}")
             return
@@ -135,7 +136,7 @@ class URDFPreprocessor:
             logger.warning(f"Included file not found: {resolved}")
             return
 
-        logger.debug(f"Including: {resolved}")
+        logger.info(f"Including: {resolved}")
 
         included_tree = ET.parse(str(resolved))
         included_root = included_tree.getroot()
@@ -145,16 +146,23 @@ class URDFPreprocessor:
 
         parent = self._get_parent(element)
         if parent is not None:
-            parent_children = list(parent)
-            idx = parent_children.index(element) if element in parent_children else -1
-            parent.remove(element)
-
+            children = list(parent)
+            try:
+                idx = children.index(element)
+            except ValueError:
+                idx = len(children)
+            
             if included_root.tag == 'robot':
+                # Insert all children of the included robot
                 included_children = list(included_root)
                 for i, child in enumerate(included_children):
                     parent.insert(idx + i, child)
             else:
                 parent.insert(idx, included_root)
+            
+            parent.remove(element)
+        else:
+            logger.error(f"No parent found for include: {filename}")
 
     def _handle_property(self, element: ET.Element):
         """Handle <xacro:property name="x" value="y"/>"""
@@ -176,8 +184,10 @@ class URDFPreprocessor:
             logger.warning("<xacro:macro> missing name attribute")
             return
 
-        self._macros[name] = element
-        logger.debug(f"Macro defined: {name}")
+        # Store with xacro: prefix so lookup by tag works
+        macro_key = f"{self.XACRO_NS}:{name}"
+        self._macros[macro_key] = element
+        logger.debug(f"Macro defined: {name} (key: {macro_key})")
 
         parent = self._get_parent(element)
         if parent is not None:
@@ -197,20 +207,51 @@ class URDFPreprocessor:
 
         macro_children = list(macro_def)
         new_children = []
+        
+        # First pass: collect property definitions
+        temp_properties = {}
         for child in macro_children:
             tag = self._tag_name(child)
             if tag == f"{self.XACRO_NS}:property":
-                continue
+                name = child.get('name')
+                value = child.get('value', '')
+                if name:
+                    # Substitute macro params in the property value
+                    value = self._substitute_string(value)
+                    for pname, pvalue in param_values.items():
+                        value = value.replace(f"${{{pname}}}", pvalue or '')
+                    temp_properties[name] = value
+        
+        # Temporarily add these properties
+        old_properties = {}
+        for name, value in temp_properties.items():
+            old_properties[name] = self._properties.get(name)
+            self._properties[name] = value
+        
+        # Second pass: copy and substitute non-property children
+        for child in macro_children:
+            tag = self._tag_name(child)
+            if tag == f"{self.XACRO_NS}:property":
+                continue  # Skip property definitions
             new_child = self._deep_copy_element(child)
+            self._substitute_macro_params(new_child, param_values)
             new_children.append(new_child)
+        
+        # Restore old property values (or remove if they didn't exist)
+        for name, old_value in old_properties.items():
+            if old_value is None:
+                self._properties.pop(name, None)
+            else:
+                self._properties[name] = old_value
 
-        for child in new_children:
-            self._substitute_macro_params(child, param_values)
-
+        # Insert into parent
         parent = self._get_parent(element)
         if parent is not None:
             parent_children = list(parent)
-            idx = parent_children.index(element) if element in parent_children else -1
+            try:
+                idx = parent_children.index(element)
+            except ValueError:
+                idx = len(parent_children)
             parent.remove(element)
             for i, child in enumerate(new_children):
                 parent.insert(idx + i, child)
@@ -388,9 +429,7 @@ class URDFPreprocessor:
 
     def _get_parent(self, element: ET.Element) -> Optional[ET.Element]:
         """Get the parent of an XML element."""
-        if hasattr(element, '_parent'):
-            return element._parent
-        return None
+        return element.get('_parent')
 
     def _deep_copy_element(self, element: ET.Element) -> ET.Element:
         """Create a deep copy of an XML element."""
@@ -401,6 +440,12 @@ class URDFPreprocessor:
     def _element_to_string(element: ET.Element) -> str:
         """Convert an XML element to a pretty-printed string."""
         import xml.dom.minidom as minidom
+        
+        # Remove internal _parent attributes from all elements
+        for el in element.iter():
+            if '_parent' in el.attrib:
+                del el.attrib['_parent']
+        
         rough_string = ET.tostring(element, encoding='unicode')
         reparsed = minidom.parseString(rough_string)
         return reparsed.toprettyxml(indent="  ")

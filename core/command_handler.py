@@ -60,9 +60,9 @@ class CommandHandler:
         Event data format:
             {'positions': List[float], 'names': Optional[List[str]]}
         """
-        print(f"[CH] Received JOINT_COMMAND, active_robot={self._active_robot}")
+        # print(f"[CH] Received JOINT_COMMAND, active_robot={self._active_robot}")
         if self._active_robot is None:
-            print(f"[CH] No active robot!")
+            # print(f"[CH] No active robot!")
             return
         
         positions = event.data.get('positions')
@@ -70,7 +70,7 @@ class CommandHandler:
             return
         
         # Forward to active robot (simulated or real)
-        print(f"[CH] Calling move_joints with {positions}")
+        # print(f"[CH] Calling move_joints with {positions}")
         self._active_robot.move_joints(positions)
     
     def _on_cartesian_command(self, event):
@@ -80,7 +80,7 @@ class CommandHandler:
         Event data format:
             {'pose': np.ndarray (4x4), 'frame': str ('base' or 'world')}
         """
-        print(f"[CH] Received CARTESIAN_COMMAND, active_robot={self._active_robot}")
+        # print(f"[CH] Received CARTESIAN_COMMAND, active_robot={self._active_robot}")
         if self._active_robot is None:
             return
         
@@ -98,7 +98,7 @@ class CommandHandler:
         """
         Handle MODE_SWITCH_ REQUEST from UI.
         """
-        print(f"[CH] Received MODE_SWITCH_REQUEST, active_robot={self._active_robot}")
+        # print(f"[CH] Received MODE_SWITCH_REQUEST, active_robot={self._active_robot}")
 
         mode_str = event.data.get('mode')   # "simulate" or "real"
         

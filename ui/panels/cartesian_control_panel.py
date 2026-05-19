@@ -414,11 +414,13 @@ class CartesianControlPanel(QWidget):
             self.current_values[1].setText(f"{tcp_pose[1, 3]:.3f}")
             self.current_values[2].setText(f"{tcp_pose[2, 3]:.3f}")
 
-            # Orientation as RPY
-            roll, pitch, yaw = self._matrix_to_rpy(tcp_pose[:3, :3])
-            self.current_values[3].setText(f"{roll:.3f}")
-            self.current_values[4].setText(f"{pitch:.3f}")
-            self.current_values[5].setText(f"{yaw:.3f}")
+            R_tcp_to_base = tcp_pose[:3, :3]
+            R_base_to_tcp = R_tcp_to_base
+            # Orientation as Rx, Ry, Rz
+            rotvec = R.from_matrix(R_base_to_tcp).as_rotvec()
+            self.current_values[3].setText(f"{rotvec[0]:.3f}")
+            self.current_values[4].setText(f"{rotvec[1]:.3f}")
+            self.current_values[5].setText(f"{rotvec[2]:.3f}")
 
             # Initialize target on first display update
             if not self._initialized and self.target_pose is None:

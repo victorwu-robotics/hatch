@@ -71,7 +71,7 @@
     <child link="camera_link"/> <!-- Direct reference to Orbbec's link -->
   </joint>
 
-  <xacro:include filename="${orbbec_path}/urdf/gemini_335_336.urdf.xacro" />
+  <xacro:include filename="${orbbec_path}/urdf/my_orbbec.urdf" />
 
 
 </robot>

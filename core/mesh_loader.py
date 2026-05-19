@@ -274,12 +274,6 @@ class MeshLoader:
         return polydata
 
     def _load_dae(self, filepath: Path) -> vtk.vtkPolyData:
-        """
-        Load DAE (Collada) file using trimesh and convert to vtkPolyData.
-
-        Combines all geometry from the scene into a single polydata.
-        Extracts vertex colors if enable_color_extraction is True.
-        """
         if not TRIMESH_AVAILABLE:
             raise ImportError(
                 "DAE files require trimesh. Install with: pip install trimesh"
@@ -289,11 +283,9 @@ class MeshLoader:
 
         meshes = []
         if isinstance(scene, trimesh.Scene):
-            for geometry in scene.geometry.values():
-                if isinstance(geometry, trimesh.Trimesh):
-                    meshes.append(geometry)
+            meshes = scene.dump()  # ← Changed: dump() applies scene transforms
         elif isinstance(scene, trimesh.Trimesh):
-            meshes.append(scene)
+            meshes = [scene]
         else:
             raise RuntimeError(f"Unsupported DAE content: {type(scene)}")
 

@@ -3,6 +3,7 @@ State Handler - Updates kinematic model and transform registry from robot state.
 """
 
 import numpy as np
+import logging
 from typing import Optional, Set
 
 from core.world_state.state_channel import StateChannel
@@ -10,6 +11,7 @@ from core.world_state.event_types import EventType
 from core.world_state.transform_registry import TransformRegistry, FrameStatus
 from core.kinematics.kinematic_model import KinematicModel
 
+logger = logging.getLogger(__name__)
 
 class StateHandler:
     """
@@ -48,41 +50,49 @@ class StateHandler:
     
     def _build_arm_chain_links(self) -> Set[str]:
         """
-        Build a set of link names that are part of the main kinematic chain.
-        This excludes camera frames, laser scanners, and tool attachments.
+        Build the set of link names in the main kinematic chain.
+
+        Includes all moving links and any fixed links attached to them.
+        Fixed links after the last moving joint (tools, sensors, flanges)
+        move rigidly with the wrist and must be updated.
+
+        Handles multiple fixed children (branching) at any link.
         """
         arm_links = set()
-        
+
         try:
-            # Get the arm chain (list of joint names from base to TCP)
-            arm_joints = self._model.get_arm_chain(base_link_name=self._model.get_true_root())
-            
+            arm_joints = self._model.get_arm_chain()
+
+            # Add parents and children of all moving joints
             for joint_name in arm_joints:
                 joint = self._model.joints.get(joint_name)
                 if joint:
                     arm_links.add(joint['parent'])
                     arm_links.add(joint['child'])
-            
-            # Also add the true root if not already included
+
+            # Add the true root
             true_root = self._model.get_true_root()
             arm_links.add(true_root)
-            
-        except Exception as e:
-            print(f"[StateHandler] Warning: Could not build arm chain: {e}")
-            # Fallback: use all links (may include cameras)
-            arm_links = set(self._model.link_transforms.keys())
 
-        # Also include the tool mount link if it is a fixed child of the last link
-        tool_mount = self._model.tool_mount_link
-        if tool_mount and tool_mount not in arm_links:
-            # Check if it's connected by a fixed joint to a link already in the chain
-            parent = self._model.link_parents.get(tool_mount)
-            if parent and parent in arm_links:
-                # Verify the joint is fixed
-                for j in self._model.joints.values():
-                    if j['parent'] == parent and j['child'] == tool_mount and j['type'] == 'fixed':
-                        arm_links.add(tool_mount)
-                        break
+            # Add ALL fixed descendants of any arm link (handles branching)
+            to_process = list(arm_links)
+            while to_process:
+                link_name = to_process.pop()
+                if link_name in self._model.link_children:
+                    for child in self._model.link_children[link_name]:
+                        if child not in arm_links:
+                            # Check if connected by a fixed joint
+                            for j in self._model.joints.values():
+                                if (j['parent'] == link_name and
+                                    j['child'] == child and
+                                    j['type'] == 'fixed'):
+                                    arm_links.add(child)
+                                    to_process.append(child)
+                                    break
+
+        except Exception as e:
+            logger.warning(f"Could not build arm chain: {e}. Using all links.")
+            arm_links = set(self._model.link_transforms.keys())
 
         return arm_links
     
@@ -94,14 +104,14 @@ class StateHandler:
             {'joint_positions': List[float], 'tcp_pose': ..., 'timestamp': float}
         """
         joint_positions = event.data.get('joint_positions')
-        print(f"[SH] joint_positions from event: {joint_positions}")
-        print(f"[SH] Type: {type(joint_positions)}, length: {len(joint_positions) if joint_positions else 0}")
+        # print(f"[SH] joint_positions from event: {joint_positions}")
+        # print(f"[SH] Type: {type(joint_positions)}, length: {len(joint_positions) if joint_positions else 0}")
         
         if joint_positions is None:
             return
         
         # 1. Update kinematic model (recomputes all link transforms)
-        print(f"[SH] Updating model with {joint_positions[:3]}...")
+        # print(f"[SH] Updating model with {joint_positions[:3]}...")
         self._model.update_state(joint_positions)
         
         # 2. Update transform registry (for display and queries)

@@ -178,6 +178,10 @@ class RobotManager:
                 preprocessor = URDFPreprocessor(package_dirs)
                 urdf_xml = preprocessor.process(str(urdf_path))
 
+                # Save preprocessed output for comparison
+                with open('/tmp/hatch_preprocessed.urdf', 'w') as f:
+                    f.write(urdf_xml)
+
                 # Write preprocessed URDF to temp file for KinematicModel
                 with tempfile.NamedTemporaryFile(
                     mode='w', suffix='.urdf', delete=False
@@ -223,6 +227,30 @@ class RobotManager:
                 asset_id=asset_id
             )
             display.attach(self.engine.get_renderer())
+
+            # Force initial position update for all registered frames
+            # This ensures fixed children (sensors, tools) appear at their
+            # correct positions before any joint movement.
+            if hasattr(model, 'link_transforms'):
+                for link_name in model.link_transforms:
+                    frame_name = f"{asset_id}_{link_name}"
+                    if frame_name in self.transform_registry.list_frames():
+                        T_world = model.link_transforms[link_name]
+                        # Compute parent-relative transform
+                        if link_name in model.root_links:
+                            T_rel = T_world
+                        else:
+                            parent_link = model.link_parents.get(link_name)
+                            if parent_link and parent_link in model.link_transforms:
+                                T_parent = model.link_transforms[parent_link]
+                                T_rel = np.linalg.inv(T_parent) @ T_world
+                            else:
+                                T_rel = T_world
+                        try:
+                            self.transform_registry.update_frame(frame_name, T_rel)
+                        except ValueError:
+                            pass
+
             self.engine.register_display(display)
 
             # Add joint frame display
@@ -292,12 +320,9 @@ class RobotManager:
     def _register_initial_transforms(self, asset_id: str, model):
         """
         Register all robot frames in TransformRegistry on initial load.
-
-        Computes parent-relative transforms for each link.
-        Uses the true kinematic root (parent of first moving joint)
-        as the reference. Fixed joints between world and true root
-        are preserved in the transform chain for visualization.
+        Uses multi-pass registration to handle arbitrary parent-child ordering.
         """
+        import numpy as np  # Add this line temporarily if needed
         from core.world_state.transform_registry import FrameStatus
 
         if not hasattr(model, 'link_transforms'):
@@ -305,80 +330,119 @@ class RobotManager:
 
         true_root = model.get_true_root()
         logger.info(f"Registering transforms for {asset_id} "
-                   f"(true root: {true_root})")
+                f"(true root: {true_root})")
 
-        # Collect frames with parent relationships
-        frames_info = []
+        # Collect all frames that need to be registered
+        frames_to_register = {}
+        
         for link_name in model.link_transforms.keys():
             frame_name = f"{asset_id}_{link_name}"
-
+            
             if link_name == true_root:
-                parent = "world"
+                parent_frame = "world"
             elif link_name in model.link_parents:
-                parent_link = model.link_parents.get(link_name)
-                parent = f"{asset_id}_{parent_link}" if parent_link else "world"
+                parent_link = model.link_parents[link_name]
+                parent_frame = f"{asset_id}_{parent_link}" if parent_link else "world"
             else:
-                parent = "world"
-
-            frames_info.append({
-                'name': frame_name,
-                'original_name': link_name,
-                'parent': parent,
-                'is_true_root': (link_name == true_root)
-            })
-
-        # Sort by depth: parents before children
-        frames_info.sort(key=lambda f: self._frame_depth(f, frames_info))
-
-        # Register each frame
-        registered = 0
-        for frame in frames_info:
-            frame_name = frame['name']
-            parent = frame['parent']
-            link_name = frame['original_name']
-            T_world = model.link_transforms[link_name]
-
-            if parent == "world":
-                T_rel = T_world
-            else:
-                parent_link = parent.replace(f"{asset_id}_", "")
-                if parent_link in model.link_transforms:
-                    T_parent_world = model.link_transforms[parent_link]
-                    T_rel = np.linalg.inv(T_parent_world) @ T_world
-                else:
-                    logger.warning(f"Parent {parent} not found, using world")
-                    T_rel = T_world
-
-            try:
-                self.transform_registry.register_frame(
-                    frame_name,
-                    T_rel,
-                    parent=parent,
-                    status=FrameStatus.DYNAMIC,
-                    description=f"Link: {link_name}"
-                )
-                registered += 1
-            except ValueError as e:
-                logger.warning(f"Failed to register {frame_name}: {e}")
-
+                parent_frame = "world"
+            
+            frames_to_register[frame_name] = {
+                'link_name': link_name,
+                'parent_frame': parent_frame,
+                'is_root': (link_name == true_root)
+            }
+        
+        # Multi-pass registration: keep trying until all frames are registered
+        registered_frames = set()
+        remaining_frames = set(frames_to_register.keys())
+        max_passes = len(remaining_frames) + 1
+        
+        for pass_num in range(max_passes):
+            if not remaining_frames:
+                break
+                
+            frames_registered_this_pass = []
+            
+            for frame_name in list(remaining_frames):
+                info = frames_to_register[frame_name]
+                parent_frame = info['parent_frame']
+                
+                # Can register if parent is world or already registered
+                if parent_frame == "world" or parent_frame in registered_frames:
+                    link_name = info['link_name']
+                    T_world = model.link_transforms[link_name]
+                    
+                    # Compute relative transform
+                    if parent_frame == "world":
+                        T_rel = T_world
+                    else:
+                        parent_link = parent_frame.replace(f"{asset_id}_", "")
+                        if parent_link in model.link_transforms:
+                            T_parent_world = model.link_transforms[parent_link]
+                            T_rel = np.linalg.inv(T_parent_world) @ T_world
+                        else:
+                            logger.warning(f"Parent transform not found for {parent_link}")
+                            T_rel = T_world
+                    
+                    try:
+                        self.transform_registry.register_frame(
+                            frame_name,
+                            T_rel,
+                            parent=parent_frame,
+                            status=FrameStatus.DYNAMIC,
+                            description=f"Link: {link_name}"
+                        )
+                        registered_frames.add(frame_name)
+                        frames_registered_this_pass.append(frame_name)
+                    except ValueError as e:
+                        logger.error(f"Failed to register {frame_name}: {e}")
+            
+            # Remove registered frames from remaining
+            for frame_name in frames_registered_this_pass:
+                remaining_frames.discard(frame_name)
+            
+            if not frames_registered_this_pass and remaining_frames:
+                # No progress - handle remaining frames by attaching to world
+                logger.warning(f"Pass {pass_num}: Cannot register {len(remaining_frames)} frames. "
+                            f"Attaching remaining to world: {remaining_frames}")
+                
+                for frame_name in remaining_frames:
+                    info = frames_to_register[frame_name]
+                    link_name = info['link_name']
+                    T_world = model.link_transforms.get(link_name, np.eye(4))
+                    
+                    try:
+                        self.transform_registry.register_frame(
+                            frame_name,
+                            T_world,
+                            parent="world",
+                            status=FrameStatus.DYNAMIC,
+                            description=f"Link (fallback): {link_name}"
+                        )
+                        registered_frames.add(frame_name)
+                    except ValueError as e:
+                        logger.error(f"Failed fallback registration for {frame_name}: {e}")
+                
+                remaining_frames.clear()
+                break
+        
         # Register TCP frame
         tcp_frame = f"{asset_id}_tcp"
         mount_link = model.tool_mount_link or "wrist_3_link"
         parent_frame = f"{asset_id}_{mount_link}"
-
+        
         try:
             self.transform_registry.register_frame(
                 tcp_frame,
-                np.eye(4),  # TCP at mount point by default
+                np.eye(4),
                 parent=parent_frame,
                 status=FrameStatus.DYNAMIC,
                 description="Tool Center Point"
             )
-            registered += 1
         except ValueError as e:
             logger.warning(f"Could not register TCP frame: {e}")
-
-        logger.info(f"Registered {registered} frames for {asset_id}")
+        
+        logger.info(f"Registered {len(registered_frames)} frames for {asset_id}")
 
     def _frame_depth(self, frame, frames_info):
         """Calculate depth of a frame in the tree (world = depth 0)."""

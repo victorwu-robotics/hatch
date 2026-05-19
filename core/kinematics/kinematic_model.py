@@ -474,7 +474,7 @@ class KinematicModel:
 
         self._update_config_vector()
 
-    def _update_registry(self):
+    def update_registry(self):
         """Update TransformRegistry with current link transforms."""
         if not self.transform_registry:
             return
@@ -496,6 +496,63 @@ class KinematicModel:
                     T_rel = np.linalg.inv(T_world_parent) @ T_world_link
 
             self.transform_registry.update_frame(frame_name, T_rel)
+
+    def _update_registry(self):
+        """Update TransformRegistry with current link transforms (topological order)."""
+        if not self.transform_registry:
+            return
+
+        for name in sorted(self.link_transforms.keys()):
+            parent = self.link_parents.get(name, 'NONE')
+            is_root = name in self.root_links
+            print(f"  {'[ROOT]' if is_root else '      '} {name} -> parent: {parent}")
+
+        # Build a dependency graph: child -> parent
+        # Root links have no parent and should be registered first
+        registered = set()
+        pending = set(self.link_transforms.keys())
+
+        # Register all links in topological order (parents before children)
+        while pending:
+            progress = False
+            for link_name in list(pending):
+                frame_name = f"{self.asset_id}_{link_name}"
+
+                if link_name in self.root_links:
+                    # Root link: attach to world
+                    T_world_link = self.link_transforms[link_name]
+                    self.transform_registry.update_frame(frame_name, T_world_link)
+                    registered.add(link_name)
+                    pending.discard(link_name)
+                    progress = True
+                else:
+                    parent_link = self.link_parents.get(link_name)
+                    if parent_link is None:
+                        # Orphaned link: attach to world
+                        T_world_link = self.link_transforms[link_name]
+                        self.transform_registry.update_frame(frame_name, T_world_link)
+                        registered.add(link_name)
+                        pending.discard(link_name)
+                        progress = True
+                    else:
+                        parent_frame = f"{self.asset_id}_{parent_link}"
+                        # Only register if parent is already registered
+                        if parent_link in registered or parent_frame in self.transform_registry.list_frames():
+                            T_world_link = self.link_transforms[link_name]
+                            T_world_parent = self.link_transforms.get(parent_link, np.eye(4))
+                            T_rel = np.linalg.inv(T_world_parent) @ T_world_link
+                            self.transform_registry.update_frame(frame_name, T_rel)
+                            registered.add(link_name)
+                            pending.discard(link_name)
+                            progress = True
+
+            if not progress:
+                # Circular dependency or missing parents — register remaining to world
+                for link_name in pending:
+                    frame_name = f"{self.asset_id}_{link_name}"
+                    T_world_link = self.link_transforms[link_name]
+                    self.transform_registry.update_frame(frame_name, T_world_link)
+                break
 
     def _update_config_vector(self):
         """Update the configuration vector for backward compatibility."""

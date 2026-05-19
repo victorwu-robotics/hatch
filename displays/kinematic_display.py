@@ -119,10 +119,16 @@ class KinematicDisplay:
         '''
 
         if self.asset_id:
+            registered_frames = set(self.registry.list_frames())
             for link_name in self.kinematic_model.link_transforms.keys():
                 frame_name = f"{self.asset_id}_{link_name}"
-                T_world = self.registry.get_transform(frame_name, "world")
-                # self._update_link_transforms(link_name, T_world)
+                if frame_name not in registered_frames:
+                    continue
+                try:
+                    T_world = self.registry.get_transform(frame_name, "world")
+                    self._update_link_transforms(link_name, T_world)
+                except ValueError:
+                    pass
 
 
     def detach(self):
@@ -225,7 +231,8 @@ class KinematicDisplay:
         elif ext == '.vtp':
             reader = vtk.vtkXMLPolyDataReader()
         elif ext == '.dae':
-            return self._load_collada_direct(mesh_path)
+            # return self._load_collada_direct(mesh_path)
+            return self._load_collada_with_trimesh(mesh_path)
         else:
             logger.warning(f"Unsupported format: {ext}")
             return None
@@ -234,70 +241,115 @@ class KinematicDisplay:
         reader.Update()
         return reader.GetOutput()
 
-    def _load_collada_direct(self, mesh_path: Path) -> Optional[vtk.vtkPolyData]:
-        """Load COLLADA file using trimesh."""
+    def _load_collada_with_trimesh(self, mesh_path: Path) -> Optional[vtk.vtkPolyData]:
+        """
+        Load COLLADA using trimesh.
+        
+        Args:
+            mesh_path: Path to the COLLADA file.
+            
+        Returns:
+            vtk.vtkPolyData: Combined mesh data, or None if loading fails.
+        """
         try:
             import trimesh
-            from vtk.util import numpy_support
         except ImportError:
-            logger.warning("trimesh not available for DAE loading")
+            print(f"    ERROR: trimesh not installed. Install with: pip install trimesh")
             return None
-
+        
         try:
+            # Load mesh with trimesh
             scene = trimesh.load(str(mesh_path))
-
+            
+            append_filter = vtk.vtkAppendPolyData()
+            mesh_count = 0
+            
+            # Handle both single mesh and scene
             if isinstance(scene, trimesh.Trimesh):
                 meshes = [scene]
             elif isinstance(scene, trimesh.Scene):
-                meshes = list(scene.geometry.values())
+                meshes = scene.dump()
             else:
-                return None
-
-            append_filter = vtk.vtkAppendPolyData()
-            mesh_count = 0
-
+                meshes = []
+            
             for mesh in meshes:
                 if not isinstance(mesh, trimesh.Trimesh):
                     continue
-
-                vertices = mesh.vertices.astype(np.float32)
-                faces = mesh.faces.astype(np.int32)
-
+                    
+                # Get vertices and faces
+                vertices_np = mesh.vertices.astype(np.float32)
+                faces_np = mesh.faces.astype(np.int32)
+                
+                # Create VTK points
                 points = vtk.vtkPoints()
-                vtk_verts = numpy_support.numpy_to_vtk(
-                    vertices, deep=True, array_type=vtk.VTK_FLOAT
+                vtk_points = numpy_support.numpy_to_vtk(
+                    vertices_np, 
+                    deep=True, 
+                    array_type=vtk.VTK_FLOAT
                 )
-                points.SetData(vtk_verts)
-
+                points.SetData(vtk_points)
+                
+                # Create VTK cells
                 cells = vtk.vtkCellArray()
-                for face in faces:
+                for face in faces_np:
                     cells.InsertNextCell(3, face)
-
+                
+                # Create PolyData
                 polydata = vtk.vtkPolyData()
                 polydata.SetPoints(points)
                 polydata.SetPolys(cells)
+                
+                # Add vertex colors if available
+                if hasattr(mesh, 'visual') and hasattr(mesh.visual, 'vertex_colors'):
+                    colors_np = mesh.visual.vertex_colors[:, :3].astype(np.uint8)
+                    # print(f"    🎨 Found vertex colors! Shape: {colors_np.shape}")
+                    # print(f"    🎨 First few colors: {colors_np[:5]}")
 
-                # Vertex colors
-                if hasattr(mesh.visual, 'vertex_colors') and mesh.visual.vertex_colors is not None:
-                    colors = mesh.visual.vertex_colors[:, :3].astype(np.uint8)
                     vtk_colors = numpy_support.numpy_to_vtk(
-                        colors, deep=True, array_type=vtk.VTK_UNSIGNED_CHAR
+                        colors_np, 
+                        deep=True, 
+                        array_type=vtk.VTK_UNSIGNED_CHAR
                     )
                     vtk_colors.SetNumberOfComponents(3)
                     vtk_colors.SetName("Colors")
                     polydata.GetPointData().SetScalars(vtk_colors)
 
+                    # Verify they were set
+                    scalars = polydata.GetPointData().GetScalars()
+                    if scalars:
+                        print(f"    ✅ VTK scalars set: {scalars.GetNumberOfTuples()} values, {scalars.GetNumberOfComponents()} components")
+                        print(f"    First few values: {[scalars.GetTuple(i) for i in range(min(5, scalars.GetNumberOfTuples()))]}")
+                    else:
+                        print(f"    ❌ VTK scalars NOT set!")
+
+                else:
+                    print(f"    ⚠ No vertex colors found in mesh")
+
                 append_filter.AddInputData(polydata)
                 mesh_count += 1
-
+            
             if mesh_count == 0:
+                print(f"    No valid meshes found in {mesh_path.name}")
                 return None
-
+            
             append_filter.Update()
-            return append_filter.GetOutput()
-
+            result = append_filter.GetOutput()
+            
+            # Generate normals for lighting
+            normals_filter = vtk.vtkPolyDataNormals()
+            normals_filter.SetInputData(result)
+            normals_filter.ComputePointNormalsOn()
+            normals_filter.ComputeCellNormalsOff()
+            normals_filter.SplittingOff()
+            normals_filter.Update()
+            result = normals_filter.GetOutput()
+            
+            print(f"    ✓ Loaded {mesh_count} meshes from {mesh_path.name} "
+                f"({result.GetNumberOfPoints()} points, {result.GetNumberOfCells()} cells)")
+            return result
+            
         except Exception as e:
-            logger.warning(f"COLLADA load failed for {mesh_path.name}: {e}")
+            print(f"    ERROR loading {mesh_path.name} with trimesh: {e}")
             return None
 
     # =================================================================
@@ -340,47 +392,43 @@ class KinematicDisplay:
     # =================================================================
 
     def _create_actor_from_polydata(self,
-                                     link_name: str,
-                                     geom: Dict,
-                                     polydata: vtk.vtkPolyData,
-                                     index: int):
+                                    link_name: str,
+                                    geom: Dict,
+                                    polydata: vtk.vtkPolyData,
+                                    index: int):
         """Create VTK actor from PolyData with transform pipeline."""
-        # Transform filter (static — transform is modified in place)
+        
+        # STEP 1: Apply scale to mesh vertices directly (in local frame)
+        scale = geom.get('scale', [1, 1, 1])
+        if scale != [1, 1, 1]:
+            scale_transform = vtk.vtkTransform()
+            scale_transform.Scale(scale)
+            scale_filter = vtk.vtkTransformPolyDataFilter()
+            scale_filter.SetInputData(polydata)
+            scale_filter.SetTransform(scale_transform)
+            scale_filter.Update()
+            polydata = scale_filter.GetOutput()
+        
+        # STEP 2: Create transform filter for kinematic updates
         transform_filter = vtk.vtkTransformPolyDataFilter()
         transform_filter.SetInputData(polydata)
 
-        # Base transform: scale + visual origin (never changes)
+        # STEP 3: Base transform — visual origin only (no scale, already applied)
         base_transform = vtk.vtkTransform()
-        scale = geom.get('scale', [1, 1, 1])
-        if scale != [1, 1, 1]:
-            base_transform.Scale(scale)
-
-        # Compare model FK vs registry transform
-        if self.asset_id and link_name == self.kinematic_model.get_true_root():
-            frame_name = f"{self.asset_id}_{link_name}"
-            T_registry = self.registry.get_transform(frame_name, "world")
-            T_model = self.kinematic_model.link_transforms.get(link_name)
-            print(f"[CREATE {link_name}]")
-            print(f"  model FK pos:    ({T_model[0,3]:.4f}, {T_model[1,3]:.4f}, {T_model[2,3]:.4f})")
-            print(f"  registry pos:    ({T_registry[0,3]:.4f}, {T_registry[1,3]:.4f}, {T_registry[2,3]:.4f})")
-            print(f"  model == registry: {np.allclose(T_model, T_registry)}")
-
         origin_matrix = geom.get('origin_transform', np.eye(4))
         origin_transform = self._numpy_to_vtk_transform(origin_matrix)
         if origin_transform:
             base_transform.Concatenate(origin_transform)
 
-        # Chained transform: world kinematic + base (set once at creation)
+        # STEP 4: Chained transform — world kinematic + base origin
         transform_key = f"{link_name}_{index}"
         chained_transform = vtk.vtkTransform()
-
-        # Use model FK for initial position (authoritative)
-        T_world = self.kinematic_model.link_transforms.get(link_name)
-        if T_world is not None:
-            world_vtk = self._numpy_to_vtk_transform(T_world)
-            chained_transform.DeepCopy(world_vtk)
-
-        chained_transform.Concatenate(base_transform)
+        
+        # Use model FK for initial position (authoritative) - same as old working code
+        kinematic_transform = self.kinematic_model.get_vtk_transform(link_name)
+        if kinematic_transform:
+            chained_transform.DeepCopy(kinematic_transform)
+            chained_transform.Concatenate(base_transform)
 
         transform_filter.SetTransform(chained_transform)
         transform_filter.Update()

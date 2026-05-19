@@ -30,6 +30,15 @@
       <origin  xyz="0 0 ${ref_dist_a}" rpy="0 0 0"/>
       <parent link="${prefix}lj_v7200_optical_frame"/>
       <child  link="${prefix}lj_v7200_frame"/>
-   </joint>
+    </joint>
+
+    <!-- Connect the virtual root to the actual base link 
+    <link name="base_link"/>
+    <joint name="base_link_to_lj_v7200_optical_frame" type="fixed">
+      <parent link="base_link"/>
+      <child link="${prefix}lj_v7200_optical_frame"/>
+      <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
+    </joint>
+  <xacro:lj_v7200 prefix=""/>-->
   </xacro:macro>
 </robot>

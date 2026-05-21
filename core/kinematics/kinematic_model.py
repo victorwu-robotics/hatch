@@ -622,9 +622,9 @@ class KinematicModel:
                          target_pose: np.ndarray,
                          q_guess: np.ndarray = None) -> Optional[np.ndarray]:
         """Solve IK for target TCP pose using attached solver."""
-        print(f"[KINEMATIC] going to call ik_solver")
+        # print(f"[KINEMATIC] going to call ik_solver")
         if not hasattr(self, '_ik_solver') or self._ik_solver is None:
-            print(f"[KINEMATIC] Call set_ik_solver() first.")
+            # print(f"[KINEMATIC] Call set_ik_solver() first.")
             raise RuntimeError("IK solver not configured. Call set_ik_solver() first.")
         return self._ik_solver.solve_ik_for_tcp(target_pose, q_guess)
 

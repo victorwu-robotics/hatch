@@ -136,7 +136,7 @@ class OffsetWristIKSolver:
         # Get the arm chain starting from true base
         try:
             true_root = self.model.get_true_root()
-            print(f"\n  Extracting DH parameters using true root: {true_root}")
+            # print(f"\n  Extracting DH parameters using true root: {true_root}")
             chain = self.model.get_arm_chain(true_root)
         except ValueError as e:
             print(f"Error: {e}")
@@ -146,7 +146,7 @@ class OffsetWristIKSolver:
             print(f"Warning: Expected 6 joints, found {len(chain)}")
             return
         
-        print(f"\nExtracting DH parameters from arm chain (base: {true_base}):")
+        # print(f"\nExtracting DH parameters from arm chain (base: {true_base}):")
         
         # Get transforms relative to true base
         transforms = self.model.get_joint_child_transforms(chain, true_base)
@@ -154,7 +154,7 @@ class OffsetWristIKSolver:
         # Print transforms for debugging
         for i, (j_name, T) in enumerate(zip(chain, transforms)):
             pos = T[:3, 3]
-            print(f"  {j_name} → {self.model.joints[j_name]['child']}: ({pos[0]:.6f}, {pos[1]:.6f}, {pos[2]:.6f})")
+            # print(f"  {j_name} → {self.model.joints[j_name]['child']}: ({pos[0]:.6f}, {pos[1]:.6f}, {pos[2]:.6f})")
         
         # Extract DH parameters
         dh_params = self._extract_dh_from_transforms(transforms)
@@ -167,6 +167,7 @@ class OffsetWristIKSolver:
         self.d5 = dh_params['d5']
         self.d6 = dh_params['d6']
         
+        '''
         print(f"\nFinal extracted parameters:")
         print(f"  d1 = {self.d1:.6f}")
         print(f"  a2 = {self.a2:.6f}")
@@ -174,6 +175,7 @@ class OffsetWristIKSolver:
         print(f"  d4 = {self.d4:.6f}")
         print(f"  d5 = {self.d5:.6f}")
         print(f"  d6 = {self.d6:.6f}")
+        '''
     
     def _extract_dh_from_transforms(self, transforms: List[np.ndarray]) -> dict:
         """Extract DH parameters from link transforms at zero position."""

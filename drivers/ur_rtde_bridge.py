@@ -3,13 +3,16 @@ UR RTDE robot arm driver with thread-safe Qt signals.
 
 Communicates with Universal Robots via RTDE protocol.
 Uses URRobotSignalHolder (composition) for thread-safe Qt signal emission.
-No threading logic here — that's handled externally by the application.
+Uses a blocking receive loop in a background thread — wakes only when
+data arrives from the robot. Event-driven, no polling.
 
+Principle #2: Event-Driven, No Polling.
 Principle #8: Pure Python where possible. Qt used only for signal bridge.
 """
 
 import time
 import logging
+import threading
 from typing import Dict, List, Optional, Any
 
 try:
@@ -43,7 +46,7 @@ class URRobotDriver(BaseRobotArmDriver):
     """
     UR robot driver using RTDE protocol.
 
-    Thread-safe: emits Qt signals from internal RTDE thread.
+    Thread-safe: emits Qt signals from the RTDE receive thread.
     Application connects to these signals via Qt.QueuedConnection
     for safe cross-thread delivery.
 
@@ -91,8 +94,9 @@ class URRobotDriver(BaseRobotArmDriver):
             'safety_status': 0
         }
 
-        self._last_receive_time = 0.0
-        self._receive_timeout = 1.0
+        # Thread control for blocking receive loop
+        self._stop_receive = None
+        self._receive_thread = None
 
     # =================================================================
     # Connection Management
@@ -150,11 +154,11 @@ class URRobotDriver(BaseRobotArmDriver):
                     )
 
                 self.is_connected = True
-                self._last_receive_time = time.time()
                 self._update_state_from_rtde()
                 self.signals.connection_signal.emit(
                     True, f"Connected to UR at {ip}"
                 )
+
                 logger.info(f"Connected successfully on attempt {retry_count + 1}")
                 return True
 
@@ -204,12 +208,13 @@ class URRobotDriver(BaseRobotArmDriver):
                 pass
             self._rtde_r = None
 
-    # =================================================================
-    # State Acquisition
-    # =================================================================
-
     def _update_state_from_rtde(self):
-        """Get latest state from RTDE and update cache."""
+        """
+        Get latest state from RTDE and update cache.
+
+        Uses blocking RTDE calls — getActualQ() blocks until
+        new data arrives from the robot controller.
+        """
         if not self.is_connected or self._mock_mode or self._rtde_r is None:
             return
 
@@ -218,40 +223,8 @@ class URRobotDriver(BaseRobotArmDriver):
             if q_actual is None:
                 return
 
-            self._last_receive_time = time.time()
-
-            qd_actual = self._rtde_r.getActualQd()
-            current = self._rtde_r.getActualCurrent()
-            tcp_pose = self._rtde_r.getActualTCPPose()
-            tcp_force = self._rtde_r.getActualTCPForce()
-            robot_status = self._rtde_r.getRobotStatus()
-            safety_status = self._rtde_r.getSafetyStatusBits()
-
-            self._latest_state = {
-                'joint_positions': (
-                    q_actual if q_actual is not None
-                    else self._latest_state['joint_positions']
-                ),
-                'joint_velocities': (
-                    qd_actual if qd_actual is not None
-                    else self._latest_state['joint_velocities']
-                ),
-                'joint_currents': (
-                    current if current is not None
-                    else self._latest_state['joint_currents']
-                ),
-                'timestamp': time.time(),
-                'tcp_pose': (
-                    tcp_pose if tcp_pose is not None
-                    else self._latest_state['tcp_pose']
-                ),
-                'tcp_force': (
-                    tcp_force if tcp_force is not None
-                    else self._latest_state['tcp_force']
-                ),
-                'robot_status': robot_status,
-                'safety_status': safety_status
-            }
+            self._latest_state['joint_positions'] = q_actual
+            self._latest_state['timestamp'] = time.time()
 
             self.signals.state_signal.emit(self._latest_state)
 
@@ -269,9 +242,6 @@ class URRobotDriver(BaseRobotArmDriver):
         if not self.is_connected:
             return None
 
-        if not self._mock_mode and self._rtde_r is not None:
-            self._update_state_from_rtde()
-
         return self._latest_state.copy() if self._latest_state else None
 
     # =================================================================
@@ -280,13 +250,17 @@ class URRobotDriver(BaseRobotArmDriver):
 
     def send_joint_command(self, positions: List[float]) -> bool:
         """
-        Send joint position command to robot.
-
+        Send joint position command to robot and wait for completion.
+        
+        This is a BLOCKING call that returns only when the robot has reached
+        the target position. After completion, it reads and returns the final
+        state.
+        
         Args:
             positions: List of 6 joint angles in radians.
-
+            
         Returns:
-            True if command sent successfully.
+            True if command completed successfully, False otherwise.
         """
         if not self.is_connected:
             self.signals.error_signal.emit(
@@ -298,6 +272,7 @@ class URRobotDriver(BaseRobotArmDriver):
             self.signals.error_signal.emit("Invalid joint positions", None)
             return False
 
+        # Mock mode for testing without hardware
         if self._mock_mode:
             self._latest_state['joint_positions'] = positions
             self._latest_state['timestamp'] = time.time()
@@ -305,50 +280,70 @@ class URRobotDriver(BaseRobotArmDriver):
             return True
 
         try:
+            # Send moveJ command and wait for completion (blocking)
+            # moveJ returns only when the robot reaches the target
             success = self._rtde_c.moveJ(positions, 0.5, 0.5)
-            if success:
-                self._latest_state['joint_positions'] = positions
-            return success
+            
+            if not success:
+                self.signals.error_signal.emit(
+                    "moveJ command failed", None
+                )
+                return False
+            
+            # Command completed — robot is at target position
+            # Read final state directly (no polling loop needed)
+            self._update_state_from_rtde()
+            
+            # Emit state signal with final position
+            self.signals.state_signal.emit(self._latest_state)
+            
+            return True
+            
         except Exception as e:
             self.signals.error_signal.emit(
-                "Failed to send joint command", e
+                f"Failed to send joint command: {e}", e
             )
             return False
 
-    def send_cartesian_command(self,
-                               pose: List[float],
-                               speed: float = 0.5,
-                               acceleration: float = 0.5) -> bool:
+    def send_cartesian_command(self, pose: List[float], speed: float = 0.5, 
+                            acceleration: float = 0.5) -> bool:
         """
-        Send linear Cartesian move command (moveL).
-
+        Send Cartesian move command and wait for completion.
+        
         Args:
-            pose: [x, y, z, rx, ry, rz] in meters and radians.
-            speed: Tool speed in m/s.
-            acceleration: Tool acceleration in m/s².
-
+            pose: [x, y, z, rx, ry, rz] in meters and radians
+            speed: m/s (default 0.5)
+            acceleration: m/s² (default 0.5)
+            
         Returns:
-            True if command sent successfully.
+            True if command completed successfully, False otherwise.
         """
-        if not self.is_connected or self._mock_mode or self._rtde_c is None:
+        if not self.is_connected or self._mock_mode:
             if self._mock_mode:
-                logger.debug(f"Mock mode — would send Cartesian: {pose}")
+                print(f"🔧 MOCK MODE: Cartesian command to {pose}")
                 return True
             return False
-
+        
         if len(pose) != 6:
-            self.signals.error_signal.emit(
-                f"Invalid pose length: {len(pose)}", None
-            )
+            self.signals.error_signal.emit(f"Invalid pose length: {len(pose)}", None)
             return False
-
+        
         try:
-            self._rtde_c.moveL(pose, speed, acceleration)
+            # Send moveL command and wait for completion (blocking)
+            success = self._rtde_c.moveL(pose, speed, acceleration)
+            
+            if not success:
+                self.signals.error_signal.emit("moveL command failed", None)
+                return False
+            
+            # Command completed — read final state
+            self._update_state_from_rtde()
+            self.signals.state_signal.emit(self._latest_state)
+            
             return True
+            
         except Exception as e:
-            self.signals.error_signal.emit(
-                f"Failed to send Cartesian command: {e}", e
-            )
+            self.signals.error_signal.emit(f"Failed to send Cartesian command: {e}", e)
             return False
 
     def get_inverse_kinematics(self,

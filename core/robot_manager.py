@@ -12,7 +12,7 @@ Principle #9: UI Separate from Services.
 Principle #10: One Robot Per Session.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 import numpy as np
 import logging
@@ -491,27 +491,15 @@ class RobotManager:
     # =================================================================
 
     def set_mode(self, mode: str):
-        """
-        Request a mode switch.
-
-        Valid modes: "simulate_local", "simulate_real_ik", "real"
-
-        Publishes MODE_SWITCH_REQUEST. CommandHandler processes it
-        and publishes MODE_SWITCHED on completion.
-        """
-        valid_modes = ["simulate_local", "simulate_real_ik", "real"]
+        valid_modes = ["simulate", "real"]
         if mode not in valid_modes:
             logger.warning(f"Invalid mode: {mode}")
             return
-
+        
         if mode == "real" and not self.is_connected:
-            self.state_channel.publish(
-                EventType.ERROR_OCCURRED,
-                data={'error': "Cannot switch to real mode: Not connected"},
-                source="robot_manager"
-            )
+            self.error_occurred.emit("Cannot switch to real mode: Not connected")
             return
-
+        
         self.state_channel.publish(
             EventType.MODE_SWITCH_REQUEST,
             data={'mode': mode},
@@ -554,17 +542,13 @@ class RobotManager:
     # Public Query Methods
     # =================================================================
 
-    def get_current_joint_positions(self) -> Optional[Dict[str, float]]:
-        """Get current joint positions from simulated robot."""
-        if not self._simulated_robot:
-            return None
-
-        state = self._simulated_robot.get_state()
-        if state and 'joint_positions' in state and self.current_kinematic_model:
-            positions = state['joint_positions']
-            joint_names = self.current_kinematic_model.get_joint_info()['names']
-            return dict(zip(joint_names, positions))
-
+    def get_current_joint_positions(self) -> Optional[List[float]]:
+        """Get current joint positions from the active robot."""
+        if self._current_mode == Mode.REAL and self._real_robot.is_connected():
+            state = self._real_robot.get_state()
+            return state.get('joint_positions')
+        elif self.current_kinematic_model:
+            return self.current_kinematic_model.get_current_joint_positions()
         return None
 
     def stop_robot(self):

@@ -365,6 +365,7 @@ class KinematicDisplay:
             return
 
         link_name = frame_name[len(self.asset_id) + 1:]
+        # print(f"[KD] Transform updated: {link_name}")
 
         # Get world transform from registry
         try:

@@ -201,6 +201,10 @@ class SimulatedRobot(RobotInterface):
 
     def _publish_state(self):
         """Publish current state as ROBOT_STATE event."""
+        # Update kinematic model before publishing
+        if self._model:
+            self._model.update_state(self._joint_positions)
+        
         state = self.get_state()
         self._channel.publish(
             EventType.ROBOT_STATE,
@@ -216,12 +220,12 @@ class SimulatedRobot(RobotInterface):
         """
         Sync virtual robot state to match real robot.
 
-        Called when switching from real to simulate mode
-        to maintain visual continuity.
+        Called when switching from SIMULATE to REAL mode
+        to ensure virtual robot matches real robot's position.
 
         Args:
             joint_positions: Joint angles from real robot.
         """
         self._joint_positions = np.array(joint_positions, dtype=np.float64)
         self._publish_state()
-        logger.info("Synced to real robot position")
+        logger.info("Synced virtual robot to real robot position")

@@ -4,6 +4,7 @@ Command Handler - Routes UI commands to the active robot.
 
 from typing import Optional
 import numpy as np
+import time
 
 from core.world_state.state_channel import StateChannel
 from core.world_state.event_types import EventType
@@ -66,6 +67,7 @@ class CommandHandler:
             return
         
         positions = event.data.get('positions')
+        print(f"[CMD RECEIVED] {time.time():.3f} | {[f'{p:.4f}' for p in positions]}")
         if positions is None:
             return
         
@@ -96,10 +98,8 @@ class CommandHandler:
 
     def _on_mode_switch_request(self, event):
         """
-        Handle MODE_SWITCH_ REQUEST from UI.
+        Handle MODE_SWITCH_REQUEST from UI.
         """
-        # print(f"[CH] Received MODE_SWITCH_REQUEST, active_robot={self._active_robot}")
-
         mode_str = event.data.get('mode')   # "simulate" or "real"
         
         if mode_str == "real":
@@ -110,6 +110,19 @@ class CommandHandler:
                     source="command_handler"
                 )
                 return
+            
+            # ===== ADD THIS SECTION =====
+            # Get current real robot position and sync virtual robot
+            real_state = self._real_robot.get_state()
+            real_positions = real_state.get('joint_positions') if real_state else None
+            
+            if real_positions:
+                self._simulated_robot.sync_to_real(real_positions)
+                print(f"[CommandHandler] Synced virtual robot to real robot position")
+            else:
+                print(f"[CommandHandler] Warning: Could not get real robot position")
+            # ===========================
+            
             self._current_mode = Mode.REAL
             self._active_robot = self._real_robot
             

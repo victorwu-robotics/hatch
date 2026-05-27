@@ -10,6 +10,7 @@ Principle #2: Event-Driven. Publishes events, subscribes to state.
 """
 
 import numpy as np
+import time
 from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QSlider,
     QPushButton, QGroupBox, QScrollArea, QWidget
@@ -51,7 +52,7 @@ class JointControlPanel(QWidget):
         self._setup_ui()
 
         # Subscribe to events
-        self.state_channel.subscribe(EventType.ROBOT_STATE, self._on_robot_state)
+        # self.state_channel.subscribe(EventType.ROBOT_STATE, self._on_robot_state)
         self.state_channel.subscribe(EventType.MODE_SWITCHED, self._on_mode_switched)
 
         # Install wheel event filters
@@ -149,7 +150,6 @@ class JointControlPanel(QWidget):
     # =================================================================
     # Slider Handling
     # =================================================================
-
     def _on_slider_changed(self, joint_name, slider_value):
         """
         Handle slider value change.
@@ -174,6 +174,7 @@ class JointControlPanel(QWidget):
             positions.append(low + frac * (high - low))
 
         # Publish JOINT_COMMAND
+        print(f"[JOINT_COMMAND] {time.time():.3f} | {joint_name} | {[f'{p:.4f}' for p in positions]}")
         self.state_channel.publish(
             EventType.JOINT_COMMAND,
             data={
@@ -229,22 +230,28 @@ class JointControlPanel(QWidget):
 
     def _update_ui_from_positions(self, positions):
         """Update all sliders and labels from a positions list."""
+        if positions is None:
+            return
+
         for i, name in enumerate(self.joint_names):
             if i >= len(positions):
                 break
-
+            
             slider = self.sliders[name]
             lower, upper = slider.limits
             pos = positions[i]
-
+            
+            # Convert joint angle to slider value
             fraction = (pos - lower) / (upper - lower)
             fraction = max(0.0, min(1.0, fraction))
             slider_value = int(fraction * 1000)
-
+            
+            # Update slider (block signals to avoid recursion)
             slider.blockSignals(True)
             slider.setValue(slider_value)
             slider.blockSignals(False)
-
+            
+            # Update label
             self.labels[name].setText(f"{pos:.3f} rad")
 
     # =================================================================
@@ -263,10 +270,23 @@ class JointControlPanel(QWidget):
             self._update_ui_from_positions(positions)
 
     def _on_mode_switched(self, event):
-        """Handle MODE_SWITCHED — update UI indicators."""
+        """Handle MODE_SWITCHED — update UI indicators and sync sliders to real robot."""
         mode = event.data.get('mode', '')
         is_real = (mode == "real")
+        
+        # Update label appearance
         self._set_mode_indicators(is_real)
+        
+        # When switching to REAL mode, sync sliders to actual robot position
+        if is_real and self.kinematic_model:
+            positions = self.kinematic_model.get_current_joint_positions()
+
+            # FIX: Check if positions is not None and has length
+            if positions is not None and len(positions) > 0:
+                print(f"[JointControl] Syncing sliders to: {positions}")
+                self._update_ui_from_positions(positions)
+            else:
+                print(f"[JointControl] No positions to sync")
 
     def _set_mode_indicators(self, is_real):
         """Update joint name labels to show (actual) in Real mode."""
@@ -322,5 +342,5 @@ class JointControlPanel(QWidget):
 
     def cleanup(self):
         """Unsubscribe from events before destruction."""
-        self.state_channel.unsubscribe(EventType.ROBOT_STATE, self._on_robot_state)
+        # self.state_channel.unsubscribe(EventType.ROBOT_STATE, self._on_robot_state)
         self.state_channel.unsubscribe(EventType.MODE_SWITCHED, self._on_mode_switched)

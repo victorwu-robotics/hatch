@@ -104,6 +104,9 @@ class StateHandler:
             {'joint_positions': List[float], 'tcp_pose': ..., 'timestamp': float}
         """
         joint_positions = event.data.get('joint_positions')
+        source = event.data.get('source', 'unknown')
+        # print(f"[StateHandler] Received ROBOT_STATE from {source}: {joint_positions}")
+
         # print(f"[SH] joint_positions from event: {joint_positions}")
         # print(f"[SH] Type: {type(joint_positions)}, length: {len(joint_positions) if joint_positions else 0}")
         
@@ -113,9 +116,11 @@ class StateHandler:
         # 1. Update kinematic model (recomputes all link transforms)
         # print(f"[SH] Updating model with {joint_positions[:3]}...")
         self._model.update_state(joint_positions)
+        # print(f"[StateHandler] Model updated. TCP: {self._model.get_tcp_pose()[:3,3]}")
         
         # 2. Update transform registry (for display and queries)
         self._update_transform_registry()
+        # print(f"[StateHandler] Registry updated")
     
     def _update_transform_registry(self):
         """

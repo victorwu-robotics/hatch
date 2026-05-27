@@ -69,6 +69,7 @@ class RealRobot(QObject):
     @pyqtSlot(dict)
     def _on_driver_state(self, state: Dict):
         """Convert driver state signal to ROBOT_STATE event."""
+        # print(f"[RealRobot] Received state from driver: {state.get('joint_positions', 'N/A')}")
         joint_positions = state.get('joint_positions')
         if joint_positions is None:
             return
@@ -83,6 +84,7 @@ class RealRobot(QObject):
             },
             source="real_robot"
         )
+        # print(f"[RealRobot] Published ROBOT_STATE")
 
     @pyqtSlot(bool, str)
     def _on_driver_connection(self, connected: bool, message: str):

@@ -116,6 +116,7 @@ class MotionContainer(QWidget):
         self.joint_panel = JointControlPanel(
             self.kinematic_model,
             self.state_channel,
+            robot_manager = self.robot_manager,
             parent=self
         )
         self.stacked.addWidget(self.joint_panel)

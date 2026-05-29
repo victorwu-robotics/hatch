@@ -79,7 +79,7 @@ class FileMenu:
             self.parent,
             "Load URDF File",
             "",
-            "URDF Files (*.urdf);;All Files (*)"
+            "URDF Files (*.urdf *.xacro);;All Files (*)"
         )
 
         if not file_path:

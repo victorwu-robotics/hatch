@@ -72,11 +72,8 @@ class CartesianControlPanel(QWidget):
 
         # Subscribe to robot state for display updates ONLY
         self.state_channel.subscribe(EventType.ROBOT_STATE, self._on_robot_state)
-
-        # Timer for periodic display refresh (reads from kinematic model)
-        self._display_timer = QTimer()
-        self._display_timer.timeout.connect(self._update_current_display)
-        self._display_timer.start(33)  # 30 Hz
+        # Subscribe to mode switched
+        self.state_channel.subscribe(EventType.MODE_SWITCHED, self._on_mode_switched)
 
     # =================================================================
     # UI Setup
@@ -93,6 +90,12 @@ class CartesianControlPanel(QWidget):
         title.setStyleSheet("font-weight: bold; font-size: 14px;")
         title.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(title)
+
+        # IK mode indicator
+        self.ik_mode_label = QLabel("IK: unknown")
+        self.ik_mode_label.setAlignment(Qt.AlignCenter)
+        self.ik_mode_label.setStyleSheet("QLabel { color: #888; font-size: 10px; }")
+        main_layout.addWidget(self.ik_mode_label)
 
         # Current Pose Display
         main_layout.addWidget(self._create_current_pose_group())
@@ -375,6 +378,7 @@ class CartesianControlPanel(QWidget):
 
         Updates the display labels to show current TCP pose.
         Does NOT update the kinematic model — that is StateHandler's job.
+        Never update sliders from state.
         """
 
         # Re-check IK if panels were disabled
@@ -487,6 +491,27 @@ class CartesianControlPanel(QWidget):
         self.step_deg.setChecked(abs(value - 0.01745) < 0.001)
 
     # ==================================================================
+
+    def _on_mode_switched(self, event):
+        mode = event.data.get('mode', '')
+        
+        # Update IK mode display
+        mode_display = {
+            'simulate_local': 'IK: Local (simulated)',
+            'simulate_real_ik': 'IK: Real robot solver',
+            'real': 'IK: Real robot solver',
+        }
+        self.ik_mode_label.setText(mode_display.get(mode, f'IK: {mode}'))
+        
+        # Sync sliders when switching to Real mode
+        if mode == "real" and self.robot_manager and self.robot_manager._real_robot:
+            state = self.robot_manager._real_robot.get_state()
+            if state:
+                tcp_pose = self._get_tcp_pose_in_base()
+                if tcp_pose is not None:
+                    self.target_pose = tcp_pose.copy()
+                    self._update_sliders_from_target()
+                    self._initialized = True
 
     def _check_ik_available(self) -> bool:
         """Check if the kinematic model has a working IK solver."""

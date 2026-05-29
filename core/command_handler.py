@@ -5,6 +5,7 @@ Command Handler - Routes UI commands to the active robot.
 from typing import Optional
 import numpy as np
 import time
+import logging
 
 from core.world_state.state_channel import StateChannel
 from core.world_state.event_types import EventType
@@ -13,6 +14,7 @@ from drivers.robot_interface import RobotInterface
 from drivers.simulated_robot import SimulatedRobot
 from drivers.real_robot import RealRobot
 
+logger = logging.getLogger(__name__)
 
 class CommandHandler:
     """
@@ -51,6 +53,9 @@ class CommandHandler:
         self._channel.subscribe(EventType.JOINT_COMMAND, self._on_joint_command)
         self._channel.subscribe(EventType.CARTESIAN_COMMAND, self._on_cartesian_command)
         self._channel.subscribe(EventType.MODE_SWITCH_REQUEST, self._on_mode_switch_request)
+
+        self._channel.subscribe(EventType.CONNECTION_ESTABLISHED, self._on_connection_established)
+        self._channel.subscribe(EventType.CONNECTION_LOST, self._on_connection_lost)
 
         print(f"[CommandHandler] Initialized in mode: {self._current_mode}")
 
@@ -145,6 +150,31 @@ class CommandHandler:
         )
         
         print(f"[CommandHandler] Mode switched to: {self._current_mode}")
+
+    def _on_connection_established(self, event):
+        """When real robot connects, upgrade IK if in Simulate mode."""
+        if self._current_mode == Mode.SIMULATE_LOCAL:
+            self._current_mode = Mode.SIMULATE_REAL_IK
+            self._simulated_robot.set_mode(self._current_mode)
+            self._channel.publish(
+                EventType.MODE_SWITCHED,
+                data={'mode': self._current_mode.name.lower()},
+                source="command_handler"
+            )
+            logger.info("IK upgraded to SIMULATE_REAL_IK (real robot connected)")
+
+    def _on_connection_lost(self, event):
+        """When real robot disconnects, downgrade IK if in Simulate mode."""
+        if self._current_mode in (Mode.SIMULATE_REAL_IK, Mode.REAL):
+            self._current_mode = Mode.SIMULATE_LOCAL
+            self._active_robot = self._simulated_robot
+            self._simulated_robot.set_mode(self._current_mode)
+            self._channel.publish(
+                EventType.MODE_SWITCHED,
+                data={'mode': self._current_mode.name.lower()},
+                source="command_handler"
+            )
+            logger.info("IK downgraded to SIMULATE_LOCAL (real robot disconnected)")
 
     @property
     def current_mode(self) -> Mode:

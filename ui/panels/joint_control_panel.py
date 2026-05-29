@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QSlider,
     QPushButton, QGroupBox, QScrollArea, QWidget
 )
-from PyQt5.QtCore import Qt, QEvent
+from PyQt5.QtCore import Qt, QEvent, QTimer
 
 from core.world_state.event_types import EventType
 
@@ -32,11 +32,12 @@ class JointControlPanel(QWidget):
         5. This panel receives ROBOT_STATE and updates sliders/labels
     """
 
-    def __init__(self, kinematic_model, state_channel, parent=None):
+    def __init__(self, kinematic_model, state_channel, robot_manager=None, parent=None):
         super().__init__(parent)
 
         self.kinematic_model = kinematic_model
         self.state_channel = state_channel
+        self.robot_manager = robot_manager
 
         # Joint information from model
         self.joint_info = kinematic_model.get_joint_info()
@@ -52,12 +53,17 @@ class JointControlPanel(QWidget):
         self._setup_ui()
 
         # Subscribe to events
-        # self.state_channel.subscribe(EventType.ROBOT_STATE, self._on_robot_state)
         self.state_channel.subscribe(EventType.MODE_SWITCHED, self._on_mode_switched)
 
         # Install wheel event filters
         for slider in self.sliders.values():
             slider.installEventFilter(self)
+
+        # Debounce timer for slider commands
+        self._debounce_timer = QTimer()
+        self._debounce_timer.setSingleShot(True)
+        self._debounce_timer.timeout.connect(self._publish_debounced_command)
+        self._pending_command = None
 
     # =================================================================
     # UI Setup
@@ -173,6 +179,16 @@ class JointControlPanel(QWidget):
             frac = s.value() / 1000.0
             positions.append(low + frac * (high - low))
 
+        self._pending_command = (positions, joint_name, joint_value)
+        self._debounce_timer.start(100)  # Wait 100ms after last change
+
+    def _publish_debounced_command(self):
+        """Publish the command after the slider has settled."""
+        if self._pending_command is None:
+            return
+        positions, joint_name, joint_value = self._pending_command
+        self._pending_command = None
+
         # Publish JOINT_COMMAND
         print(f"[JOINT_COMMAND] {time.time():.3f} | {joint_name} | {[f'{p:.4f}' for p in positions]}")
         self.state_channel.publish(
@@ -258,17 +274,6 @@ class JointControlPanel(QWidget):
     # Event Handlers (display only — no model mutation)
     # =================================================================
 
-    def _on_robot_state(self, event):
-        """
-        Handle ROBOT_STATE event.
-
-        Updates UI sliders and labels from the authoritative robot state.
-        Does NOT update the kinematic model — that is StateHandler's job.
-        """
-        positions = event.data.get('joint_positions')
-        if positions:
-            self._update_ui_from_positions(positions)
-
     def _on_mode_switched(self, event):
         """Handle MODE_SWITCHED — update UI indicators and sync sliders to real robot."""
         mode = event.data.get('mode', '')
@@ -278,8 +283,9 @@ class JointControlPanel(QWidget):
         self._set_mode_indicators(is_real)
         
         # When switching to REAL mode, sync sliders to actual robot position
-        if is_real and self.kinematic_model:
-            positions = self.kinematic_model.get_current_joint_positions()
+        if is_real and self.robot_manager and self.robot_manager._real_robot:
+            state = self.robot_manager._real_robot.get_state()
+            positions = state.get('joint_positions')
 
             # FIX: Check if positions is not None and has length
             if positions is not None and len(positions) > 0:

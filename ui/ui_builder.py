@@ -8,7 +8,7 @@ from PyQt5.QtCore import Qt
 from ui.menus.file_menu import FileMenu
 from ui.menus.view_menu import ViewMenu
 from ui.menus.robots_menu import RobotsMenu
-# from ui.menus.camera_menu import CameraMenu
+from ui.menus.camera_menu import CameraMenu
 from ui.panels.grid_control_panel import GridControlPanel
 from ui.panels.view_controls_panel import ViewControlsPanel, ViewToolBar
 
@@ -18,7 +18,7 @@ class UIBuilder:
     Manages UI components: menus, dock widgets, and status bar.
     """
     
-    def __init__(self, parent_window, state_channel, robot_manager, engine):
+    def __init__(self, parent_window, state_channel, robot_manager, camera_manager, engine):
         """
         Initialize the UI manager.
 
@@ -31,7 +31,7 @@ class UIBuilder:
         self.parent = parent_window
         self.state_channel = state_channel
         self.robot_manager = robot_manager
-        # self.camera_manager = camera_manager
+        self.camera_manager = camera_manager
         self.engine = engine
         
         # Menu instances
@@ -78,13 +78,11 @@ class UIBuilder:
         menubar.addMenu(self.robots_menu)   # Directly add, not separate
         
         # Camera Menu
-        '''
         self.camera_menu = CameraMenu(self.parent, self.camera_manager)
         camera_menu = menubar.addMenu("&Camera")
         for action in self.camera_menu.get_actions():
             camera_menu.addAction(action)
 
-                    '''
         # Help Menu
         self.help_menu = menubar.addMenu("&Help")
         about_action = QAction("&About", self.parent)

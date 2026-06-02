@@ -32,7 +32,7 @@ from drivers.real_robot import RealRobot
 
 # UI
 from ui.ui_builder import UIBuilder
-#from ui.managers.camera_manager import CameraManager
+from ui.managers.camera_manager import CameraManager
 from ui.panels.motion_container import MotionContainer
 
 logger = logging.getLogger(__name__)
@@ -78,21 +78,20 @@ class MainWindow(QMainWindow):
         self._setup_robot_components()
 
         # ===== 5. Camera Manager =====
-        '''
         self.camera_manager = CameraManager(
             self.transform_registry,
             self.state_channel,
             self.engine,
+            self.robot_manager,
             self
         )
-        '''
 
         # ===== 6. UI Builder (menus, toolbars, docks) =====
         self.ui_builder = UIBuilder(
             self,
             self.state_channel,
             self.robot_manager,
-            # self.camera_manager,
+            self.camera_manager,
             self.engine
         )
 

@@ -9,8 +9,8 @@ from typing import Optional
 from PyQt5.QtCore import QTimer
 
 from core.world_state.transform_registry import TransformRegistry
-from .processors.pointcloud_processor import PointCloudProcessor
-from .renderers.pointcloud_renderer import PointCloudRenderer
+from .pointcloud_processor import PointCloudProcessor
+from .pointcloud_renderer import PointCloudRenderer
 
 
 class PointCloudDisplay:
@@ -19,7 +19,7 @@ class PointCloudDisplay:
     Everything runs in the main Qt thread at 30 FPS.
     """
     
-    def __init__(self, registry: TransformRegistry):
+    def __init__(self, registry: TransformRegistry, kinematic_model=None, asset_id=None):
         """
         Initialize point cloud display.
         
@@ -27,6 +27,8 @@ class PointCloudDisplay:
             registry: Shared transform registry
         """
         self.registry = registry
+        self.kinematic_model = kinematic_model
+        self.asset_id = asset_id
         
         # Components (no threads)
         self.camera = None
@@ -37,6 +39,7 @@ class PointCloudDisplay:
         self.is_attached = False
         self.is_running = False
         self.device_sn = None
+        self._needs_render = False
         
         # Performance tracking
         self.frame_count = 0
@@ -50,18 +53,22 @@ class PointCloudDisplay:
         self.timer = QTimer()
         self.timer.timeout.connect(self._update)
         
-    def attach(self, renderer):
+    def attach(self, renderer, engine=None):
         """Attach point cloud display to renderer"""
         if self.is_attached:
             return
         
         self.renderer.attach(renderer)
+        if engine:
+            engine.register_display(self)
+        self._needs_render = False
         self.is_attached = True
         print("✅ PointCloudDisplay: Attached (single-threaded)")
     
     def start_camera(self, device_sn: Optional[str] = None, 
                     camera_type: str = "orbbec",
-                    width: int = 640, height: int = 360, fps: int = 30) -> bool:
+                    width: int = 640, height: int = 360, fps: int = 30,
+                    asset_id=None, kinematic_model=None) -> bool:
         """
         Start camera with specified resolution.
         Note: Orbbec default is 640x360, RealSense default is 640x480
@@ -96,7 +103,16 @@ class PointCloudDisplay:
                 
             self.camera.start_streaming()
             print(f"✅ Camera initialized")
-            
+
+            if kinematic_model and asset_id:
+                print(f"✅ Going to find Camera Optical Frame")
+                optical_frame = self._find_camera_optical_frame(kinematic_model, asset_id)
+                if optical_frame:
+                    self.set_camera_frame(optical_frame)
+                    print(f"📷 Camera optical frame: {optical_frame}")
+                else:
+                    print("⚠️ No camera depth optical frame found in URDF")
+
         except Exception as e:
             print(f"❌ Failed to start camera: {e}")
             import traceback
@@ -119,7 +135,14 @@ class PointCloudDisplay:
         
         print("✅ PointCloudDisplay: Single-threaded pipeline started")
         return True
-    
+
+    def _find_camera_optical_frame(self, kinematic_model, asset_id):
+        """Find the camera depth optical frame from the kinematic model."""
+        for link_name in kinematic_model.link_transforms.keys():
+            if 'depth_optical_frame' in link_name.lower():
+                return f"{asset_id}_{link_name}"
+        return None
+
     def _update(self):
         """
         Main update loop - called at 30 FPS by QTimer.
@@ -151,9 +174,7 @@ class PointCloudDisplay:
         t2 = time.time()
         # Update renderer directly (no signal)
         self.renderer.update_point_cloud(points, colors)
-        # Force render now (not waiting for timer)
-        if hasattr(self.renderer, 'force_render'):
-            self.renderer.force_render()
+        self._needs_render = True
         render_time = (time.time() - t2) * 1000
         
         # ===== Track Performance =====
@@ -174,7 +195,7 @@ class PointCloudDisplay:
         # Statistics every 30 frames
         self.frame_count += 1
         if self.frame_count >= 30:
-            self._print_stats()
+            # self._print_stats()
             self.frame_count = 0
     
     def _print_stats(self):
@@ -225,6 +246,7 @@ class PointCloudDisplay:
     def set_camera_frame(self, frame_name: str):
         """Set camera optical frame name"""
         self.processor.set_camera_frame(frame_name)
+        self.renderer.camera_optical_frame = frame_name
     
     def set_roi_range(self, x_min: float, x_max: float, 
                     y_min: float, y_max: float,

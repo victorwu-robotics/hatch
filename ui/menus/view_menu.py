@@ -26,7 +26,6 @@ class ViewMenu:
             engine: VisualizerEngine for view and grid control.
         """
         self.parent = parent_window
-        # self.camera_manager = camera_manager
         self.engine = engine
 
         self.actions = []

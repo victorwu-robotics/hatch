@@ -1,49 +1,52 @@
 """
-Camera Menu - Handles camera controls.
+Camera Menu - Handles camera controls for the active camera.
 """
 
 from PyQt5.QtWidgets import QAction
 
 
 class CameraMenu:
-    """Camera menu for camera controls."""
+    """Camera menu for controlling the active camera."""
     
     def __init__(self, parent_window, camera_manager):
-        """
-        Initialize camera menu.
-        
-        Args:
-            parent_window: The main window
-            camera_manager: The camera manager instance
-        """
         self.parent = parent_window
         self.camera_manager = camera_manager
         self.actions = []
-        
         self._create_actions()
     
     def _create_actions(self):
-        """Create all camera menu actions."""
         # Show Camera Panel
-        show_panel_action = QAction("&Show Camera Panel", self.parent)
-        show_panel_action.setShortcut("Ctrl+Shift+C")
-        show_panel_action.triggered.connect(self.camera_manager.show_panel)
-        self.actions.append(show_panel_action)
+        show_panel = QAction("&Show Camera Panel", self.parent)
+        show_panel.setShortcut("Ctrl+Shift+C")
+        show_panel.triggered.connect(self.camera_manager.show_panel)
+        self.actions.append(show_panel)
         
-        # Transform to World Frame
-        self.transform_action = QAction("Transform to World Frame", self.parent)
-        self.transform_action.setCheckable(True)
-        self.transform_action.setChecked(True)
-        self.transform_action.triggered.connect(self.camera_manager.set_transform_to_world)
-        self.actions.append(self.transform_action)
+        # Separator
+        sep = QAction(self.parent)
+        sep.setSeparator(True)
+        self.actions.append(sep)
         
-        # Show Camera Frames
-        self.show_frames_action = QAction("Show Camera Frames", self.parent)
-        self.show_frames_action.setCheckable(True)
-        self.show_frames_action.setChecked(True)
-        self.show_frames_action.triggered.connect(self.camera_manager.set_show_frames)
-        self.actions.append(self.show_frames_action)
+        # Start Camera
+        start_action = QAction("&Start Camera", self.parent)
+        start_action.triggered.connect(self._on_start)
+        self.actions.append(start_action)
+        
+        # Stop Camera
+        stop_action = QAction("&Stop Camera", self.parent)
+        stop_action.triggered.connect(self._on_stop)
+        self.actions.append(stop_action)
+    
+    def _on_start(self):
+        cam_id = self.camera_manager.active_camera_id
+        if cam_id:
+            self.camera_manager.start_camera(cam_id)
+    
+    def _on_stop(self):
+        cam_id = self.camera_manager.active_camera_id
+        if cam_id:
+            self.camera_manager.stop_camera(cam_id)
     
     def get_actions(self):
-        """Get all camera menu actions."""
         return self.actions
+
+

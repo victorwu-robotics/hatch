@@ -1,8 +1,8 @@
 """
 State Channel - Generic publish/subscribe for application events.
 
-Principle #6: Time = StateChannel. All events flow through here.
-Principle #2: Event-Driven, No Polling.
+Principle: Time = StateChannel. All events flow through here.
+Principle: Event-Driven, No Polling.
 """
 
 import time
@@ -33,6 +33,8 @@ class Event:
 class StateChannel:
     """
     Generic publish/subscribe system for application events.
+
+    Not thread-safe. Designed for single-threaded use per Hatch architecture.
 
     Usage:
         channel = StateChannel()

@@ -6,6 +6,8 @@ from math import pi
 
 from core.kinematics.ur_ik_solver import URIKSolver
 
+import logging
+logger = logging.getLogger(__name__)
 
 class OffsetWristIKSolver:
     """IK solver wrapper that creates a parameterized UR IK solver."""
@@ -41,12 +43,12 @@ class OffsetWristIKSolver:
             d6=self.d6
         )
         
-        print(f"IKSolver: Created UR IK solver with parameters:")
-        print(f"  d1={self.d1:.6f}, a2={self.a2:.6f}, a3={self.a3:.6f}")
-        print(f"  d4={self.d4:.6f}, d5={self.d5:.6f}, d6={self.d6:.6f}")
+        logger.debug(f"IKSolver: Created UR IK solver with parameters:")
+        logger.debug(f"  d1={self.d1:.6f}, a2={self.a2:.6f}, a3={self.a3:.6f}")
+        logger.debug(f"  d4={self.d4:.6f}, d5={self.d5:.6f}, d6={self.d6:.6f}")
         
         if self._base_compensation is not None:
-            print(f"  Base compensation: {self._true_base_frame} → {self._ik_base_frame}")
+            logger.debug(f"  Base compensation: {self._true_base_frame} → {self._ik_base_frame}")
     
     def _setup_base_compensation(self):
         """
@@ -68,11 +70,11 @@ class OffsetWristIKSolver:
                 break
         
         if true_base is None:
-            print("  No moving joints found - robot may be static")
+            logger.debug("  No moving joints found - robot may be static")
             return
         
         self._true_base_frame = true_base
-        print(f"\n  True kinematic base: {true_base}")
+        logger.debug(f"\n  True kinematic base: {true_base}")
         
         # Step 2: Find the frame that DH parameters expect
         # This is typically the first link in the arm chain
@@ -83,9 +85,9 @@ class OffsetWristIKSolver:
                 first_joint = arm_chain[0]
                 ik_base = self.model.joints[first_joint]['parent']
                 self._ik_base_frame = ik_base
-                print(f"  IK expects base: {ik_base}")
+                logger.debug(f"  IK expects base: {ik_base}")
         except Exception as e:
-            print(f"  Could not determine IK base: {e}")
+            logger.debug(f"  Could not determine IK base: {e}")
             return
         
         # Step 3: If true base and IK base are different, compute compensation
@@ -98,16 +100,16 @@ class OffsetWristIKSolver:
                 # Compute transform from true base to IK base
                 self._base_compensation = np.linalg.inv(T_true_world) @ T_ik_world
                 
-                print(f"  ✅ Base compensation enabled: {true_base} → {self._ik_base_frame}")
+                logger.debug(f"  ✅ Base compensation enabled: {true_base} → {self._ik_base_frame}")
                 
                 # Check if it's a 180° rotation (for debugging)
                 R = self._base_compensation[:3, :3]
                 if np.allclose(R, np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]]), atol=1e-6):
-                    print(f"      (This is a 180° rotation around Z)")
+                    logger.debug(f"      (This is a 180° rotation around Z)")
             else:
-                print(f"  ⚠️  Could not compute compensation - missing transforms")
+                logger.debug(f"  ⚠️  Could not compute compensation - missing transforms")
         else:
-            print(f"  ✅ No compensation needed - true base matches IK base")
+            logger.debug(f"  ✅ No compensation needed - true base matches IK base")
     
     def _extract_from_model(self):
         """Extract DH parameters from the arm chain transforms."""
@@ -130,23 +132,23 @@ class OffsetWristIKSolver:
                 break
         
         if true_base is None:
-            print("No moving joints found")
+            logger.debug("No moving joints found")
             return
         
         # Get the arm chain starting from true base
         try:
             true_root = self.model.get_true_root()
-            # print(f"\n  Extracting DH parameters using true root: {true_root}")
+            logger.debug(f"\n  Extracting DH parameters using true root: {true_root}")
             chain = self.model.get_arm_chain(true_root)
         except ValueError as e:
-            print(f"Error: {e}")
+            logger.debug(f"Error: {e}")
             return
         
         if len(chain) < 6:
-            print(f"Warning: Expected 6 joints, found {len(chain)}")
+            logger.debug(f"Warning: Expected 6 joints, found {len(chain)}")
             return
         
-        # print(f"\nExtracting DH parameters from arm chain (base: {true_base}):")
+        logger.debug(f"\nExtracting DH parameters from arm chain (base: {true_base}):")
         
         # Get transforms relative to true base
         transforms = self.model.get_joint_child_transforms(chain, true_base)
@@ -154,7 +156,7 @@ class OffsetWristIKSolver:
         # Print transforms for debugging
         for i, (j_name, T) in enumerate(zip(chain, transforms)):
             pos = T[:3, 3]
-            # print(f"  {j_name} → {self.model.joints[j_name]['child']}: ({pos[0]:.6f}, {pos[1]:.6f}, {pos[2]:.6f})")
+            logger.debug(f"  {j_name} → {self.model.joints[j_name]['child']}: ({pos[0]:.6f}, {pos[1]:.6f}, {pos[2]:.6f})")
         
         # Extract DH parameters
         dh_params = self._extract_dh_from_transforms(transforms)
@@ -167,16 +169,6 @@ class OffsetWristIKSolver:
         self.d5 = dh_params['d5']
         self.d6 = dh_params['d6']
         
-        '''
-        print(f"\nFinal extracted parameters:")
-        print(f"  d1 = {self.d1:.6f}")
-        print(f"  a2 = {self.a2:.6f}")
-        print(f"  a3 = {self.a3:.6f}")
-        print(f"  d4 = {self.d4:.6f}")
-        print(f"  d5 = {self.d5:.6f}")
-        print(f"  d6 = {self.d6:.6f}")
-        '''
-    
     def _extract_dh_from_transforms(self, transforms: List[np.ndarray]) -> dict:
         """Extract DH parameters from link transforms at zero position."""
         if len(transforms) < 6:

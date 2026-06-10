@@ -7,7 +7,9 @@ import numpy as np
 import vtk
 import time
 from vtk.util import numpy_support
+import logging
 
+logger = logging.getLogger(__name__)
 
 class StreamingPointCloud:
     """
@@ -64,7 +66,7 @@ class StreamingPointCloud:
             self.polydata.GetPointData().GetScalars()
         ).reshape(-1, 3)
         
-        print(f"StreamingPointCloud: Initialized with {max_points} max points")
+        logger.debug(f"StreamingPointCloud: Initialized with {max_points} max points")
     
     def update(self, points_np: np.ndarray, colors_np: np.ndarray):
         """ZERO-COPY update - direct memory overwrite."""

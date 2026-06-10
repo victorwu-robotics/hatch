@@ -20,6 +20,8 @@ from scipy.spatial.transform import Rotation as R
 
 from core.world_state.event_types import EventType
 
+import logging
+logger = logging.getLogger(__name__)
 
 class CartesianControlPanel(QWidget):
     """
@@ -443,7 +445,7 @@ class CartesianControlPanel(QWidget):
         Pure query — no mutation.
         """
         if self.kinematic_model is None:
-            print("[CARTESIAN] _get_tcp_pose_in_base: kinematic_model is None")
+            logger.debug("[CARTESIAN] _get_tcp_pose_in_base: kinematic_model is None")
             return None
 
         try:
@@ -456,11 +458,11 @@ class CartesianControlPanel(QWidget):
                     from_frame="world",
                     to_frame=base_frame
                 )
-                # print(f"[CARTESIAN] _get_tcp_pose_in_base: success, pos=({result[0,3]:.4f}, {result[1,3]:.4f}, {result[2,3]:.4f})")
+                logger.debug(f"[CARTESIAN] _get_tcp_pose_in_base: success, pos=({result[0,3]:.4f}, {result[1,3]:.4f}, {result[2,3]:.4f})")
                 return result
             return tcp_world
         except Exception as e:
-            print(f"[CARTESIAN] _get_tcp_pose_in_base: exception {e}")
+            logger.debug(f"[CARTESIAN] _get_tcp_pose_in_base: exception {e}")
             return None
 
     @staticmethod
@@ -520,12 +522,12 @@ class CartesianControlPanel(QWidget):
         try:
             # Try a simple IK call at current position
             current_pose = self.kinematic_model.get_tcp_pose()
-            print(f"[CARTESIAN] current pose: {current_pose}")
+            logger.debug(f"[CARTESIAN] current pose: {current_pose}")
             result = self.kinematic_model.solve_ik_for_tcp(
                 current_pose, 
                 self.kinematic_model.get_current_joint_positions()
             )
-            print(f"[CARTESIAN] result: {result}")
+            logger.debug(f"[CARTESIAN] result: {result}")
             return result is not None
         except Exception:
             return False

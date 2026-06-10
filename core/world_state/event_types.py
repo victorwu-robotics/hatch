@@ -9,8 +9,8 @@ Events are organized into three categories:
 - State: System → UI (reports of what happened)
 - Lifecycle: System → System (internal coordination)
 
-Principle #6: Time = StateChannel. All events flow through here.
-Principle #2: Event-Driven, No Polling. No component polls for changes.
+Principle: Time = StateChannel. All events flow through here.
+Principle: Event-Driven, No Polling. No component polls for changes.
 """
 
 from enum import Enum

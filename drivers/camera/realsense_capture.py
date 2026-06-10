@@ -12,6 +12,8 @@ import pyrealsense2 as rs
 
 from .base_camera import BaseCameraDriver, CameraCaptureThread
 
+import logging
+logger = logging.getLogger(__name__)
 
 class RealSenseDriver(BaseCameraDriver):
     """
@@ -74,14 +76,14 @@ class RealSenseDriver(BaseCameraDriver):
             
             # Get device info
             self.device = profile.get_device()
-            print(f"📷 RealSense Device: {self.device.get_info(rs.camera_info.name)}")
-            print(f"   Serial: {self.device.get_info(rs.camera_info.serial_number)}")
-            print(f"   Firmware: {self.device.get_info(rs.camera_info.firmware_version)}")
+            logger.info(f"📷 RealSense Device: {self.device.get_info(rs.camera_info.name)}")
+            logger.info(f"   Serial: {self.device.get_info(rs.camera_info.serial_number)}")
+            logger.info(f"   Firmware: {self.device.get_info(rs.camera_info.firmware_version)}")
             
             # Get depth scale for conversion
             depth_sensor = self.device.first_depth_sensor()
             self.depth_scale = depth_sensor.get_depth_scale()
-            print(f"   Depth scale: {self.depth_scale:.4f} m/unit")
+            logger.info(f"   Depth scale: {self.depth_scale:.4f} m/unit")
             
             # Create align object to align depth to color
             self.align = rs.align(rs.stream.color)
@@ -89,12 +91,12 @@ class RealSenseDriver(BaseCameraDriver):
             # Optional: colorizer for debugging
             self.colorizer = rs.colorizer()
             
-            print(f"✅ RealSenseDriver: Camera hardware ready")
-            print(f"   Depth: {self.depth_width}x{self.depth_height} @ {self.depth_fps}fps")
-            print(f"   Color: {self.color_width}x{self.color_height} @ {self.color_fps}fps")
+            logger.info(f"✅ RealSenseDriver: Camera hardware ready")
+            logger.info(f"   Depth: {self.depth_width}x{self.depth_height} @ {self.depth_fps}fps")
+            logger.info(f"   Color: {self.color_width}x{self.color_height} @ {self.color_fps}fps")
             
         except Exception as e:
-            print(f"❌ Failed to start RealSense camera: {e}")
+            logger.info(f"❌ Failed to start RealSense camera: {e}")
             import traceback
             traceback.print_exc()
             raise
@@ -113,7 +115,7 @@ class RealSenseDriver(BaseCameraDriver):
             # Wait for frames
             frames = self.pipeline.wait_for_frames(timeout_ms=5000)
             if frames is None:
-                print("No Frames ....")
+                logger.debug("No Frames ....")
                 return None, None
             # Align depth to color
             aligned_frames = self.align.process(frames)
@@ -123,7 +125,7 @@ class RealSenseDriver(BaseCameraDriver):
             depth_frame = aligned_frames.get_depth_frame()
             
             if not color_frame or not depth_frame:
-                print("No Frames after alignment ....")
+                logger.debug("No Frames after alignment ....")
                 return None, None
             
             # Convert to numpy arrays
@@ -145,7 +147,7 @@ class RealSenseDriver(BaseCameraDriver):
             )
             
             if points is None or len(points) == 0:
-                print("No Points ....")
+                logger.debug("No Points ....")
                 return None, None
             
             # Track performance
@@ -159,7 +161,7 @@ class RealSenseDriver(BaseCameraDriver):
             now = time.time()
             if now - self.last_emit_time > 5.0:
                 avg_time = sum(self.capture_times) / len(self.capture_times)
-                print(f"📊 RealSense: {self.frame_count/5:.1f} FPS, {avg_time:.1f}ms, {len(points)} points")
+                logger.info(f"📊 RealSense: {self.frame_count/5:.1f} FPS, {avg_time:.1f}ms, {len(points)} points")
                 self.frame_count = 0
                 self.last_emit_time = now
 
@@ -243,7 +245,7 @@ class RealSenseDriver(BaseCameraDriver):
         if self.pipeline:
             try:
                 self.pipeline.stop()
-                print(f"✅ RealSenseDriver: Pipeline stopped")
+                logger.info(f"✅ RealSenseDriver: Pipeline stopped")
             except:
                 pass
             self.pipeline = None

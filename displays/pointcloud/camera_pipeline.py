@@ -154,7 +154,7 @@ class CameraPipeline:
         """Called at 30 FPS. Captures, processes, and renders one frame."""
         if not self.is_running or self.camera is None:
             return
-        # print(f"[Pipeline] _update called")  # ← Add this
+        logger.debug(f"[Pipeline] _update called")  # ← Add this
 
         # 1. Capture
         t0 = time.time()

@@ -11,6 +11,8 @@ from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 from typing import Tuple
 from dataclasses import dataclass
 
+import logging
+logger = logging.getLogger(__name__)
 
 @dataclass
 class RenderConfig:
@@ -111,9 +113,9 @@ class VisualizerEngine:
         self.displays = []
         self._setup_render_timer()
 
-        print(f"VisualizerEngine: VTK renderer created")
-        print(f"VisualizerEngine: Grid size: {self.config.grid_size}m, extent: ±{self.config.grid_extent}m")
-        print(f"VisualizerEngine: Embedded VTK widget in Qt container")
+        logger.info(f"VisualizerEngine: VTK renderer created")
+        logger.info(f"VisualizerEngine: Grid size: {self.config.grid_size}m, extent: ±{self.config.grid_extent}m")
+        logger.info(f"VisualizerEngine: Embedded VTK widget in Qt container")
 
     def _get_camera_distance(self) -> float:
         """Get the current distance from camera to focal point."""
@@ -146,7 +148,7 @@ class VisualizerEngine:
         camera = self.renderer.GetActiveCamera()
         camera.SetPosition(new_position)
         
-        print(f"VisualizerEngine: Camera distance preserved: {distance:.2f}m")
+        logger.info(f"VisualizerEngine: Camera distance preserved: {distance:.2f}m")
 
     # ===== DISTANCE-PRESERVING VIEW METHODS =====
     
@@ -225,7 +227,7 @@ class VisualizerEngine:
         self.render()
         
         mode = "preserving distance" if preserve_distance else "default distance"
-        print(f"VisualizerEngine: Set view to ISOMETRIC ({mode})")
+        logger.info(f"VisualizerEngine: Set view to ISOMETRIC ({mode})")
 
     def zoom_to_fit(self, target: str = "all"):
         """
@@ -252,7 +254,7 @@ class VisualizerEngine:
         
         # Store the new distance
         self.current_distance = self._get_camera_distance()
-        print(f"VisualizerEngine: Zoomed to fit {target}, new distance: {self.current_distance:.2f}m")
+        logger.info(f"VisualizerEngine: Zoomed to fit {target}, new distance: {self.current_distance:.2f}m")
 
     def _has_robot(self) -> bool:
         """Check if there's a robot in the scene."""
@@ -290,7 +292,7 @@ class VisualizerEngine:
         if view_name in view_map:
             view_map[view_name]()
         else:
-            print(f"VisualizerEngine: Unknown view '{view_name}'")
+            logger.debug(f"VisualizerEngine: Unknown view '{view_name}'")
 
     # ===== GRID METHODS =====
     
@@ -365,7 +367,7 @@ class VisualizerEngine:
     def set_grid_parameters(self, size_meters: float, color_rgb: Tuple[float, float, float]):
         """Set the grid size and color dynamically."""
         if not self.grid_actor:
-            print("Warning: No grid actor found")
+            logger.info("Warning: No grid actor found")
             return
         
         try:
@@ -379,10 +381,10 @@ class VisualizerEngine:
             
             # Force render
             self.render()
-            print(f"VisualizerEngine: Grid updated - size: {size_meters}m, color: {color_rgb}")
+            logger.info(f"VisualizerEngine: Grid updated - size: {size_meters}m, color: {color_rgb}")
             
         except Exception as e:
-            print(f"Error updating grid: {e}")
+            logger.info(f"Error updating grid: {e}")
             import traceback
             traceback.print_exc()
 
@@ -400,7 +402,7 @@ class VisualizerEngine:
         self.renderer.RemoveActor(self.grid_actor)
         self._setup_grid()
         self.render()
-        print(f"VisualizerEngine: Grid extent set to ±{extent}m")
+        logger.info(f"VisualizerEngine: Grid extent set to ±{extent}m")
 
     def set_grid_preset(self, preset_name: str):
         """
@@ -428,9 +430,9 @@ class VisualizerEngine:
             self.renderer.RemoveActor(self.grid_actor)
             self._setup_grid()
             self.render()
-            print(f"VisualizerEngine: Grid set to {preset_name} (±{preset['extent']}m, {preset['size']*1000:.0f}mm grid)")
+            logger.info(f"VisualizerEngine: Grid set to {preset_name} (±{preset['extent']}m, {preset['size']*1000:.0f}mm grid)")
         else:
-            print(f"Unknown preset: {preset_name}")
+            logger.info(f"Unknown preset: {preset_name}")
 
     def _setup_axes(self):
         """Add coordinate axes widget."""
@@ -457,11 +459,11 @@ class VisualizerEngine:
 
     def _on_render_timer(self):
         """Called 60 times per second - renders ONLY if needed."""
-        # print(f"[VIZ] Timer tick, checking {len(self.displays)} displays")
+        logger.debug(f"[VIZ] Timer tick, checking {len(self.displays)} displays")
         needs_render = False
         for display in self.displays:
             if display._needs_render:
-                # print(f"[VIZ] Display needs render")
+                logger.debug(f"[VIZ] Display needs render")
                 needs_render = True
                 break
         

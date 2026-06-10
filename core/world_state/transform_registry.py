@@ -1,7 +1,7 @@
 """
 Transform Registry - Lazy evaluation with cache invalidation.
 
-Principle #5: Space = TransformRegistry.
+Principle: Space = TransformRegistry.
 All relative poses in one place. Lazy evaluation — transforms computed
 only when requested. Cache invalidation on change. No polling.
 
@@ -39,6 +39,8 @@ class FrameInfo:
 class TransformRegistry:
     """
     Lazy-evaluation transform registry for all frames.
+
+    Not thread-safe. Designed for single-threaded use per Hatch architecture.
 
     Frames are registered with a transform relative to their parent.
     World transforms are computed only when requested via get_transform().
@@ -299,6 +301,10 @@ class TransformRegistry:
     def get_frame_info(self, name: str) -> Optional[FrameInfo]:
         """Get metadata about a frame."""
         return self._frames.get(name)
+
+    def has_frame(self, name: str) -> bool:
+        """Check if a frame exists in the registry."""
+        return name in self._frames
 
     def list_frames(self) -> List[str]:
         """List all registered frame names."""

@@ -19,6 +19,8 @@ from PyQt5.QtCore import Qt, QEvent, QTimer
 
 from core.world_state.event_types import EventType
 
+import logging
+logger = logging.getLogger(__name__)
 
 class JointControlPanel(QWidget):
     """
@@ -190,7 +192,7 @@ class JointControlPanel(QWidget):
         self._pending_command = None
 
         # Publish JOINT_COMMAND
-        print(f"[JOINT_COMMAND] {time.time():.3f} | {joint_name} | {[f'{p:.4f}' for p in positions]}")
+        logger.debug(f"[JOINT_COMMAND] {time.time():.3f} | {joint_name} | {[f'{p:.4f}' for p in positions]}")
         self.state_channel.publish(
             EventType.JOINT_COMMAND,
             data={
@@ -289,10 +291,10 @@ class JointControlPanel(QWidget):
 
             # FIX: Check if positions is not None and has length
             if positions is not None and len(positions) > 0:
-                print(f"[JointControl] Syncing sliders to: {positions}")
+                logger.debug(f"[JointControl] Syncing sliders to: {positions}")
                 self._update_ui_from_positions(positions)
             else:
-                print(f"[JointControl] No positions to sync")
+                logger.debug(f"[JointControl] No positions to sync")
 
     def _set_mode_indicators(self, is_real):
         """Update joint name labels to show (actual) in Real mode."""

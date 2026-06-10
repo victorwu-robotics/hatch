@@ -18,6 +18,8 @@ class StateHandler:
     Subscribes to ROBOT_STATE events.
     Updates KinematicModel and TransformRegistry.
     This is the ONLY place that modifies these systems.
+
+    Not thread-safe. Designed for single-threaded use per Hatch architecture.
     """
     
     def __init__(self,
@@ -45,8 +47,8 @@ class StateHandler:
         # Subscribe to robot state events
         self._channel.subscribe(EventType.ROBOT_STATE, self._on_robot_state)
         
-        print(f"[StateHandler] Initialized for asset: {asset_id}")
-        print(f"[StateHandler] Arm chain has {len(self._arm_chain_links)} links")
+        logger.debug(f"[StateHandler] Initialized for asset: {asset_id}")
+        logger.debug(f"[StateHandler] Arm chain has {len(self._arm_chain_links)} links")
     
     def _build_arm_chain_links(self) -> Set[str]:
         """
@@ -91,7 +93,7 @@ class StateHandler:
                                     break
 
         except Exception as e:
-            logger.warning(f"Could not build arm chain: {e}. Using all links.")
+            logger.warning(f"Could not build arm chain: {e}. Using all links.", exc_info=True)
             arm_links = set(self._model.link_transforms.keys())
 
         return arm_links
@@ -105,22 +107,22 @@ class StateHandler:
         """
         joint_positions = event.data.get('joint_positions')
         source = event.data.get('source', 'unknown')
-        # print(f"[StateHandler] Received ROBOT_STATE from {source}: {joint_positions}")
+        logger.debug(f"[StateHandler] Received ROBOT_STATE from {source}: {joint_positions}")
 
-        # print(f"[SH] joint_positions from event: {joint_positions}")
-        # print(f"[SH] Type: {type(joint_positions)}, length: {len(joint_positions) if joint_positions else 0}")
+        logger.debug(f"[SH] joint_positions from event: {joint_positions}")
+        logger.debug(f"[SH] Type: {type(joint_positions)}, length: {len(joint_positions) if joint_positions else 0}")
         
         if joint_positions is None:
             return
         
         # 1. Update kinematic model (recomputes all link transforms)
-        # print(f"[SH] Updating model with {joint_positions[:3]}...")
+        logger.debug(f"[SH] Updating model with {joint_positions[:3]}...")
         self._model.update_state(joint_positions)
-        # print(f"[StateHandler] Model updated. TCP: {self._model.get_tcp_pose()[:3,3]}")
+        logger.debug(f"[StateHandler] Model updated. TCP: {self._model.get_tcp_pose()[:3,3]}")
         
         # 2. Update transform registry (for display and queries)
         self._update_transform_registry()
-        # print(f"[StateHandler] Registry updated")
+        logger.debug(f"[StateHandler] Registry updated")
     
     def _update_transform_registry(self):
         """
@@ -177,36 +179,32 @@ class StateHandler:
         # Sort by depth: parents before children
         updates.sort(key=lambda x: x[0])
 
+        # Update link frames
         for depth, link_name, T_rel, parent_frame in updates:
             frame_name = f"{self._asset_id}_{link_name}"
 
-            try:
+            if self._registry.has_frame(frame_name):
                 self._registry.update_frame(frame_name, T_rel)
-            except ValueError:
-                try:
-                    self._registry.register_frame(
-                        frame_name, T_rel,
-                        status=FrameStatus.DYNAMIC,
-                        parent=parent_frame,
-                        description=f"Link: {link_name}"
-                    )
-                except ValueError:
-                    continue
+            else:
+                self._registry.register_frame(
+                    frame_name, T_rel,
+                    status=FrameStatus.DYNAMIC,
+                    parent=parent_frame,
+                    description=f"Link: {link_name}"
+                )
 
         # Update TCP frame
         mount_link = self._model.tool_mount_link or "wrist_3_link"
         if mount_link in self._arm_chain_links:
             tcp_frame = f"{self._asset_id}_tcp"
-            parent_frame = f"{self._asset_id}_{mount_link}"
-            try:
-                self._registry.update_frame(tcp_frame, np.eye(4))
-            except ValueError:
-                try:
-                    self._registry.register_frame(
-                        tcp_frame, np.eye(4),
-                        status=FrameStatus.DYNAMIC,
-                        parent=parent_frame,
-                        description="Tool Center Point"
-                    )
-                except ValueError:
-                    pass
+            tcp_parent_frame = f"{self._asset_id}_{mount_link}"
+            tool_transform = self._model.get_tool_transform()
+            if self._registry.has_frame(tcp_frame):
+                self._registry.update_frame(tcp_frame, tool_transform)
+            else:
+                self._registry.register_frame(
+                    tcp_frame, tool_transform,
+                    status=FrameStatus.DYNAMIC,
+                    parent=tcp_parent_frame,
+                    description="Tool Center Point"
+                )

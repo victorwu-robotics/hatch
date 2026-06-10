@@ -311,12 +311,12 @@ if __name__ == "__main__":
 
     # 1. Initialize and connect to the scanner
     SCANNER_IP = "192.168.10.6"
-    print(f"Initializing Keyence LJ-V7200 Driver test at {SCANNER_IP}...")
+    logger.debug(f"Initializing Keyence LJ-V7200 Driver test at {SCANNER_IP}...")
     
     driver = KeyenceScannerDriver(ip=SCANNER_IP)
     
     if not driver.connect():
-        print("CRITICAL: Could not connect to the scanner. Exiting test.")
+        logger.debug("CRITICAL: Could not connect to the scanner. Exiting test.")
         exit(1)
 
     try:

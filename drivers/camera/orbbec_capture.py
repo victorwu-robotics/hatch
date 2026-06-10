@@ -9,6 +9,8 @@ from typing import Optional, Tuple
 
 from .base_camera import BaseCameraDriver
 
+import logging
+logger = logging.getLogger(__name__)
 
 class OrbbecDriver(BaseCameraDriver):
     """
@@ -45,7 +47,7 @@ class OrbbecDriver(BaseCameraDriver):
         self.color_width = color_width
         self.color_height = color_height
         self.color_fps = color_fps
-        print(f"📹 Orbbec resolution set to {depth_width}x{depth_height} @ {depth_fps}fps")
+        logger.info(f"📹 Orbbec resolution set to {depth_width}x{depth_height} @ {depth_fps}fps")
 
     def start_streaming(self):
         """Initialize Orbbec camera pipeline"""
@@ -68,7 +70,7 @@ class OrbbecDriver(BaseCameraDriver):
                     profile.get_height() == self.depth_height and 
                     profile.get_format() == pyorbbecsdk.OBFormat.Y16):
                     depth_profile = profile
-                    print(f"✅ Found matching depth profile: {self.depth_width}x{self.depth_height} @ {self.depth_fps}fps")
+                    logger.info(f"✅ Found matching depth profile: {self.depth_width}x{self.depth_height} @ {self.depth_fps}fps")
                     break
 
             # If exact match not found, try any resolution with Y16 format
@@ -77,7 +79,7 @@ class OrbbecDriver(BaseCameraDriver):
                     profile = depth_profiles.get_stream_profile_by_index(i)
                     if profile.get_format() == pyorbbecsdk.OBFormat.Y16:
                         depth_profile = profile
-                        print(f"⚠️ Using fallback depth profile: {profile.get_width()}x{profile.get_height()} @ {profile.get_fps()}fps")
+                        logger.info(f"⚠️ Using fallback depth profile: {profile.get_width()}x{profile.get_height()} @ {profile.get_fps()}fps")
                         break
                         
             if depth_profile is None:
@@ -106,7 +108,7 @@ class OrbbecDriver(BaseCameraDriver):
                     profile = color_profiles.get_stream_profile_by_index(i)
                     if profile.get_format() == pyorbbecsdk.OBFormat.RGB:
                         color_profile = profile
-                        print(f"⚠️ Using fallback color profile: {profile.get_width()}x{profile.get_height()}")
+                        logger.info(f"⚠️ Using fallback color profile: {profile.get_width()}x{profile.get_height()}")
                         break
                         
             if color_profile is None:
@@ -124,10 +126,10 @@ class OrbbecDriver(BaseCameraDriver):
             self.point_cloud_filter.set_create_point_format(pyorbbecsdk.OBFormat.RGB_POINT)
             
             self.is_streaming = True
-            print(f"✅ OrbbecDriver: Camera hardware ready at {self.depth_width}x{self.depth_height}")
+            logger.info(f"✅ OrbbecDriver: Camera hardware ready at {self.depth_width}x{self.depth_height}")
             
         except Exception as e:
-            print(f"Failed to start Orbbec camera: {e}")
+            logger.info(f"Failed to start Orbbec camera: {e}")
             import traceback
             traceback.print_exc()
             raise
@@ -185,7 +187,7 @@ class OrbbecDriver(BaseCameraDriver):
         if self.pipeline:
             try:
                 self.pipeline.stop()
-                print("✅ OrbbecDriver: Pipeline stopped")
+                logger.info("✅ OrbbecDriver: Pipeline stopped")
             except:
                 pass
             self.is_streaming = False
@@ -224,4 +226,3 @@ if __name__ == "__main__":
     print(f"  Mean: {np.mean(times)*1000:.1f}ms")
     print(f"  Std:  {np.std(times)*1000:.1f}ms")
     print(f"  Max:  {np.max(times)*1000:.1f}ms")
-""""""

@@ -12,6 +12,8 @@ from ui.menus.camera_menu import CameraMenu
 from ui.panels.grid_control_panel import GridControlPanel
 from ui.panels.view_controls_panel import ViewControlsPanel, ViewToolBar
 
+import logging
+logger = logging.getLogger(__name__)
 
 class UIBuilder:
     """
@@ -54,7 +56,7 @@ class UIBuilder:
         self._create_grid_control_dock()
         self._create_view_controls_dock()
         
-        print("UIBuilder: Initialized")
+        logger.info("UIBuilder: Initialized")
     
     def _setup_menus(self):
         """Setup all menus."""

@@ -5,17 +5,16 @@ Loads URDF, parses joint/links, computes forward kinematics.
 No visualization code. No Pinocchio dependency.
 Pure Python with NumPy for transformations.
 
-Principle #4: Everything in URDF.
-Principle #7: Movements as Models.
+Principle: Everything in URDF.
+Principle: Movements as Models.
 """
 
 import numpy as np
 import xml.etree.ElementTree as ET
-import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-import vtk
 
+import logging
 logger = logging.getLogger(__name__)
 
 
@@ -29,17 +28,13 @@ class KinematicModel:
     The model detects the true kinematic root (parent of first moving joint)
     to handle URDFs where base_link is not the kinematic root (e.g., UR robots
     with a base_inertia fixed joint).
-
-    Registry updates are controlled by update_registry_on_state_change.
-    Set to False when StateHandler is managing registry updates externally.
     """
 
     def __init__(self,
                  urdf_path,
                  package_dirs=None,
                  transform_registry=None,
-                 asset_id=None,
-                 update_registry_on_state_change=True):
+                 asset_id=None):
         """
         Initialize the kinematic model.
 
@@ -48,10 +43,7 @@ class KinematicModel:
             package_dirs: Directories for resolving package:// mesh paths.
             transform_registry: Optional TransformRegistry for frame registration.
             asset_id: Unique asset identifier for frame namespacing.
-            update_registry_on_state_change: If True, update registry on each
-                state change. Set to False when StateHandler manages this.
         """
-        self._update_registry_on_state_change = update_registry_on_state_change
         self.transform_registry = transform_registry
         self.asset_id = asset_id
 
@@ -85,6 +77,7 @@ class KinematicModel:
         # Tool configuration
         self._tool_transform = np.eye(4)
         self.tool_mount_link = None     # will be set in _find_true_root()
+        self._ik_solver = None          # set via set_ik_solver()
 
         # Parse and build
         self._parse_urdf()
@@ -441,14 +434,15 @@ class KinematicModel:
     # State Management
     # =================================================================
 
-    def update_state(self, q, update_registry=None):
+    def update_state(self, q):
         """
         Update joint state and recompute forward kinematics.
 
+        Does NOT update TransformRegistry. That is StateHandler's job.
+
         Args:
             q: Either a numpy array of joint positions (in joint order)
-               or a dictionary mapping joint names to positions.
-            update_registry: Override for update_registry_on_state_change.
+            or a dictionary mapping joint names to positions.
         """
         if isinstance(q, dict):
             for name, pos in q.items():
@@ -456,7 +450,7 @@ class KinematicModel:
                     self.joints[name]['value'] = pos
         elif isinstance(q, (list, np.ndarray)):
             joint_names = [name for name, j in self.joints.items()
-                          if j['type'] != 'fixed']
+                        if j['type'] != 'fixed']
             for i, name in enumerate(joint_names):
                 if i < len(q):
                     self.joints[name]['value'] = q[i]
@@ -465,94 +459,7 @@ class KinematicModel:
             return
 
         self._forward_kinematics()
-
-        # Update registry if configured (StateHandler sets this to False)
-        should_update = (update_registry if update_registry is not None
-                        else self._update_registry_on_state_change)
-        if should_update and self.transform_registry and self.asset_id:
-            self._update_registry()
-
         self._update_config_vector()
-
-    def update_registry(self):
-        """Update TransformRegistry with current link transforms."""
-        if not self.transform_registry:
-            return
-
-        for link_name, T_world_link in self.link_transforms.items():
-            frame_name = f"{self.asset_id}_{link_name}"
-
-            if link_name in self.root_links:
-                parent_frame = "world"
-                T_rel = T_world_link
-            else:
-                parent_link = self.link_parents.get(link_name)
-                if parent_link is None:
-                    parent_frame = "world"
-                    T_rel = T_world_link
-                else:
-                    parent_frame = f"{self.asset_id}_{parent_link}"
-                    T_world_parent = self.link_transforms.get(parent_link, np.eye(4))
-                    T_rel = np.linalg.inv(T_world_parent) @ T_world_link
-
-            self.transform_registry.update_frame(frame_name, T_rel)
-
-    def _update_registry(self):
-        """Update TransformRegistry with current link transforms (topological order)."""
-        if not self.transform_registry:
-            return
-
-        for name in sorted(self.link_transforms.keys()):
-            parent = self.link_parents.get(name, 'NONE')
-            is_root = name in self.root_links
-            print(f"  {'[ROOT]' if is_root else '      '} {name} -> parent: {parent}")
-
-        # Build a dependency graph: child -> parent
-        # Root links have no parent and should be registered first
-        registered = set()
-        pending = set(self.link_transforms.keys())
-
-        # Register all links in topological order (parents before children)
-        while pending:
-            progress = False
-            for link_name in list(pending):
-                frame_name = f"{self.asset_id}_{link_name}"
-
-                if link_name in self.root_links:
-                    # Root link: attach to world
-                    T_world_link = self.link_transforms[link_name]
-                    self.transform_registry.update_frame(frame_name, T_world_link)
-                    registered.add(link_name)
-                    pending.discard(link_name)
-                    progress = True
-                else:
-                    parent_link = self.link_parents.get(link_name)
-                    if parent_link is None:
-                        # Orphaned link: attach to world
-                        T_world_link = self.link_transforms[link_name]
-                        self.transform_registry.update_frame(frame_name, T_world_link)
-                        registered.add(link_name)
-                        pending.discard(link_name)
-                        progress = True
-                    else:
-                        parent_frame = f"{self.asset_id}_{parent_link}"
-                        # Only register if parent is already registered
-                        if parent_link in registered or parent_frame in self.transform_registry.list_frames():
-                            T_world_link = self.link_transforms[link_name]
-                            T_world_parent = self.link_transforms.get(parent_link, np.eye(4))
-                            T_rel = np.linalg.inv(T_world_parent) @ T_world_link
-                            self.transform_registry.update_frame(frame_name, T_rel)
-                            registered.add(link_name)
-                            pending.discard(link_name)
-                            progress = True
-
-            if not progress:
-                # Circular dependency or missing parents — register remaining to world
-                for link_name in pending:
-                    frame_name = f"{self.asset_id}_{link_name}"
-                    T_world_link = self.link_transforms[link_name]
-                    self.transform_registry.update_frame(frame_name, T_world_link)
-                break
 
     def _update_config_vector(self):
         """Update the configuration vector for backward compatibility."""
@@ -622,18 +529,31 @@ class KinematicModel:
                          target_pose: np.ndarray,
                          q_guess: np.ndarray = None) -> Optional[np.ndarray]:
         """Solve IK for target TCP pose using attached solver."""
-        # print(f"[KINEMATIC] going to call ik_solver")
-        if not hasattr(self, '_ik_solver') or self._ik_solver is None:
-            # print(f"[KINEMATIC] Call set_ik_solver() first.")
+        if self._ik_solver is None:
             raise RuntimeError("IK solver not configured. Call set_ik_solver() first.")
         return self._ik_solver.solve_ik_for_tcp(target_pose, q_guess)
 
     def forward_kinematics(self, q: np.ndarray) -> np.ndarray:
-        """Compute forward kinematics for given joint positions."""
-        if hasattr(self, '_ik_solver') and self._ik_solver is not None:
+        """Compute forward kinematics for given joint positions.
+
+        Does NOT mutate the model's current state. Computes FK for the
+        given q and returns the resulting TCP pose, leaving the model
+        in its original state.
+        """
+        if self._ik_solver is not None:
             return self._ik_solver.forward_kinematics(q)
+
+        # Save current state
+        saved_q = self.get_current_joint_positions()
+
+        # Compute FK without registry updates
         self.update_state(q)
-        return self.get_tcp_pose()
+        tcp_pose = self.get_tcp_pose().copy()
+
+        # Restore original state
+        self.update_state(saved_q)
+
+        return tcp_pose
 
     def get_arm_chain(self, base_link_name: str = "base_link") -> List[str]:
         """
@@ -734,38 +654,4 @@ class KinematicModel:
     def get_visual_geometries(self) -> Dict[str, List[Dict]]:
         """Get all visual geometries."""
         return self.visual_geometries
-
-    def get_vtk_transform(self, link_name: str) -> Optional[vtk.vtkTransform]:
-        """Get VTK transform for a link at current state."""
-        if link_name not in self.link_transforms:
-            return None
-
-        transform_matrix = self.link_transforms[link_name]
-        vtk_transform = vtk.vtkTransform()
-        vtk_transform.Translate(transform_matrix[:3, 3])
-
-        rotation = transform_matrix[:3, :3]
-        euler = self._rotation_matrix_to_euler(rotation)
-        vtk_transform.RotateZ(np.degrees(euler[2]))
-        vtk_transform.RotateY(np.degrees(euler[1]))
-        vtk_transform.RotateX(np.degrees(euler[0]))
-
-        return vtk_transform
-
-    @staticmethod
-    def _rotation_matrix_to_euler(R: np.ndarray) -> np.ndarray:
-        """Convert 3x3 rotation matrix to ZYX Euler angles (radians)."""
-        sy = np.sqrt(R[0, 0] ** 2 + R[1, 0] ** 2)
-        singular = sy < 1e-6
-
-        if not singular:
-            x = np.arctan2(R[2, 1], R[2, 2])
-            y = np.arctan2(-R[2, 0], sy)
-            z = np.arctan2(R[1, 0], R[0, 0])
-        else:
-            x = np.arctan2(-R[1, 2], R[1, 1])
-            y = np.arctan2(-R[2, 0], sy)
-            z = 0
-
-        return np.array([x, y, z])
 

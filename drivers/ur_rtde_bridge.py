@@ -320,7 +320,7 @@ class URRobotDriver(BaseRobotArmDriver):
         """
         if not self.is_connected or self._mock_mode:
             if self._mock_mode:
-                print(f"🔧 MOCK MODE: Cartesian command to {pose}")
+                logger.debug(f"🔧 MOCK MODE: Cartesian command to {pose}")
                 return True
             return False
         

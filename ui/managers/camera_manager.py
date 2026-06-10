@@ -223,7 +223,7 @@ class CameraManager:
 
     def _on_robot_loaded(self, event):
         """When a robot is loaded, discover cameras from its URDF."""
-        print(f"===== handling ROBOT_LOADED ")
+        logger.debug(f"===== handling ROBOT_LOADED ")
         self.discover_cameras_from_urdf()
 
     def discover_cameras_from_urdf(self):
@@ -236,7 +236,7 @@ class CameraManager:
 
         Camera type is inferred from the frame naming convention.
         """
-        print(f"----- Discovering Cameras from URDF")
+        logger.debug(f"----- Discovering Cameras from URDF")
         if not self.robot_manager or not self.robot_manager.current_kinematic_model:
             logger.info("No robot loaded — skipping camera discovery")
             return
@@ -285,6 +285,12 @@ class CameraManager:
             self.camera_dock.setWidget(self.camera_panel)
             self.parent.addDockWidget(Qt.RightDockWidgetArea, self.camera_dock)
             
+            # Wire ROI changes
+            self.camera_panel.roi_changed.connect(
+                lambda xmin, xmax, ymin, ymax, zmin, zmax:
+                    self._on_roi_changed(xmin, xmax, ymin, ymax, zmin, zmax)
+            )
+
             # Populate the camera list
             self.camera_panel.refresh_camera_list()
         
@@ -305,6 +311,11 @@ class CameraManager:
         cam_id = self.active_camera_id
         if cam_id and cam_id in self.cameras:
             self.cameras[cam_id]['pipeline'].set_visible(enabled)
+
+    def _on_roi_changed(self, x_min, x_max, y_min, y_max, z_min, z_max):
+        cam_id = self.active_camera_id
+        if cam_id and cam_id in self.cameras:
+            self.cameras[cam_id]['pipeline'].set_roi(x_min, x_max, y_min, y_max, z_min, z_max)
 
     def cleanup(self):
         """Stop all cameras and clean up resources."""

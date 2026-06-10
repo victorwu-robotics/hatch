@@ -193,16 +193,14 @@ class RobotManager:
                     urdf_path=temp_path,
                     package_dirs=package_dirs,
                     transform_registry=self.transform_registry,
-                    asset_id=asset_id,
-                    update_registry_on_state_change=False
+                    asset_id=asset_id
                 )
             else:
                 model = KinematicModel(
                     urdf_path=str(urdf_path),
                     package_dirs=package_dirs,
                     transform_registry=self.transform_registry,
-                    asset_id=asset_id,
-                    update_registry_on_state_change=False
+                    asset_id=asset_id
                 )
 
             model.load()
@@ -308,10 +306,10 @@ class RobotManager:
             ik_solver = IKSolver(model)
             model.set_ik_solver(ik_solver)
             if ik_solver is not None:
-                print("[ROB MANAGER]ik_solver is not None.")
+                logger.debug("[ROB MANAGER]ik_solver is not None.")
                 logger.info("IK solver attached")
             else:
-                print("[ROB MANAGER]ik_solver is None.")
+                logger.debug("[ROB MANAGER]ik_solver is None.")
         except ImportError:
             logger.info("IK solver not available (missing dependencies)")
         except Exception as e:

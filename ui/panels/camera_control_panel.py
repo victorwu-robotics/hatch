@@ -7,7 +7,8 @@ the selected camera. Multiple cameras can run simultaneously.
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QComboBox, QLineEdit, QGroupBox, QCheckBox, QSpinBox
+    QComboBox, QLineEdit, QGroupBox, QCheckBox, QSpinBox,
+    QDoubleSpinBox
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 
@@ -22,6 +23,7 @@ class CameraControlPanel(QWidget):
     transform_toggled = pyqtSignal(bool)
     show_frames_toggled = pyqtSignal(bool)
     visible_toggled = pyqtSignal(bool)
+    roi_changed = pyqtSignal(float, float, float, float, float, float)
 
     def __init__(self, camera_manager, parent=None):
         super().__init__(parent)
@@ -85,6 +87,87 @@ class CameraControlPanel(QWidget):
 
         self.connection_group.setLayout(conn_layout)
         layout.addWidget(self.connection_group)
+
+        # ===== 3D ROI CONTROLS =====
+        self.roi_group = QGroupBox("Region of Interest (ROI)")
+        roi_layout = QVBoxLayout()
+        
+        # X Range
+        x_layout = QHBoxLayout()
+        x_layout.addWidget(QLabel("X Range:"))
+        self.min_x_spin = QDoubleSpinBox()
+        self.min_x_spin.setRange(-5.0, 5.0)
+        self.min_x_spin.setValue(-2.0)
+        self.min_x_spin.setSingleStep(0.1)
+        self.min_x_spin.setDecimals(1)
+        self.min_x_spin.setPrefix("min: ")
+        self.min_x_spin.setSuffix(" m")
+        x_layout.addWidget(self.min_x_spin)
+        
+        self.max_x_spin = QDoubleSpinBox()
+        self.max_x_spin.setRange(-5.0, 5.0)
+        self.max_x_spin.setValue(2.0)
+        self.max_x_spin.setSingleStep(0.1)
+        self.max_x_spin.setDecimals(1)
+        self.max_x_spin.setPrefix("max: ")
+        self.max_x_spin.setSuffix(" m")
+        x_layout.addWidget(self.max_x_spin)
+        roi_layout.addLayout(x_layout)
+        
+        # Y Range
+        y_layout = QHBoxLayout()
+        y_layout.addWidget(QLabel("Y Range:"))
+        self.min_y_spin = QDoubleSpinBox()
+        self.min_y_spin.setRange(-5.0, 5.0)
+        self.min_y_spin.setValue(-2.0)
+        self.min_y_spin.setSingleStep(0.1)
+        self.min_y_spin.setDecimals(1)
+        self.min_y_spin.setPrefix("min: ")
+        self.min_y_spin.setSuffix(" m")
+        y_layout.addWidget(self.min_y_spin)
+        
+        self.max_y_spin = QDoubleSpinBox()
+        self.max_y_spin.setRange(-5.0, 5.0)
+        self.max_y_spin.setValue(2.0)
+        self.max_y_spin.setSingleStep(0.1)
+        self.max_y_spin.setDecimals(1)
+        self.max_y_spin.setPrefix("max: ")
+        self.max_y_spin.setSuffix(" m")
+        y_layout.addWidget(self.max_y_spin)
+        roi_layout.addLayout(y_layout)
+        
+        # Z Range (existing, but enhanced)
+        z_layout = QHBoxLayout()
+        z_layout.addWidget(QLabel("Z Range:"))
+        self.min_z_spin = QDoubleSpinBox()  # Add min Z
+        self.min_z_spin.setRange(0.1, 10.0)
+        self.min_z_spin.setValue(0.1)
+        self.min_z_spin.setSingleStep(0.1)
+        self.min_z_spin.setDecimals(1)
+        self.min_z_spin.setPrefix("min: ")
+        self.min_z_spin.setSuffix(" m")
+        z_layout.addWidget(self.min_z_spin)
+        
+        self.max_z_spin = QDoubleSpinBox()  # Rename from max_depth_spin
+        self.max_z_spin.setRange(0.5, 10.0)
+        self.max_z_spin.setValue(2.0)
+        self.max_z_spin.setSingleStep(0.1)
+        self.max_z_spin.setDecimals(1)
+        self.max_z_spin.setPrefix("max: ")
+        self.max_z_spin.setSuffix(" m")
+        z_layout.addWidget(self.max_z_spin)
+        roi_layout.addLayout(z_layout)
+
+        for spin in [self.min_x_spin, self.max_x_spin, self.min_y_spin,
+                    self.max_y_spin, self.min_z_spin, self.max_z_spin]:
+            spin.valueChanged.connect(self._emit_roi)
+
+        # Reset button
+        self.reset_roi_btn = QPushButton("Reset ROI")
+        roi_layout.addWidget(self.reset_roi_btn)
+        
+        self.roi_group.setLayout(roi_layout)
+        layout.addWidget(self.roi_group)
 
         # Start/Stop buttons
         btn_layout = QHBoxLayout()
@@ -212,6 +295,9 @@ class CameraControlPanel(QWidget):
         self.start_btn.setEnabled(not cam['is_running'])
         self.stop_btn.setEnabled(cam['is_running'])
 
+        is_depth = cam_type in ("orbbec", "realsense")
+        self.roi_group.setVisible(is_depth)
+
     def _on_start(self):
         """User clicked Start."""
         camera_id = self.camera_combo.currentData()
@@ -247,3 +333,10 @@ class CameraControlPanel(QWidget):
         camera_id = self.camera_combo.currentData()
         cam = next((c for c in cameras if c['id'] == camera_id), None)
         return cam['type'] if cam else None
+
+    def _emit_roi(self):
+        self.roi_changed.emit(
+            self.min_x_spin.value(), self.max_x_spin.value(),
+            self.min_y_spin.value(), self.max_y_spin.value(),
+            self.min_z_spin.value(), self.max_z_spin.value()
+        )

@@ -104,20 +104,6 @@ class KinematicDisplay:
 
         # Force initial transform update
 
-        '''
-        if self.asset_id:
-            print(f"\n=== Transform Debug for {self.asset_id} ===")
-            for link_name in self.kinematic_model.link_transforms.keys():
-                frame_name = f"{self.asset_id}_{link_name}"
-                try:
-                    T_world = self.registry.get_transform(frame_name, "world")
-                    pos = T_world[:3, 3]
-                    print(f"  {link_name}: world pos = ({pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f})")
-                except ValueError:
-                    print(f"  {link_name}: NOT IN REGISTRY")
-            print("=" * 40)
-        '''
-
         if self.asset_id:
             registered_frames = set(self.registry.list_frames())
             for link_name in self.kinematic_model.link_transforms.keys():
@@ -284,7 +270,7 @@ class KinematicDisplay:
         chained_transform = vtk.vtkTransform()
         
         # Use model FK for initial position (authoritative) - same as old working code
-        kinematic_transform = self.kinematic_model.get_vtk_transform(link_name)
+        kinematic_transform = self._get_vtk_transform(link_name)
         if kinematic_transform:
             chained_transform.DeepCopy(kinematic_transform)
             chained_transform.Concatenate(base_transform)
@@ -347,6 +333,40 @@ class KinematicDisplay:
         }
         self._load_box_geometry(link_name, placeholder, index)
 
+    def _get_vtk_transform(self, link_name: str) -> Optional[vtk.vtkTransform]:
+        """Get VTK transform for a link at current state from the kinematic model."""
+        if link_name not in self.kinematic_model.link_transforms:
+            return None
+
+        transform_matrix = self.kinematic_model.link_transforms[link_name]
+        vtk_transform = vtk.vtkTransform()
+        vtk_transform.Translate(transform_matrix[:3, 3])
+
+        rotation = transform_matrix[:3, :3]
+        euler = self._rotation_matrix_to_euler(rotation)
+        vtk_transform.RotateZ(np.degrees(euler[2]))
+        vtk_transform.RotateY(np.degrees(euler[1]))
+        vtk_transform.RotateX(np.degrees(euler[0]))
+
+        return vtk_transform
+
+    @staticmethod
+    def _rotation_matrix_to_euler(R: np.ndarray) -> np.ndarray:
+        """Convert 3x3 rotation matrix to ZYX Euler angles (radians)."""
+        sy = np.sqrt(R[0, 0] ** 2 + R[1, 0] ** 2)
+        singular = sy < 1e-6
+
+        if not singular:
+            x = np.arctan2(R[2, 1], R[2, 2])
+            y = np.arctan2(-R[2, 0], sy)
+            z = np.arctan2(R[1, 0], R[0, 0])
+        else:
+            x = np.arctan2(-R[1, 2], R[1, 1])
+            y = np.arctan2(-R[2, 0], sy)
+            z = 0
+
+        return np.array([x, y, z])
+
     # =================================================================
     # Transform Updates
     # =================================================================
@@ -365,7 +385,7 @@ class KinematicDisplay:
             return
 
         link_name = frame_name[len(self.asset_id) + 1:]
-        # print(f"[KD] Transform updated: {link_name}")
+        logger.debug(f"[KD] Transform updated: {link_name}")
 
         # Get world transform from registry
         try:

@@ -4,7 +4,7 @@ Real Robot - Wraps URRobotDriver and publishes events via StateChannel.
 Uses Qt internally for thread-safe driver communication.
 Implements the RobotInterface contract without multiple inheritance.
 
-Principle #2: Event-Driven. Publishes ROBOT_STATE, CONNECTION_ESTABLISHED, etc.
+Principle: Event-Driven. Publishes ROBOT_STATE, CONNECTION_ESTABLISHED, etc.
 """
 
 import time
@@ -69,7 +69,7 @@ class RealRobot(QObject):
     @pyqtSlot(dict)
     def _on_driver_state(self, state: Dict):
         """Convert driver state signal to ROBOT_STATE event."""
-        # print(f"[RealRobot] Received state from driver: {state.get('joint_positions', 'N/A')}")
+        logger.debug(f"[RealRobot] Received state from driver: {state.get('joint_positions', 'N/A')}")
         joint_positions = state.get('joint_positions')
         if joint_positions is None:
             return
@@ -84,7 +84,7 @@ class RealRobot(QObject):
             },
             source="real_robot"
         )
-        # print(f"[RealRobot] Published ROBOT_STATE")
+        logger.debug(f"[RealRobot] Published ROBOT_STATE")
 
     @pyqtSlot(bool, str)
     def _on_driver_connection(self, connected: bool, message: str):

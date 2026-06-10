@@ -57,7 +57,7 @@ class CommandHandler:
         self._channel.subscribe(EventType.CONNECTION_ESTABLISHED, self._on_connection_established)
         self._channel.subscribe(EventType.CONNECTION_LOST, self._on_connection_lost)
 
-        print(f"[CommandHandler] Initialized in mode: {self._current_mode}")
+        logger.debug(f"[CommandHandler] Initialized in mode: {self._current_mode}")
 
     def _on_joint_command(self, event):
         """
@@ -66,18 +66,18 @@ class CommandHandler:
         Event data format:
             {'positions': List[float], 'names': Optional[List[str]]}
         """
-        # print(f"[CH] Received JOINT_COMMAND, active_robot={self._active_robot}")
+        logger.debug(f"[CH] Received JOINT_COMMAND, active_robot={self._active_robot}")
         if self._active_robot is None:
-            # print(f"[CH] No active robot!")
+            logger.debug(f"[CH] No active robot!")
             return
         
         positions = event.data.get('positions')
-        print(f"[CMD RECEIVED] {time.time():.3f} | {[f'{p:.4f}' for p in positions]}")
+        logger.debug(f"[CMD RECEIVED] {time.time():.3f} | {[f'{p:.4f}' for p in positions]}")
         if positions is None:
             return
         
         # Forward to active robot (simulated or real)
-        # print(f"[CH] Calling move_joints with {positions}")
+        logger.debug(f"[CH] Calling move_joints with {positions}")
         self._active_robot.move_joints(positions)
     
     def _on_cartesian_command(self, event):
@@ -87,7 +87,7 @@ class CommandHandler:
         Event data format:
             {'pose': np.ndarray (4x4), 'frame': str ('base' or 'world')}
         """
-        # print(f"[CH] Received CARTESIAN_COMMAND, active_robot={self._active_robot}")
+        logger.debug(f"[CH] Received CARTESIAN_COMMAND, active_robot={self._active_robot}")
         if self._active_robot is None:
             return
         
@@ -123,9 +123,9 @@ class CommandHandler:
             
             if real_positions:
                 self._simulated_robot.sync_to_real(real_positions)
-                print(f"[CommandHandler] Synced virtual robot to real robot position")
+                logger.debug(f"[CommandHandler] Synced virtual robot to real robot position")
             else:
-                print(f"[CommandHandler] Warning: Could not get real robot position")
+                logger.debug(f"[CommandHandler] Warning: Could not get real robot position")
             # ===========================
             
             self._current_mode = Mode.REAL
@@ -149,7 +149,7 @@ class CommandHandler:
             source="command_handler"
         )
         
-        print(f"[CommandHandler] Mode switched to: {self._current_mode}")
+        logger.debug(f"[CommandHandler] Mode switched to: {self._current_mode}")
 
     def _on_connection_established(self, event):
         """When real robot connects, upgrade IK if in Simulate mode."""

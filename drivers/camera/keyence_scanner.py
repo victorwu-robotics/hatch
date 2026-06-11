@@ -9,8 +9,8 @@ between requests. No streaming. No buffer overflow. No continuous consumption.
 Architecture: Persistent connection, on-demand request-response.
 The connection is scoped to the welding pass, not to individual profiles.
 
-Principle #2: Event-Driven. Each request is triggered by the application.
-Principle #8: Pure Python. Single-threaded, synchronous I/O.
+Principle: Event-Driven. Each request is triggered by the application.
+Principle: Pure Python. Single-threaded, synchronous I/O.
 """
 
 import socket

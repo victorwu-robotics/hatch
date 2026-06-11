@@ -74,7 +74,7 @@ class URDFPreprocessor:
         if not filepath.exists():
             raise FileNotFoundError(f"URDF file not found: {filepath}")
 
-        logger.info(f"Processing: {filepath}")
+        logger.debug(f"Processing: {filepath}")
 
         tree = ET.parse(str(filepath))
         root = tree.getroot()
@@ -136,7 +136,7 @@ class URDFPreprocessor:
             logger.warning(f"Included file not found: {resolved}")
             return
 
-        logger.info(f"Including: {resolved}")
+        logger.debug(f"Including: {resolved}")
 
         included_tree = ET.parse(str(resolved))
         included_root = included_tree.getroot()

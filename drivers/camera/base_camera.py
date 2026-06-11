@@ -4,7 +4,7 @@ Base Camera Driver - Abstract interface for all depth-sensing devices.
 Defines the contract that all camera and scanner drivers must fulfill.
 Uses Python's abc module — no Qt dependency.
 
-Principle #8: Pure Python. No Qt in driver abstractions.
+Principle: Pure Python. No Qt in driver abstractions.
 """
 
 from abc import ABC, abstractmethod

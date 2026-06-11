@@ -6,10 +6,10 @@ Handles robot loading, connection management, and mode switching.
 Publishes all state changes via StateChannel events.
 Does NOT emit Qt signals. Does NOT inherit from QObject.
 
-Principle #4: Everything in URDF.
-Principle #8: Pure Python (no Qt in core services).
-Principle #9: UI Separate from Services.
-Principle #10: One Robot Per Session.
+Principle: Everything in URDF.
+Principle: Pure Python (no Qt in core services).
+Principle: UI Separate from Services.
+Principle: One Robot Per Session.
 """
 
 from typing import Optional, List, Dict, Any

@@ -5,8 +5,8 @@ Publishes JOINT_COMMAND events when the user moves sliders.
 Subscribes to ROBOT_STATE for display updates only.
 Does NOT update kinematic models or call managers directly.
 
-Principle #9: UI Separate from Services. Pure presentation.
-Principle #2: Event-Driven. Publishes events, subscribes to state.
+Principle: UI Separate from Services. Pure presentation.
+Principle: Event-Driven. Publishes events, subscribes to state.
 """
 
 import numpy as np
@@ -56,6 +56,7 @@ class JointControlPanel(QWidget):
 
         # Subscribe to events
         self.state_channel.subscribe(EventType.MODE_SWITCHED, self._on_mode_switched)
+        self.state_channel.subscribe(EventType.CONNECTION_ESTABLISHED, self._on_connection_established)
 
         # Install wheel event filters
         for slider in self.sliders.values():
@@ -276,25 +277,28 @@ class JointControlPanel(QWidget):
     # Event Handlers (display only — no model mutation)
     # =================================================================
 
+    def _sync_sliders_to_real_robot(self):
+        """Sync sliders to actual robot position — called once on connection or mode switch."""
+        if self.robot_manager and self.robot_manager._real_robot:
+            state = self.robot_manager._real_robot.get_state()
+            positions = state.get('joint_positions')
+            if positions is not None and len(positions) > 0:
+                logger.debug(f"[JointControl] Syncing sliders: {positions}")
+                self._update_ui_from_positions(positions)
+
+    def _on_connection_established(self, event):
+        """Handle CONNECTION_ESTABLISHED — sync sliders once."""
+        self._sync_sliders_to_real_robot()
+
     def _on_mode_switched(self, event):
-        """Handle MODE_SWITCHED — update UI indicators and sync sliders to real robot."""
+        """Handle MODE_SWITCHED — update UI indicators and sync sliders."""
         mode = event.data.get('mode', '')
         is_real = (mode == "real")
         
-        # Update label appearance
         self._set_mode_indicators(is_real)
         
-        # When switching to REAL mode, sync sliders to actual robot position
-        if is_real and self.robot_manager and self.robot_manager._real_robot:
-            state = self.robot_manager._real_robot.get_state()
-            positions = state.get('joint_positions')
-
-            # FIX: Check if positions is not None and has length
-            if positions is not None and len(positions) > 0:
-                logger.debug(f"[JointControl] Syncing sliders to: {positions}")
-                self._update_ui_from_positions(positions)
-            else:
-                logger.debug(f"[JointControl] No positions to sync")
+        if is_real:
+            self._sync_sliders_to_real_robot()
 
     def _set_mode_indicators(self, is_real):
         """Update joint name labels to show (actual) in Real mode."""
@@ -350,5 +354,5 @@ class JointControlPanel(QWidget):
 
     def cleanup(self):
         """Unsubscribe from events before destruction."""
-        # self.state_channel.unsubscribe(EventType.ROBOT_STATE, self._on_robot_state)
+        self.state_channel.unsubscribe(EventType.CONNECTION_ESTABLISHED, self._on_connection_established)
         self.state_channel.unsubscribe(EventType.MODE_SWITCHED, self._on_mode_switched)

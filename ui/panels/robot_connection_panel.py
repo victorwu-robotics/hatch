@@ -5,8 +5,8 @@ Handles IP connection, mode switching, and status display.
 Communicates via StateChannel events and direct RobotManager method calls.
 Does NOT connect to Qt signals from RobotManager.
 
-Principle #9: UI Separate from Services.
-Principle #2: Event-Driven. Subscribes to state, publishes commands.
+Principle: UI Separate from Services.
+Principle: Event-Driven. Subscribes to state, publishes commands.
 """
 
 from PyQt5.QtWidgets import (

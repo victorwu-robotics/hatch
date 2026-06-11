@@ -4,7 +4,7 @@ Robot Interface - Abstract base class for all robot implementations.
 Defines the contract that all robots (real and simulated) must fulfill.
 Uses Python's abc module — no Qt dependency.
 
-Principle #8: Pure Python. No Qt in core abstractions.
+Principle: Pure Python. No Qt in core abstractions.
 """
 
 from abc import ABC, abstractmethod

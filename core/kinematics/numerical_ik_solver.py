@@ -4,7 +4,7 @@ Numerical IK Solver - Works with any serial robot using the KinematicModel's FK.
 Uses the Jacobian pseudo-inverse with adaptive damping and line search.
 No D-H parameters required — uses the model's native FK directly.
 
-Principle #7: Movements as Models.
+Principle: Movements as Models.
 """
 
 import numpy as np

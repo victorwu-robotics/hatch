@@ -5,8 +5,8 @@ Loads 3D mesh files (STL, OBJ, PLY, DAE) and returns vtkPolyData.
 Manages caching and retrieval. No UI, no transforms, no events.
 Returns raw vtkPolyData only — no VTK actors.
 
-Principle #3: Visualizer as Mind-Prying Tool. Loading is a service.
-Principle #9: UI Separate from Services. Pure data loading, no presentation.
+Principle: Visualizer as Mind-Prying Tool. Loading is a service.
+Principle: UI Separate from Services. Pure data loading, no presentation.
 """
 
 import hashlib

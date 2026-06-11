@@ -4,8 +4,8 @@ Camera Pipeline - Single-threaded point cloud pipeline for one camera.
 Replaces the fragmented PointCloudDisplay/Processor/Renderer architecture
 with a single class. Capture → Process → Render, driven by a 30 FPS timer.
 
-Principle #2: Event-Driven. The timer is a single centralized check.
-Principle #3: Visualizer as Mind-Prying Tool. Reads state, doesn't control.
+Principle: Event-Driven. The timer is a single centralized check.
+Principle: Visualizer as Mind-Prying Tool. Reads state, doesn't control.
 """
 
 import time

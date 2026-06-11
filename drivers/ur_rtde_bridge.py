@@ -6,8 +6,8 @@ Uses URRobotSignalHolder (composition) for thread-safe Qt signal emission.
 Uses a blocking receive loop in a background thread — wakes only when
 data arrives from the robot. Event-driven, no polling.
 
-Principle #2: Event-Driven, No Polling.
-Principle #8: Pure Python where possible. Qt used only for signal bridge.
+Principle: Event-Driven, No Polling.
+Principle: Pure Python where possible. Qt used only for signal bridge.
 """
 
 import time

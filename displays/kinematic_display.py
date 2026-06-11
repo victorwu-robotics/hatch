@@ -5,8 +5,8 @@ Renders robot links as VTK actors, updated by transform changes.
 Uses MeshLoader for mesh file loading (does not load files directly).
 Subscribes to TransformRegistry callbacks for efficient updates.
 
-Principle #3: Visualizer as Mind-Prying Tool. Reads state, doesn't control.
-Principle #9: UI Separate from Services. Pure presentation.
+Principle: Visualizer as Mind-Prying Tool. Reads state, doesn't control.
+Principle: UI Separate from Services. Pure presentation.
 """
 
 import vtk

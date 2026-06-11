@@ -5,8 +5,8 @@ Implements RobotInterface using local FK/IK.
 Publishes ROBOT_STATE events on each command.
 No Qt dependency — pure Python.
 
-Principle #8: Pure Python.
-Principle #7: Movements as Models. Commands produce state, not side effects.
+Principle: Pure Python.
+Principle: Movements as Models. Commands produce state, not side effects.
 """
 
 import time

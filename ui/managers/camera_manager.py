@@ -5,7 +5,7 @@ Each camera gets its own PointCloudDisplay and lifecycle.
 The control panel switches between cameras; multiple cameras
 can be active simultaneously.
 
-Principle #4: Everything in URDF. Cameras are discovered, not added.
+Principle: Everything in URDF. Cameras are discovered, not added.
 """
 
 import logging

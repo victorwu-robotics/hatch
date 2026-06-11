@@ -2,7 +2,7 @@
 View Menu - Camera views, grid settings, and fullscreen.
 
 Communicates directly with VisualizerEngine for view changes.
-Principle #9: UI Separate from Services.
+Principle: UI Separate from Services.
 """
 
 import logging

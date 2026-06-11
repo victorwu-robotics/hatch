@@ -5,8 +5,8 @@ Creates all core services, visualization engine, and UI.
 Wires components together via StateChannel events.
 Does NOT hold business logic, update models, or bypass the event architecture.
 
-Principle #9: UI Separate from Services.
-Principle #2: Event-Driven, No Polling.
+Principle: UI Separate from Services.
+Principle: Event-Driven, No Polling.
 """
 
 import sys

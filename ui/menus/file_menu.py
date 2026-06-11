@@ -2,7 +2,7 @@
 File Menu - Handles file operations (Load URDF, Save Screenshot, Exit).
 
 Communicates via StateChannel events and RobotManager method calls.
-Principle #9: UI Separate from Services.
+Principle: UI Separate from Services.
 """
 
 from pathlib import Path
@@ -65,7 +65,7 @@ class FileMenu:
 
     def _on_load_urdf(self):
         """Load a URDF file from disk."""
-        # One robot per session (Principle #10)
+        # One robot per session (Principle)
         if self.robot_manager and self.robot_manager.current_asset_id:
             QMessageBox.information(
                 self.parent,

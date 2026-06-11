@@ -5,8 +5,8 @@ Publishes CARTESIAN_COMMAND events when the user moves sliders.
 Subscribes to ROBOT_STATE for display updates only.
 Does NOT update kinematic models or transform registries directly.
 
-Principle #9: UI Separate from Services. Pure presentation.
-Principle #2: Event-Driven. Publishes events, does not call managers.
+Principle: UI Separate from Services. Pure presentation.
+Principle: Event-Driven. Publishes events, does not call managers.
 """
 
 import numpy as np

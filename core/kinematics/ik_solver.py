@@ -5,8 +5,8 @@ Uses analytical D-H solver for offset wrists (UR-style).
 Uses numerical Jacobian solver for spherical wrists.
 Selection is automatic based on URDF joint geometry.
 
-Principle #7: Movements as Models.
-Principle #4: Everything in URDF.
+Principle: Movements as Models.
+Principle: Everything in URDF.
 """
 
 import logging

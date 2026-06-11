@@ -1,7 +1,7 @@
 """
 Robots Menu - Shows current robot (read-only).
 
-One robot per session per Principle #10.
+One robot per session per Principle.
 """
 
 import logging

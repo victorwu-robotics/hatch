@@ -150,17 +150,15 @@ c² = a² + b² - 2ab·cos(C)
 ```
 
 In our triangle, the side opposite the elbow is D (shoulder to wrist). The sides meeting at the elbow are L1 and L2. Therefore:
-$$
+```text
 D² = L1² + L2² - 2·L1·L2·cos(θ3)
-$$
+```
 
 Rearranging:
-$$
+```text
 cos(θ3) = (L1² + L2² - D²) / (2·L1·L2)
-$$
-$$
 θ3 = atan2(±√(1 - cos²θ3), cosθ3)
-$$
+```
 
 The ± gives us two possible values for θ3 — **elbow up** and **elbow down**. This is our second pair of solutions.
 
@@ -211,14 +209,14 @@ The arm has delivered the wrist center to the correct position. The forearm arri
 The TCP needs a specific orientation — `R_TCP` — given as part of the desired pose.
 
 The wrist joints (4, 5, and 6) start from the forearm's orientation `R_arm` and must rotate the tool to the desired orientation `R_TCP`. All of this happens around the fixed wrist center.
-
+```text
 R_arm · R_wrist = R_TCP
-
+```
 
 To isolate the wrist's job, we "undo" the forearm orientation:
-
+```text
 R_wrist = R_armᵀ · R_TCP
-
+```
 
 `R_wrist` is the desired TCP orientation, expressed in the wrist's own frame.
 
@@ -231,29 +229,29 @@ So Rᵀ is the inverse because coordinate axes are orthonormal: each has unit le
 ## 10. Extracting the Wrist Joint Angles
 
 The wrist is typically a Z-Y-Z Euler sequence:
-
+```text
 R_wrist = Rz(θ4) · Ry(θ5) · Rz(θ6)
-
+```
 
 Multiplying this out symbolically gives a matrix where each entry is a function of θ4, θ5, θ6. We have the numeric values of all nine entries from R_wrist. We read off the angles.
 
 **θ5** from element (3,3):
-
+```text
 θ5 = atan2(±√(1 - r₃₃²), r₃₃)
-
+```
 
 For non-singular cases (sin(θ5) ≠ 0):
-
+```text
 θ4 = atan2(r₂₃ / sinθ5, r₁₃ / sinθ5)
 θ6 = atan2(r₃₂ / sinθ5, -r₃₁ / sinθ5)
-
+```
 
 **The wrist singularity:** When θ5 = 0 or π, the axes of Joint 4 and Joint 6 become parallel — gimbal lock. Only the sum (or difference) of θ4 and θ6 matters. Set θ4 = 0 (or keep its last known value) and solve for θ6 from the remaining matrix elements.
 
 The wrist contributes 2 solutions (flip or no-flip), bringing our total to:
-
+```text
 2 (shoulder) × 2 (elbow) × 2 (wrist) = 8 configurations
-
+```
 
 ---
 
@@ -299,63 +297,65 @@ P_wrist = p_TCP - d6 · a
 where `a` is the approach vector (third column of R_TCP).
 
 ### Step 2: Joint 1
-
+```text
 θ1 = atan2(y_w, x_w)
-
+```
 
 ### Step 3: Project into the Arm Plane
-
+```text
 r_proj = x_w·cos(θ1) + y_w·sin(θ1)
 z_rel = z_w - d1
 D = √(r_proj² + z_rel²)
-
+```
 
 ### Step 4: Joint 3 (Law of Cosines)
-
+```text
 cos(θ3) = (D² - a2² - a3²) / (2·a2·a3)
 θ3 = atan2(±√(1 - cos²θ3), cosθ3)
-
+```
 
 If |cos(θ3)| > 1, the point is unreachable.
 
 ### Step 5: Joint 2
-
+```text
 K1 = a2 + a3·cos(θ3)
 K2 = a3·sin(θ3)
 
 sin(θ2) = (-K1·r_proj + K2·z_rel) / D²
 cos(θ2) = ( K2·r_proj + K1·z_rel) / D²
 θ2 = atan2(sinθ2, cosθ2)
-
+```
 
 ## 13. The Wrist Equations for This Robot
 
 ### Step 6: Forearm Orientation
-
+```text
 R₀₃ = Rz(θ1) · Ry(-θ2) · Ry(θ3)
-
+```
 
 Note: J2 rotates about -Y at zero configuration, hence Ry(-θ2).
 
 ### Step 7: Wrist Target
-
+```text
 R_target = R₀₃ᵀ · R_TCP
-
+```
 
 ### Step 8: Extract Z-Y-Z Euler Angles
 
 The wrist is a Z-Y-Z sequence relative to frame 3. Given the numeric entries of R_target:
-
+```text
 θ5 = atan2(±√(1 - r₃₃²), r₃₃)
-
+```
 For sin(θ5) ≠ 0:
+```text
 θ4 = atan2(r₂₃ / sinθ5, r₁₃ / sinθ5)
 θ6 = atan2(r₃₂ / sinθ5, -r₃₁ / sinθ5)
-
+```
 For sin(θ5) = 0 (singularity):
+```text
 θ4 = 0
 θ6 = atan2(-r₀₁, r₀₀)
-
+```
 
 ---
 
@@ -381,73 +381,98 @@ Combining all choices:
 **Singularity handling:** When θ5 ≈ 0 or π, the wrist is in gimbal lock. Set θ4 = 0 (or to its last valid value) and solve for θ6.
 
 **Solution selection:** When multiple valid solutions remain, choose the one closest to the robot's current joint configuration using circular angle difference:
-
+```text
 min(|θ_a - θ_b|, 2π - |θ_a - θ_b|)
-
+```
 
 Sum or weight across all six joints.
 
 **Numerical precision:** The solution is exact in closed form. Any error is purely floating-point roundoff. Testing on the E15-PRO across 100 random poses showed mean position error of 0.005 mm and mean orientation error of 0.000013 rad — effectively machine precision.
 
 ## 16. The Complete Algorithm
-
-function inverse_kinematics(pose, tool_length):
-p_tcp = pose.position
-R_tcp = pose.orientation
-a = third column of R_tcp
-
-// Step 1: Wrist center
-p_wrist = p_tcp - tool_length * a
-
-// Step 2: Joint 1 (two solutions)
-theta1_options = [atan2(p_wrist.y, p_wrist.x),
-atan2(-p_wrist.y, -p_wrist.x)]
-
-solutions = []
-
-for each theta1 in theta1_options:
-// Step 3: Project into arm plane
-r_proj = p_wrist.x*cos(theta1) + p_wrist.y*sin(theta1)
-z_rel = p_wrist.z - d1
-D_sq = r_proj² + z_rel²
-
-// Step 4: Check reachability
-cos_theta3 = (D_sq - a2² - a3²) / (2a2a3)
-if |cos_theta3| > 1: continue
-
-// Step 5: Joint 3 (two elbow solutions)
-for each sign in [+, -]:
-theta3 = atan2(sign * sqrt(1-cos_theta3²), cos_theta3)
-
-// Step 6: Joint 2
-K1 = a2 + a3*cos(theta3)
-K2 = a3*sin(theta3)
-sin_theta2 = (-K1*r_proj + K2*z_rel) / D_sq
-cos_theta2 = ( K2*r_proj + K1*z_rel) / D_sq
-theta2 = atan2(sin_theta2, cos_theta2)
-
-// Step 7: Forearm orientation
-R_03 = Rz(theta1) * Ry(-theta2) * Ry(theta3)
-
-// Step 8: Wrist target
-R_target = R_03ᵀ * R_tcp
-
-// Step 9: Wrist angles (two flip solutions)
-for each theta5 in [acos(R_target[2,2]), -acos(R_target[2,2])]:
-if sin(theta5) != 0:
-theta4 = atan2(R_target[1,2]/sin(theta5),
-R_target[0,2]/sin(theta5))
-theta6 = atan2(R_target[2,1]/sin(theta5),
--R_target[2,0]/sin(theta5))
-else:
-theta4 = 0
-theta6 = atan2(-R_target[0,1], R_target[0,0])
-
-solutions.append([theta1, theta2, theta3,
-theta4, theta5, theta6])
-
-return filter_by_joint_limits(solutions)
-
+```python
+def inverse_kinematics(pose, tool_length):
+    """
+    Solve inverse kinematics for a 6-DOF spherical wrist robot.
+    
+    Args:
+        pose: Target TCP pose (position and orientation)
+        tool_length: Distance from wrist center to TCP along tool Z-axis
+    
+    Returns:
+        List of valid joint configurations, each [θ1, θ2, θ3, θ4, θ5, θ6]
+    """
+    p_tcp = pose.position
+    R_tcp = pose.orientation
+    a = R_tcp[:, 2]  # Approach vector (third column)
+    
+    # Step 1: Wrist center
+    p_wrist = p_tcp - tool_length * a
+    
+    # Step 2: Joint 1 (two solutions)
+    theta1_options = [
+        atan2(p_wrist.y, p_wrist.x),
+        atan2(-p_wrist.y, -p_wrist.x)
+    ]
+    
+    solutions = []
+    
+    for theta1 in theta1_options:
+        # Step 3: Project into arm plane
+        r_proj = p_wrist.x * cos(theta1) + p_wrist.y * sin(theta1)
+        z_rel = p_wrist.z - d1
+        D_sq = r_proj**2 + z_rel**2
+        D = sqrt(D_sq)
+        
+        # Step 4: Check reachability
+        cos_theta3 = (D_sq - a2**2 - a3**2) / (2 * a2 * a3)
+        if abs(cos_theta3) > 1:
+            continue  # Unreachable
+        
+        # Step 5: Joint 3 (two elbow solutions)
+        for sign in [+1, -1]:
+            theta3 = atan2(sign * sqrt(1 - cos_theta3**2), cos_theta3)
+            
+            # Step 6: Joint 2
+            K1 = a2 + a3 * cos(theta3)
+            K2 = a3 * sin(theta3)
+            
+            sin_theta2 = (-K1 * r_proj + K2 * z_rel) / D_sq
+            cos_theta2 = ( K2 * r_proj + K1 * z_rel) / D_sq
+            theta2 = atan2(sin_theta2, cos_theta2)
+            
+            # Step 7: Forearm orientation
+            R_03 = Rz(theta1) @ Ry(-theta2) @ Ry(theta3)
+            
+            # Step 8: Wrist target
+            R_target = R_03.T @ R_tcp
+            
+            # Step 9: Wrist angles (two flip solutions)
+            r33 = R_target[2, 2]
+            for theta5 in [acos(r33), -acos(r33)]:
+                if abs(sin(theta5)) > 1e-6:
+                    # Non-singular case
+                    theta4 = atan2(
+                        R_target[1, 2] / sin(theta5),
+                        R_target[0, 2] / sin(theta5)
+                    )
+                    theta6 = atan2(
+                        R_target[2, 1] / sin(theta5),
+                        -R_target[2, 0] / sin(theta5)
+                    )
+                else:
+                    # Singularity: gimbal lock
+                    theta4 = 0
+                    theta6 = atan2(-R_target[0, 1], R_target[0, 0])
+                
+                solutions.append([theta1, theta2, theta3,
+                                  theta4, theta5, theta6])
+    
+    # Filter by joint limits
+    valid_solutions = filter_by_joint_limits(solutions)
+    
+    return valid_solutions
+```
 
 ## 17. How Hatch Uses This
 

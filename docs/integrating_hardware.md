@@ -308,7 +308,7 @@ driver and trial-and-error testing.
 This case study records what we got wrong, what we learned, and the principles
 that emerged.
 
-## 3.2 Five Mistakes We Made
+## 3.2 Four Mistakes We Made
 
 ### Mistake 1: Continuous Streaming vs. On-Demand Requests
 
@@ -363,28 +363,20 @@ valid_mask = (raw_z > INVALID_LOWER_BOUND) & (raw_z != 0)
 
 ### Mistake 4: The 60-Byte ACK Confusion
 
-**What we saw:** When using the `00 00 00 00` single-profile command, the
+**What we saw:** When using the 00 00 00 00 single-profile command, the
 scanner responded with exactly 60 bytes instead of the expected 2000+ byte
 profile.
 
-**The cause:** The 60-byte response was a Command Acknowledgment (ACK). The
-actual profile data was supposed to come from a separate fetch command — but
-that command format was for the LJ-8000 series, not the LJ-7000.
+**The cause:** The 60-byte response was a Command Acknowledgment (ACK) —
+the scanner confirming it received the trigger. We were treating the ACK as
+profile data. The 00 00 00 00 command is not a profile request — it is an
+initialization command that switches the controller from continuous
+streaming mode to blocking mode. It only needs to be sent once at the start
+of a session.
 
-**The resolution:** The LJ-V7200 requires the `01 01 00 00` streaming trigger,
-which returns a full profile immediately.
-
-### Mistake 5: The Connection Lifecycle
-
-**What we tried:** Connect for each profile, capture, disconnect. Or connect
-once and read continuously with drain loops.
-
-**Why both failed:** Per-profile connect/disconnect adds TCP handshake overhead.
-Continuous reading with drain loops causes buffer overflows and GUI freezes.
-
-**The correct approach:** Persistent connection, on-demand requests. Open the
-socket once at the start of the task. Send a trigger only when you need a
-profile. Close when the task is complete.
+**The resolution:** After sending 00 00 00 00 once to initialize blocking
+mode, all subsequent 01 01 00 00 requests return a full profile immediately
+and the scanner waits silently between triggers. No separate fetch step needed.
 
 ## 3.3 The Final Architecture
 
@@ -393,8 +385,10 @@ Application calls capture_profiles(count=200, interval=0.1)
     ↓
 Driver opens TCP socket (once)
     ↓
+Send initialization: 00 00 00 00 (switches controller to blocking mode)
+    ↓
 For each profile:
-    sendall(KEYENCE_TRIGGER_REQUEST)
+    sendall(01 01 00 00)    # Now blocking — returns one profile
     recv(4) → response size
     recv(size) → profile data
     unpack 20-bit → raw Z values

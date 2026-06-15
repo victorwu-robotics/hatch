@@ -37,6 +37,7 @@ one robot arm and a job to do, Hatch is built for you.
 | [Non-Polling RTDE Driver](non-polling-rtde-driver.md) | Command-response pattern for UR robots |
 | [Path Execution](path_execution.md) | Scoped streaming for trajectory following |
 | [Keyence Scanner Lessons](keyence_scanner_lessons.md) | Reverse-engineering a proprietary sensor |
+| [Integrating Hardware with Hatch](integrating_hardware.md) | Everything you need to add a robot, camera, or sensor to Hatch.|
 
 ### Technical Notes
 

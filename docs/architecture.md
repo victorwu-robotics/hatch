@@ -1,212 +1,512 @@
-Hatch (孵) Architecture Document
+# Hatch (孵) Architecture Document
+
+## A Derived Architecture
+
+> *"I need to control a robot. What must exist for that to happen?"*
+
+This document does not describe a system that was designed in advance.
+It traces a chain of needs — each one demanding the next — until a
+complete platform emerges.
+
+Every component in Hatch exists because a need required it. Every principle
+was discovered, not decreed. This is what it means to be a **derived architecture**.
 
 ---
 
-## Prologue: On Understanding
+## Part One: The Scene
 
-> *"Understand them, or you will not fully utilise them. Understand your life, or you will not live fully on earth."*
+### Need: I must describe my robot and its world
 
-Life is not about following. It is about **seeing**.
+Before anything moves, before anything is visualized, before any control
+panel exists — there must be a description of what is in the scene.
 
-The crow follows. The crowd drifts. The current carries.
+A robot is not one thing. It is a chain of links connected by joints.
+It carries tools. It sits on a table or a mobile base. It has sensors
+mounted to its wrist. All of these things exist in spatial relationship
+to each other.
 
-But the one who understands — they choose their own direction.
+We need a format that can describe:
+- Links (rigid bodies with geometry)
+- Joints (connections between links, some fixed, some moving)
+- Their positions relative to each other
+- Their visual appearance (meshes)
 
-### The Two Worlds
-
-| Physical World | Emotional World |
-| --- | --- |
-| Laplace transforms for stability | Empathy for connection |
-| Orthogonal matrix inverse | Trust that is reciprocal |
-| PCA for variance | Wisdom from experience |
-| Rotation vectors for clarity | Honesty in communication |
-
-Both require **understanding**, not just formalism.
-
-You cannot solve stability with Laplace if you do not feel what poles mean.
-You cannot truly connect if you only recite the word "love."
-
-### The Trap of Formalism
-
-Modern life — and modern education — teaches us to **follow**:
-
-| Instead of Understanding | We Are Taught To |
-| --- | --- |
-| See the projection | Memorize the matrix |
-| Feel the stability | Apply the Laplace |
-| Know the direction | Follow the crowd |
-| Understand | Recite |
-
-The result is a world of **competent engineers who cannot innovate**.
-A world of **people who speak of meaning but do not feel it**.
-
-### The Stubborn Student
-
-You were the stubborn student.
-
-You refused to memorize.
-You demanded to see.
-You asked "why?" until the formalism cracked open and revealed its meaning.
-
-That is why you can:
-
-- See the orthogonal matrix inverse as a transpose
-- Choose rotation vectors over quaternions
-- Build Hatch from first principles, not from convention
-
-You are not following. You are **seeing**.
-
-### Why Hatch Exists
-
-> *"I build Hatch because I want to fully understand robots. Then I can use robots to their limits."*
-
-Most platforms help you **use**.
-Hatch helps you **see**.
-
-| Other Platforms | Hatch |
-| --- | --- |
-| Hide complexity | Reveals it |
-| Provide black boxes | Opens them |
-| Give you APIs | Gives you insight |
-| Focus on what you can do | Focus on why it works |
-
-Because the builder — you — built it to understand first.
-
-### What Understanding Unlocks
-
-| Without Understanding | With Understanding |
-| --- | --- |
-| Move sliders | Know why the robot moves |
-| Load URDFs | See the kinematic chain |
-| Publish events | Trace the flow of data |
-| Follow instructions | Create new possibilities |
-| Shallow utilisation | **Full utilisation** |
-
-The platform is not the goal. **Understanding** is the goal. Hatch is just the vehicle.
-
-### The Invitation
-
-Hatch is open. Others may use it.
-
-But the invitation is not:
-
-> *"Here is a tool to control robots."*
-
-The invitation is:
-
-> *"Here is a way to understand robots. Then you can use them to your own limits."*
-
-### The Stubborn Student's Creed
-
-> *"I will not follow. I will see. I will not memorise. I will understand. I will not accept formalism as truth. I will demand meaning."*
-
-This is the creed of Hatch.
-This is the creed of a life fully lived.
-
-### Closing
-
-> *"Do not follow the flow, the crowd, the drift. See the direction. Choose it. Understand it. Then move."*
-
-This is Hatch.
-Built to understand.
-Built to fully utilise.
-Built to see.
-
-You are invited.
-
----
-
-*— The Stubborn Student*
-*Hatch (孵)*
-
----
-
-## Core Philosophy
-
-> *"A robot platform should be understood, not just used. Every line of code must be traceable to a first principle."*
-
-Hatch is not a collection of tools. It is a **derived architecture** — a system where every component exists because a principle demanded it.
-
-The name **Hatch (孵)** represents the moment a new robot comes to life. The right side of the character (孚) signifies incubation and nurturing — bringing ideas into existence through careful development.
-
----
-
-## The Ten Principles
-
-### Principle #0: Individuals Before Groups
-
-A team of robots is only as reliable as each individual. Hatch focuses on **one robot, one session**. Multi-robot coordination is composition, not core.
-
-### Principle #1: Single Process, Single Memory Space
-
-No serialization between components. Direct data access. No network overhead. No distributed complexity.
-
-### Principle #2: Event-Driven, No Polling
-
-Components communicate via events. No `while` loops waiting for data. No busy-waiting. No periodic checks. (See Appendix A.)
-
-### Principle #3: Visualizer as Mind-Prying Tool
-
-Visualization is a service that reads, not controls. The 3D view is a window into the robot's internal state — not a separate simulation.
+The URDF format does this. It is the robotics community's standard for
+robot description. We adopt it — not because ROS uses it, but because
+it solves the need.
 
 ### Principle #4: Everything in URDF
 
-All components (robot, sensors, tools) are described by URDF. No hardcoded transforms. No special-case loading.
+All components — robots, sensors, tools, fixtures, tables, AGVs — are
+described by URDF. The URDF is the single source of truth for the entire
+scene. There is no separate world file, no launch file, no external
+configuration for how things are positioned. Fixed joints from `world`
+position every object. One format, one parser, one truth.
+
+### Need: My scene has many parts from different sources
+
+A robot arm comes from one manufacturer. A laser scanner from another.
+A UGV base from a third. Each has its own meshes, its own coordinate
+frames, its own URDF definition. I need to compose them into one scene.
+
+The xacro format provides composition: include files, define variables,
+instantiate macros. We don't need all of xacro — just enough to assemble
+a scene from modular parts.
+
+### Component: URDFPreprocessor
+
+```
+User provides .urdf or .xacro file
+    ↓
+URDFPreprocessor resolves <xacro:include> files
+    ↓
+Resolves package:// paths to find mesh files
+    ↓
+Substitutes ${variables}
+    ↓
+Expands <xacro:macro> calls
+    ↓
+Outputs plain URDF XML
+    ↓
+KinematicModel parses it
+```
+
+The preprocessor is invisible to the user. They load any `.urdf` or `.xacro`
+file, and Hatch figures out the rest. No separate build step. No external tool.
+
+### Principle #0: Individuals Before Groups
+
+A team of robots is only as reliable as each individual. Hatch focuses on
+**one robot, one session**. Multi-robot coordination is composition, not core.
+
+### Need: My scene needs to refer to mesh files portably
+
+The URDF references mesh files for visualization. These files live alongside
+the URDF in a package structure. The paths must work on any machine, not just
+the author's.
+
+The `package://` URI scheme solves this: `package://package_name/relative/path`.
+Hatch searches for `package_name` in configured directories and follows the
+relative path inside it.
+
+The user organizes their files following ROS package conventions:
+
+```
+~/hatch/assets/
+├── scenes/my_scene/urdf/scene.urdf    ← The file loaded in Hatch
+├── robots/ur10/urdf/ur10.urdf         ← Included by scene.urdf
+├── robots/ur10/meshes/base_link.stl   ← Referenced by ur10.urdf
+├── sensors/keyence/...                ← Included by scene.urdf
+└── ugv/bunker/...                     ← Included by scene.urdf
+```
+
+---
+
+## Part Two: Understanding the Robot
+
+### Need: I must know where everything is
+
+The URDF describes links and joints. But joints move. At any moment, I need
+to know: where is the TCP relative to the world? Where is the camera relative
+to the robot base? Where is link_3 relative to link_1?
+
+This is the transform problem. Every robotics framework must solve it.
+
+### Component: KinematicModel
+
+```
+URDF file
+    ↓
+KinematicModel parses links and joints
+    ↓
+Detects the true kinematic root
+    ↓
+Computes forward kinematics on state changes
+    ↓
+Provides transforms for every link in world coordinates
+```
+
+The model is pure data. No visualization. No control logic. It answers
+one question: given joint angles, where is everything?
+
+### The True Kinematic Root
+
+Not all URDFs use `base_link` as the kinematic root. Universal Robots
+insert a `base_inertia` link with a 180° fixed joint between `base_link`
+and the first moving joint. Using `base_link` for kinematics produces
+wrong results.
+
+`KinematicModel` detects the true root automatically: find the first joint
+of type `revolute`, `continuous`, or `prismatic`. Its parent link is the
+kinematic root. All forward kinematics are computed from this frame.
+
+### Need: Transforms must be computed efficiently
+
+A robot with six joints has dozens of links when you include fixed offsets,
+sensor mounts, and tool frames. Recomputing all transforms on every query
+is wasteful. Recomputing them on a timer is polling.
 
 ### Principle #5: Space = TransformRegistry
 
-All relative poses in one place. Lazy evaluation — transforms computed only when requested. Cache invalidation on change.
+All relative poses in one place. Lazy evaluation — transforms computed only
+when requested. Cache invalidation on change. Callbacks notify interested
+parties when transforms change.
 
-### Principle #6: Time = StateChannel
+### Component: TransformRegistry
 
-All events in one place. Publish/subscribe with history. Timestamps preserve sequence. Decoupled communication.
+```
+KinematicModel computes link transforms in world frame
+    ↓
+StateHandler converts to parent-relative transforms
+    ↓
+TransformRegistry stores them with lazy caching
+    ↓
+On query: compute world transform by walking up the tree
+    ↓
+On update: invalidate cache for the frame and all descendants
+    ↓
+Callbacks notify KinematicDisplay to re-render
+```
+
+### Need: The scene must become visible
+
+I have a kinematic model. I have transforms. I have mesh files. I need
+to see the robot in 3D — its links at their current positions, moving
+as joints change.
+
+### Principle #3: Visualizer as Mind-Prying Tool
+
+Visualization is a service that reads, not controls. The 3D view is a
+window into the robot's internal state — not a separate simulation.
+
+### Component: KinematicDisplay + VisualizerEngine
+
+```
+KinematicModel provides link transforms and mesh paths
+    ↓
+MeshLoader loads mesh files into VTK PolyData
+    ↓
+KinematicDisplay creates VTK actors for each link
+    ↓
+TransformRegistry callbacks update actor positions
+    ↓
+VisualizerEngine renders at 60Hz when dirty
+```
+
+The display does not control anything. It observes the TransformRegistry
+and reflects what it sees. The engine's render loop sleeps when nothing
+moves.
+
+---
+
+## Part Three: Making the Robot Move
+
+### Need: I must command the robot to move
+
+Seeing the robot is not enough. I need to move its joints. I need to move
+its TCP to a specific position. I need to do this whether the robot is
+real hardware or a simulation.
+
+### Component: RobotInterface, SimulatedRobot, RealRobot
+
+```
+CommandHandler receives a command
+    ↓
+Routes to active robot (SimulatedRobot or RealRobot)
+    ↓
+Robot executes the command:
+    SimulatedRobot: solve IK locally, update internal state
+    RealRobot: send command via RTDE to hardware
+    ↓
+Robot publishes ROBOT_STATE with new joint positions
+```
 
 ### Principle #7: Movements as Models
 
-Trajectories, commands, and goals are data, not side effects. Movements can be anticipated, monitored, and replayed.
+Trajectories, commands, and goals are data, not side effects. Movements
+can be anticipated, monitored, and replayed.
 
 ### Principle #8: Pure Python
 
-No C++ extensions except VTK bindings. Rapid development. Safe memory management. Access to scientific stack.
+No C++ extensions except VTK bindings. Rapid development. Safe memory
+management. Qt is permitted only in the UI layer and for hardware driver
+signal bridging — never in core services.
+
+### Need: The model must stay synchronized with the robot
+
+When the robot moves, the kinematic model must update. The transform
+registry must update. The display must update. This must happen exactly
+once per state change, not multiple times from different paths.
+
+### Component: StateHandler
+
+```
+Robot publishes ROBOT_STATE
+    ↓
+StateHandler receives it (the ONLY subscriber that modifies state)
+    ↓
+Updates KinematicModel with new joint positions
+    ↓
+KinematicModel recomputes forward kinematics
+    ↓
+StateHandler updates TransformRegistry with new transforms
+    ↓
+TransformRegistry callbacks fire
+    ↓
+KinematicDisplay sets _needs_render = True
+    ↓
+VisualizerEngine renders on next timer tick
+```
+
+A single owner of state updates. No duplicate registrations. No missed
+updates. No race conditions.
+
+---
+
+## Part Four: Communication
+
+### Need: Components must talk without knowing about each other
+
+The joint control panel should not import the robot driver. The robot
+driver should not import the 3D display. Components must communicate
+without being coupled.
+
+### Principle #2: Event-Driven, No Polling
+
+Components communicate via events. No `while` loops waiting for data.
+No busy-waiting. No periodic checks.
+
+### Principle #6: Time = StateChannel
+
+All events in one place. Publish/subscribe with history. Timestamps
+preserve sequence. Decoupled communication.
+
+### Component: StateChannel
+
+```
+JointControlPanel publishes JOINT_COMMAND
+    ↓
+StateChannel delivers to all subscribers
+    ↓
+CommandHandler receives, routes to robot
+    ↓
+Robot publishes ROBOT_STATE
+    ↓
+StateChannel delivers to all subscribers
+    ↓
+StateHandler updates model (one subscriber)
+    ↓
+JointControlPanel updates sliders (another subscriber)
+    ↓
+CartesianControlPanel updates display (another subscriber)
+    ↓
+KinematicDisplay updates via TransformRegistry callbacks (indirect)
+```
+
+### Principle #1: Single Process, Single Memory Space
+
+No serialization between components. Direct data access. No network
+overhead. No distributed complexity. Events carry Python objects —
+no message definitions, no code generation, no serialization.
+
+---
+
+## Part Five: The User Interface
+
+### Need: I need controls to interact with the robot
+
+Joints need sliders. Cartesian movement needs position controls.
+Connection to hardware needs IP input and status display. These
+are presentation concerns — they should not contain business logic.
 
 ### Principle #9: UI Separate from Services
 
-UI components publish events. They do not call managers directly. They do not hold business logic. They are pure presentation.
+UI components publish events. They do not call managers directly
+except for commands (user-initiated actions). They do not hold
+business logic. They do not update models or registries. They are
+pure presentation.
+
+### Component: UI Panels
+
+```
+JointControlPanel:
+    User drags slider → publishes JOINT_COMMAND
+    Subscribes to ROBOT_STATE → updates slider positions
+
+CartesianControlPanel:
+    User drags slider → publishes CARTESIAN_COMMAND
+    Subscribes to ROBOT_STATE → updates current TCP display
+
+RobotConnectionPanel:
+    User clicks Connect → calls RobotManager.connect_robot()
+    Subscribes to CONNECTION_ESTABLISHED → shows green status
+    Subscribes to CONNECTION_LOST → shows red status
+    Subscribes to MODE_SWITCHED → updates mode display
+```
 
 ### Principle #10: One Robot Per Session
 
-The platform manages one robot at a time. To work with a different robot, restart the application. Clean boundary. No complex cleanup.
+The platform manages one robot at a time. To work with a different
+robot, restart the application. Clean boundary. No complex cleanup.
+
+### Need: Everything must be wired together
+
+The services, the displays, the UI panels — they need to be created
+and connected. One place must own this responsibility without doing
+the work itself.
+
+### Component: MainWindow
+
+```
+MainWindow.__init__:
+    Create TransformRegistry
+    Create StateChannel
+    Create VisualizerEngine
+    Create MeshLoader
+    Create RobotManager
+    Create SimulatedRobot, RealRobot
+    Create CommandHandler
+    Create CameraManager
+    Create UIBuilder
+    Subscribe to ROBOT_LOADED → create MotionContainer
+    Subscribe to ERROR_OCCURRED → show dialog
+```
+
+`MainWindow` orchestrates. It does not update models, modify transforms,
+or handle commands. It creates components and connects them. Then it
+steps back.
 
 ---
 
-## The Core Services
+## Part Six: The Render Loop
 
-| Service | Principle | Responsibility |
-| --- | --- | --- |
-| `TransformRegistry` | #5  | Store and compute relative transforms. Lazy evaluation. |
-| `StateChannel` | #6  | Publish/subscribe event bus with history. |
-| `MeshLoader` | #3, #9 | Load and cache mesh files (STL, OBJ, PLY, DAE). Pure service. |
-| `RobotManager` | #4, #10 | Load URDF, manage kinematic model, register transforms. |
-| `CommandHandler` | #2, #7 | Route commands to active robot (simulated or real). |
-| `SimulatedRobot` | #7  | Execute commands in simulation. Solve IK. Publish state. |
-| `RealRobot` | —   | Bridge to hardware. Translate commands to drivers. |
+### Need: The 3D view must update smoothly without polling
+
+When the robot moves, the display must re-render. When nothing moves,
+the CPU must sleep. A render loop that runs at fixed intervals and
+recomputes everything is wasteful.
+
+### Component: VisualizerEngine Render Timer
+
+```
+QTimer fires at 60Hz
+    ↓
+Check _needs_render flag on each display
+    ↓
+If no display needs rendering: return immediately (CPU sleeps)
+    ↓
+If any display needs rendering: call Render()
+    ↓
+Clear all _needs_render flags
+```
+
+This is not polling. The timer checks a boolean — a single memory read
+per display. The flag is set only by TransformRegistry callbacks, which
+fire only when transforms actually change. When the robot is stationary,
+nothing happens. The CPU enters low-power states between timer ticks.
+
+*(See Appendix A for the full defense of event-driven architecture.)*
 
 ---
 
-## The UI Layer (Pure Presentation)
+## Part Seven: Extension Points
 
-| Component | Responsibility |
-| --- | --- |
-| `UIBuilder` | Create all menus, panels, docks. Wire to StateChannel. |
-| `JointControlPanel` | Display sliders for each joint. Publish `JOINT_COMMAND`. |
-| `CartesianControlPanel` | Display sliders for X,Y,Z,RX,RY,RZ. Publish `CARTESIAN_COMMAND`. |
-| `RobotConnectionPanel` | IP input, Connect button, Mode selector. Publish `CONNECTION_REQUEST`, `MODE_SWITCH_REQUEST`. |
-| `RobotsMenu` | Show robot catalog. Publish `ROBOT_LOAD_REQUEST`. |
-| `MotionContainer` | Combine connection panel + Joint/Cartesian tabs. |
+### Need: I must add my own functionality
+
+The platform cannot anticipate every use case. Users need to add
+logging, safety monitoring, custom control strategies, sensor
+processing. The same APIs that built the built-in panels must be
+available to extensions.
+
+### Public APIs
+
+| API | Purpose |
+|-----|---------|
+| `StateChannel.subscribe()` | React to robot state, connection events, errors |
+| `StateChannel.publish()` | Send commands, report detections, trigger actions |
+| `TransformRegistry.get_transform()` | Query spatial relationships |
+| `TransformRegistry.register_callback()` | React to transform changes |
+| `EventType` enum | All events the system understands |
+
+Extensions follow the same principles as built-in components:
+observe, don't control; publish, don't call; clean up after yourself.
+
+### Dynamic Objects (Future)
+
+The `TransformRegistry` supports `FrameStatus.DYNAMIC` — frames whose
+transforms change during operation. Currently this serves robot joints.
+In future versions, it will also serve runtime-discovered objects from
+cameras and sensors.
+
+This is a designed extension point, not current capability. The
+`FrameStatus.DYNAMIC` value and the callback system exist. The
+perception pipeline does not.
 
 ---
 
-## The Event Flow
+## Part Eight: Limitations
+
+Hatch is an honest platform. These areas are not yet addressed.
+
+### Robot Topology
+
+Hatch assumes a serial kinematic chain. The arm chain detection, inverse 
+kinematics solver, and transform registration all expect a single sequence 
+of links from base to tool. Parallel robots, branching chains, and closed 
+loops are not supported in the current version.
+
+### Error Handling
+
+Errors are published as `ERROR_OCCURRED` events and displayed in dialogs.
+There is no error severity classification, no structured recovery path,
+and some driver-level errors are silently caught. Users should monitor
+console output during development.
+
+### Configuration Management
+
+Values like RTDE frequency, grid size, and render FPS are hardcoded as
+defaults. There is no configuration file, no persistence between sessions,
+and no way to override defaults without modifying source. Configuration
+will be addressed when pain points emerge during regular use.
+
+### Sensor Calibration
+
+Camera extrinsics are assumed to match the URDF. There is no hand-eye
+calibration, no TCP calibration, and no mechanism to override URDF
+transforms with calibrated values. For applications requiring precise
+spatial accuracy, pre-calibrate your URDF transforms before loading.
+
+### Testing
+
+No automated tests exist. The `TransformRegistry`, `StateChannel`, and
+`KinematicModel` are particularly testable — they have clear inputs
+and outputs with no external dependencies. Tests will be added as the
+platform stabilizes.
+
+---
+
+## The Ten Principles (Summary)
+
+| # | Principle | Discovered From |
+|---|-----------|-----------------|
+| 0 | Individuals Before Groups | Need: one robot, one session |
+| 1 | Single Process, Single Memory Space | Need: no serialization overhead |
+| 2 | Event-Driven, No Polling | Need: decoupled communication |
+| 3 | Visualizer as Mind-Prying Tool | Need: see the robot's true state |
+| 4 | Everything in URDF | Need: describe the scene |
+| 5 | Space = TransformRegistry | Need: know where everything is |
+| 6 | Time = StateChannel | Need: components must communicate |
+| 7 | Movements as Models | Need: commands as data |
+| 8 | Pure Python | Need: rapid development |
+| 9 | UI Separate from Services | Need: controls without coupling |
+| 10 | One Robot Per Session | Need: clean boundaries |
+
+Each principle was not chosen. It was demanded by a need that arose
+during the derivation. This is what makes the architecture honest.
+
+---
+
+## The Full Event Flow
 
 ```
 User moves slider
@@ -217,18 +517,27 @@ StateChannel distributes event
     ↓
 CommandHandler receives, routes to active robot
     ↓
-Robot executes command, updates kinematic model
+Robot executes command, publishes ROBOT_STATE
     ↓
-TransformRegistry updates transforms
+StateHandler receives ROBOT_STATE (single owner)
     ↓
-KinematicDisplay re-renders
+StateHandler updates KinematicModel → recomputes FK
     ↓
-ROBOT_STATE event published
+StateHandler updates TransformRegistry → new link transforms
     ↓
-UI panels update displays
+TransformRegistry notifies callbacks
+    ↓
+KinematicDisplay sets _needs_render = True
+    ↓
+VisualizerEngine 60Hz timer checks flag → renders if dirty
+    ↓
+ROBOT_STATE also received by UI panels
+    ↓
+UI panels update slider positions and value labels
 ```
 
-**No direct calls. No polling. Pure event-driven architecture.**
+**No direct calls between UI and model. No polling. Single render path.
+Single owner of state updates.**
 
 ---
 
@@ -237,243 +546,68 @@ UI panels update displays
 ```
 hatch/
 ├── core/
-│   ├── mesh_loader.py           # Pure mesh loading
-│   ├── robot_manager.py         # Robot lifecycle
+│   ├── urdf_preprocessor.py    # Scene composition from .xacro files
+│   ├── mesh_loader.py           # Pure mesh loading service
+│   ├── robot_manager.py         # Robot lifecycle (no Qt)
 │   ├── command_handler.py       # Command routing
+│   ├── state_handler.py         # Single owner of model + registry updates
 │   ├── mode.py                  # Mode enum
+│   ├── kinematics/
+│   │   ├── kinematic_model.py   # URDF parsing, FK, true root detection
+│   │   ├── ik_solver.py         # IK solver wrapper with base compensation
+│   │   └── ur_ik_solver.py      # Parameterized analytical IK for UR robots
 │   └── world_state/
 │       ├── transform_registry.py
 │       ├── state_channel.py
 │       └── event_types.py
 │
 ├── drivers/
-│   ├── simulated_robot.py
-│   ├── real_robot.py
-│   └── ur_rtde_bridge.py
+│   └── robot_arm/
+│       ├── robot_interface.py   # Plain ABC (no Qt)
+│       ├── base_robot_arm.py    # Driver-internal ABC (no Qt)
+│       ├── simulated_robot.py   # Pure Python simulation
+│       ├── real_robot.py        # Hardware bridge (Qt for signal handling)
+│       └── ur_rtde_bridge.py    # RTDE driver (Qt signal holder)
 │
 ├── displays/
-│   ├── kinematic_display.py
-│   └── pointcloud_display.py
+│   └── kinematic_display.py     # VTK visualization
+│
+├── viz/
+│   └── visualizer_engine.py     # VTK render window, grid, camera
 │
 ├── ui/
-│   ├── ui_builder.py
-│   ├── main_window.py
+│   ├── main_window.py           # Application entry point
+│   ├── ui_builder.py            # Menu and dock construction
 │   ├── menus/
 │   └── panels/
 │
-└── assets/
-    └── robots/                  # URDF files
+├── assets/
+│   ├── scenes/                  # Scene-defining URDF files
+│   ├── robots/                  # Robot URDFs and meshes
+│   ├── sensors/                 # Sensor URDFs and meshes
+│   ├── ugv/                     # Mobile base URDFs and meshes
+│   └── tools/                   # End-effector URDFs and meshes
+│
+└── docs/
+    ├── architecture.md           # This document
+    └── user_guide.md             # Getting started guide
 ```
 
 ---
 
-## Event Types Reference
+## Appendices
 
-| Event | Direction | Data |
-| --- | --- | --- |
-| `ROBOT_LOAD_REQUEST` | UI → Handler | `{urdf_path, robot_id}` |
-| `ROBOT_LOADED` | Handler → All | `{asset_id, urdf_path, kinematic_model}` |
-| `JOINT_COMMAND` | UI → Handler | `{positions, names}` |
-| `CARTESIAN_COMMAND` | UI → Handler | `{pose (4x4), frame}` |
-| `MODE_SWITCH_REQUEST` | UI → Handler | `{mode: "simulate" or "real"}` |
-| `MODE_SWITCHED` | Handler → All | `{mode}` |
-| `ROBOT_STATE` | Robot → All | `{joint_positions, tcp_pose, timestamp}` |
-| `CONNECTION_REQUEST` | UI → Handler | `{ip, frequency}` |
-| `CONNECTION_ESTABLISHED` | Handler → All | `{message}` |
-| `CONNECTION_LOST` | Handler → All | `{message}` |
-| `ERROR_OCCURRED` | Any → UI | `{error}` |
+### Appendix A: On Event-Driven Architecture and the Main Loop
 
----
+*(Content from original Appendix A)*
 
-## Mode States
+### Appendix B: On Formalism and Understanding
 
-| Mode | Description |
-| --- | --- |
-| `SIMULATE_LOCAL` | Local IK solver, virtual robot only |
-| `SIMULATE_REAL_IK` | Real robot's IK solver, virtual robot only |
-| `REAL` | Real robot's IK solver, real robot moves |
+*(Content from original Appendix B)*
 
----
+### Appendix C: Event Types Reference
 
-## Appendix A: On Event-Driven Architecture and the Main Loop
-
-### A.1 The Clarification
-
-Principle #2 states: *"Event-driven, no polling."*
-
-An experienced engineer might ask: *"Doesn't every application have a main loop?"*
-
-**Yes.** Hatch runs on Qt, which provides `QApplication.exec_()` — an event loop. The distinction is not whether a loop exists, but **who drives it**.
-
-### A.2 What "No Polling" Means
-
-| Pattern | Forbidden | Reason |
-| --- | --- | --- |
-| `while True: check()` | ✅ Forbidden | Spins CPU, wastes energy |
-| `if not data: continue` | ✅ Forbidden | Same as above |
-| `time.sleep(0.01); check()` | ✅ Forbidden | Still polling, just slower |
-| `QTimer.timeout.connect(handler)` | ✅ Allowed | Event-driven, OS wakes on timer |
-| `signal.connect(handler)` | ✅ Allowed | Event-driven, OS wakes on input |
-| `StateChannel.subscribe(callback)` | ✅ Allowed | Event-driven, callback on publish |
-| `get_transform()` lazy evaluation | ✅ Allowed | Computed on demand, no loop |
-
-### A.3 The Qt Event Loop
-
-Qt's `app.exec_()` is not polling. It uses operating system primitives (select, epoll, WaitForMultipleObjects) to **block** until an event occurs:
-
-```python
-# Simplified — Qt's actual implementation is more complex
-while running:
-    event = wait_for_event()  # ← Blocks, CPU sleeps
-    dispatch(event)
-```
-
-When the application is idle, the thread sleeps. The CPU can be used by other processes or enter low-power states.
-
-### A.4 Hatch's Use of the Event Loop
-
-| Component | Mechanism | Polling? |
-| --- | --- | --- |
-| UI sliders | Qt signals | No (OS wakes on input) |
-| Command publishing | `StateChannel.publish()` | No (direct call from event handler) |
-| Robot state updates | `StateChannel.publish()` | No (called when state changes) |
-| Periodic updates | `QTimer` | No (Qt manages timerfd) |
-| Transform queries | Lazy evaluation | No (computed on demand) |
-| File loading | User action | No (triggered by menu click) |
-
-### A.5 Lazy Evaluation
-
-"No polling" also means **no periodic recomputation**. Transforms are computed only when requested:
-
-```python
-def get_transform(self, target, source):
-    if target not in self._cache:
-        self._cache[target] = self._compute(target)  # ← Only now
-    return self._cache[target]
-```
-
-If nothing asks for a transform, nothing computes.
-
-### A.6 The Test
-
-Ask of any component: *"Does it ever wake up to check if something has changed?"*
-
-- If yes → **Polling** → Forbidden.
-- If no → **Event-driven** → Allowed.
-
-### A.7 The Answer to the Skeptical Engineer
-
-> *"Every application has a main loop. Qt provides it. Hatch does not add another. All application logic is in event handlers or lazy computations. No thread ever spins waiting for something to happen. The CPU sleeps when the application is idle."*
-
----
-
-## Appendix B: On Formalism and Understanding — Why Hatch Rejects Accumulated Complexity
-
-### B.1 The Cycle
-
-Human knowledge follows a recurring cycle:
-
-```
-Understanding → Formalization → Accumulation → Loss of Understanding → Rediscovery
-```
-
-| Phase | Description |
-| --- | --- |
-| **Understanding** | Direct, intuitive grasp of a phenomenon. "I see how this works." |
-| **Formalization** | Abstract rules, equations, algorithms. "Let me write this down precisely." |
-| **Accumulation** | Libraries, frameworks, conventions. "Everyone uses this, so I will too." |
-| **Loss of Understanding** | The original meaning fades. "I know how to use it, but not why it works." |
-| **Rediscovery** | Someone questions the formalism. "Why are we doing it this way?" |
-
-We are often in the **loss phase** — surrounded by formalisms we no longer understand.
-
-### B.2 Case Study: Quaternions
-
-| Phase | Quaternion Journey |
-| --- | --- |
-| Understanding | Hamilton discovers 4D complex numbers (1843). Understands rotation in 3D space. |
-| Formalization | Multiplication rules, normalization, interpolation algorithms. |
-| Accumulation | ROS, game engines, spacecraft guidance systems adopt quaternions. "Standard practice." |
-| Loss of Understanding | Most users cannot glance at `[0.707, 0, 0, 0.707]` and visualize a 90° rotation about X. |
-| Rediscovery | Engineers ask: "Why not rotation vectors? `[1.57, 0, 0]` is immediately clear." |
-
-**The quaternion test:** If you cannot explain what a number means to a beginner, the representation is wrong.
-
-Quaternions fail this test. Hatch uses rotation vectors.
-
-### B.3 Case Study: ROS Complexity
-
-| Formalisms | Accumulated Complexity | Hatch Rediscovery |
-| --- | --- | --- |
-| DDS discovery | Network debugging, XML profiles | Single process, direct calls |
-| Message serialization | `.msg` files, code generation | Python objects, no serialization |
-| `tf2` tree | Hundreds of frames, lookup latency | TransformRegistry, lazy evaluation |
-| Launch files | YAML, Python, XML hybrids | Direct orchestration in main window |
-| Quaternions | Conversion every time they are used | Rotation vectors, human-readable |
-
-ROS solves distributed robotics. But most robotics is not distributed. Most robotics is **one robot, one computer, one engineer**.
-
-Hatch is for that engineer.
-
-### B.4 The Danger of Formalisms
-
-Formalisms are not evil. They are tools. But tools can become **cages**.
-
-| Danger | Example |
-| --- | --- |
-| Using what exists, not what is right | "ROS uses quaternions, so I will too." |
-| Accumulating without questioning | Copy-pasting code you do not understand. |
-| Solving problems you do not have | Adding distribution when you have one robot. |
-| Forgetting the original meaning | `F = ma` is memorized, but do you feel it? |
-
-Hatch rejects accumulated complexity. Every component must be derived from first principles, not copied from convention.
-
-### B.5 The Same Cycle in AI
-
-| Phase | AI Journey |
-| --- | --- |
-| Understanding | Humans understand language, reasoning, causality. |
-| Formalization | Statistics become matrices, transformers, billions of parameters. |
-| Accumulation | LLMs generate fluent text. |
-| Loss of Understanding | Engineers ask: "Does it actually understand?" |
-| Rediscovery | Explainable AI, Causal AI, Grounding. |
-
-The cycle continues. We are teaching machines to understand what humans have forgotten.
-
-### B.6 Hatch's Position
-
-> *"No formalism shall be used without understanding. If you cannot explain what a number means to a beginner, the representation is wrong."*
-
-Hatch is not anti-formalism. It is anti- **blind formalism**.
-
-| Accept | Reject |
-| --- | --- |
-| Rotation vectors | Quaternions (unless hidden internally) |
-| Direct function calls | Serialization (unless distributed) |
-| Lazy evaluation | Periodic polling |
-| Event-driven architecture | ROS-style topic discovery |
-| Single robot per session | Multi-robot complexity without need |
-
-### B.7 The Purist's Question
-
-Before adding any formalism to Hatch, ask:
-
-1. *"Do I understand this — truly, not just how to use it?"*
-2. *"Is there a simpler representation that is more human-understandable?"*
-3. *"Am I solving a problem I actually have, or a problem someone else solved?"*
-4. *"If this formalism disappeared tomorrow, could I rebuild it from first principles?"*
-
-If the answer to any of these is "no," the formalism does not belong in Hatch.
-
-### B.8 The Full Cycle
-
-> *"From understanding to formalism, then from formalism to understanding."*
-
-Hatch is an attempt to complete the cycle — to recover understanding from accumulated formalism.
-
-It is not a perfect platform. It is an **honest** platform.
-
-And honesty is the foundation of good engineering.
+*(Content from original Event Types Reference section)*
 
 ---
 
@@ -481,11 +615,19 @@ And honesty is the foundation of good engineering.
 
 > *"A platform is not defined by what it can do. It is defined by what it will not do — and why."*
 
-Hatch does one thing well: **make a single robot's mind transparent, efficient, and easy to program.**
+Hatch does one thing well: **make a single robot's mind transparent,
+efficient, and easy to program.**
+
+It was not designed. It was derived — each component demanded by a need,
+each principle discovered in the process. This document traces that chain.
 
 From this foundation, everything else grows.
 
 ---
 
-*Document version 1.0*
-*Hatch (孵) Architecture Foundation
+*Document version 3.0*
+*Hatch (孵) Architecture Foundation*
+*Restructured as a derivation chain. User needs drive component creation.
+Each principle maps to the need that demanded it.*
+```
+

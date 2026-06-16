@@ -129,6 +129,42 @@ Provides transforms for every link in world coordinates
 The model is pure data. No visualization. No control logic. It answers
 one question: given joint angles, where is everything?
 
+### Why ElementTree?
+
+Hatch parses URDF using only Python's built-in `xml.etree.ElementTree`. It does
+not depend on any external URDF parsing library — not `urdfdom`, not
+`urdf_parser_py`, not `yourdfpy`. Just the standard library.
+
+This is not an oversight. It is a deliberate choice with three justifications:
+
+**Zero version conflicts.** URDF parsing libraries have complex dependency
+chains and frequently break across Python or ROS versions. ElementTree has
+been stable in the Python standard library for decades. It will still work
+exactly the same way ten years from now.
+
+**One less moving part.** Every external library is a commitment — to its
+release cycle, its API changes, its own dependencies. Hatch already requires
+NumPy, VTK, and SciPy. Adding a URDF parser for a format that is fundamentally
+XML is unnecessary weight.
+
+**Understanding what we depend on.** If ElementTree misparses a URDF, the
+problem is in the XML, not in a library whose internals we haven't read.
+Hatch's URDF parsing is straightforward XML traversal — a few hundred lines
+that anyone can read and understand completely. There is no hidden behavior.
+There is no magic.
+
+The tradeoff is that Hatch does not support every edge case of the full URDF
+specification. But the URDF files produced by robot manufacturers and
+ROS-Industrial packages use a practical subset that ElementTree handles
+without issue. If a URDF genuinely requires a full spec-compliant parser,
+it can be pre-processed externally before loading into Hatch.
+
+This choice reflects the same principle that governs every dependency in
+Hatch: *"If this dependency disappeared tomorrow, could I rebuild it from
+first principles?"* For ElementTree, the answer is yes — in an afternoon.
+For a dedicated URDF library with years of accumulated edge-case handling,
+the answer would be no.
+
 ### The True Kinematic Root
 
 Not all URDFs use `base_link` as the kinematic root. Universal Robots

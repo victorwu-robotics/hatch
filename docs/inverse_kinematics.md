@@ -1,3 +1,7 @@
+---
+layout: default
+title: Inverse Kinematics in Hatch
+---
 # Inverse Kinematics in Hatch
 
 ## A Guide to Understanding and Implementing 6-DOF Spherical Wrist IK

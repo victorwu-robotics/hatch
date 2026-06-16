@@ -1,7 +1,3 @@
----
-layout: default
-title: 孵 (Hatch) 哲学文献
----
 # 孵 (Hatch) 哲学文献
 
 ---

@@ -47,6 +47,7 @@ one robot arm and a job to do, Hatch is built for you.
 | [Fixed Chain Tail](fixed_chain_tail.md) | How fixed joints before and after moving joints are handled |
 | [URDF Processing](urdf_processing.md) | True kinematic root detection |
 | [DAE Files & Scene Handling](dae_files_scene_handling.md) | Mesh loading pitfalls and fixes |
+| [Technical Notes](technical_notes.md) | Integrated technical notes |
 
 ### Architecture History
 
@@ -66,13 +67,13 @@ cd hatch
 pip install -r requirements.txt
 python -m ui.main_window
 ```
-Then: File → Load URDF → select your robot's URDF or xacro file.
+Then: **File → Load URDF** → select your robot's URDF or xacro file.
 
 ## Status
 Active development. Core platform is functional and tested with real hardware
 (UR10, Han's E15-PRO). Documentation is extensive and honest about limitations.
 
-Next priorities: automated tests, configuration system, TCP switching UI,
+**Next priorities:** automated tests, configuration system, TCP switching UI,
 Chinese documentation (母语版本).
 
 孵 (Hatch) — to incubate. A platform that hatches your vision into reality.

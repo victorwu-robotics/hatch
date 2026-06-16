@@ -32,22 +32,13 @@ one robot arm and a job to do, Hatch is built for you.
 
 | Document | What It Covers |
 |----------|---------------|
-| [Camera Integration](camera_integration.md) | RGB-D camera pipeline and adding new cameras |
-| [Event-Driven Drivers](event_driven_drivers.md) | Why Hatch never polls — the RTDE case study |
-| [Non-Polling RTDE Driver](non-polling-rtde-driver.md) | Command-response pattern for UR robots |
-| [Path Execution](path_execution.md) | Scoped streaming for trajectory following |
-| [Keyence Scanner Lessons](keyence_scanner_lessons.md) | Reverse-engineering a proprietary sensor |
-| [Integrating Hardware with Hatch](integrating_hardware.md) | Everything you need to add a robot, camera, or sensor to Hatch.|
+| [Integrating Hardware](integrating_hardware.md) | Robot drivers, cameras, sensors — the event-driven pattern, RTDE reference, path execution, camera pipeline, and the Keyence reverse-engineering case study |
 
 ### Technical Notes
 
 | Document | What It Covers |
 |----------|---------------|
-| [Kinematic Model vs Transform Registry](kinematic_model_vs_transform_registry.md) | The coordinate system distinction that defines Hatch |
-| [Fixed Chain Tail](fixed_chain_tail.md) | How fixed joints before and after moving joints are handled |
-| [URDF Processing](urdf_processing.md) | True kinematic root detection |
-| [DAE Files & Scene Handling](dae_files_scene_handling.md) | Mesh loading pitfalls and fixes |
-| [Technical Notes](technical_notes.md) | Integrated technical notes |
+| [Technical Notes](technical_notes.md) | Kinematic model vs. transform registry, fixed chain tail, URDF root detection, DAE mesh loading |
 
 ### Architecture History
 
@@ -66,14 +57,13 @@ git clone https://github.com/victorwu-robotics/hatch.git
 cd hatch
 pip install -r requirements.txt
 python -m ui.main_window
-```
-Then: **File → Load URDF** → select your robot's URDF or xacro file.
+Then: File → Load URDF → select your robot's URDF or xacro file.
 
-## Status
+Status
 Active development. Core platform is functional and tested with real hardware
 (UR10, Han's E15-PRO). Documentation is extensive and honest about limitations.
 
-**Next priorities:** automated tests, configuration system, TCP switching UI,
+Next priorities: automated tests, configuration system, TCP switching UI,
 Chinese documentation (母语版本).
 
 孵 (Hatch) — to incubate. A platform that hatches your vision into reality.

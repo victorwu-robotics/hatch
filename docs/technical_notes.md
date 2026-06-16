@@ -355,12 +355,19 @@ meshes = scene.dump()
 `scene.dump()` returns mesh copies with all scene node transforms applied —
 including the scale that converts millimeters to meters.
 
-### 4.3 Why the Old Platform Worked
+### 4.3 How the Bug Was Introduced
 
-The old `robo_platform` loaded DAE files through its `_load_collada_with_trimesh`
-method, which used `scene.dump()` from the beginning. When Hatch was refactored
-to use `MeshLoader` as a service, the DAE loading path was rewritten and the
-`scene.dump()` call was inadvertently replaced with `scene.geometry.values()`.
+The original mesh loading code used `scene.dump()` and worked correctly. During
+a refactoring that extracted `MeshLoader` as a standalone service, the DAE
+loading path was rewritten. The `scene.dump()` call was inadvertently replaced
+with `scene.geometry.values()` — a function that returns raw vertex data
+without applying scene graph transforms. The abstraction was correct; the data
+extraction was not.
+
+This is a known risk when refactoring working code: the new structure can be
+right while a single data flow detail is wrong. The lesson is not to avoid
+refactoring, but to verify the output of the new path against the old path
+before declaring the refactoring complete.
 
 ### 4.4 Why ROS Works
 

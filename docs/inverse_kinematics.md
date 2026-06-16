@@ -176,7 +176,7 @@ $$
 
 The $$\pm$$ gives us two possible values for $$\theta_3$$ — **elbow up** and **elbow down**. This is our second pair of solutions.
 
-If $$|\cos\theta_3| > 1$$, the wrist center is too far away. The arm cannot reach it. This is our reachability check.
+If $$\lvert\cos\theta_3\rvert > 1$$, the wrist center is too far away. The arm cannot reach it. This is our reachability check.
 
 ## 8. Finding Joint 2
 
@@ -359,7 +359,7 @@ $$
 \theta_3 = \text{atan2}\left(\pm\sqrt{1 - \cos^2\theta_3},\; \cos\theta_3\right)
 $$
 
-If $$|\cos\theta_3| > 1$$, the point is unreachable.
+If $$\lvert\cos\theta_3\rvert > 1$$, the point is unreachable.
 
 ### Step 5: Joint 2
 
@@ -436,7 +436,7 @@ Combining all choices:
 
 ## 15. Implementation Notes
 
-**Reachability check:** If $$|\cos\theta_3| > 1$$, the wrist center lies outside the arm's reachable workspace. No solution exists.
+**Reachability check:** If $$\lvert\cos\theta_3\rvert > 1$$, the wrist center lies outside the arm's reachable workspace. No solution exists.
 
 **Joint limits:** After computing all valid solutions, filter out any where a joint angle exceeds the robot's physical limits.
 
@@ -445,7 +445,7 @@ Combining all choices:
 **Solution selection:** When multiple valid solutions remain, choose the one closest to the robot's current joint configuration using circular angle difference:
 
 $$
-\min(|\theta_a - \theta_b|,\; 2\pi - |\theta_a - \theta_b|)
+\min(\lvert\theta_a - \theta_b\rvert,\; 2\pi - \lvert\theta_a - \theta_b\rvert)
 $$
 
 Sum or weight across all six joints.

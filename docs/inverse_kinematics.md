@@ -72,20 +72,21 @@ This is the second critical insight. The spherical wrist separates the positioni
 
 We are given a desired pose: a position in space, and an orientation. But we must be precise about what is being posed.
 
-The robot holds a tool. The point on that tool that does the work is called the **Tool Center Point**, or TCP. The tool sticks out some fixed distance from the robot's wrist mounting flange. That distance, measured along the direction the tool points, is the **tool length**.
+The robot holds a tool. The point on that tool that does the work is called the **Tool Center Point**, or TCP. The tool sticks out some fixed distance from the robot's wrist mounting flange. That distance, measured along the direction the tool points, is the **tool length** $$d_{\text{tool}}$$.
 
 When we specify a pose, we are specifying where the TCP should be and how it should be oriented. But the arm does not reach the TCP. The arm reaches the wrist center. The wrist then holds the tool out beyond that center.
 
 So our very first step is to walk backward from the TCP to find the wrist center:
-```text
-P_wrist = p_TCP - d_tool · a
-```
 
-where `p_TCP` is the desired TCP position, `a` is the approach vector — the direction the tool points (third column of the desired orientation matrix) — and `d_tool` is the tool length.
+$$
+\mathbf{p}_{\text{wrist}} = \mathbf{p}_{\text{TCP}} - d_{\text{tool}} \cdot \mathbf{a}
+$$
+
+where $$\mathbf{p}_{\text{TCP}}$$ is the desired TCP position, $$\mathbf{a}$$ is the approach vector — the direction the tool points (third column of the desired orientation matrix) — and $$d_{\text{tool}}$$ is the tool length.
 
 Once we have the wrist center position, the entire problem separates cleanly:
 
-- **The arm (Joints 1, 2, 3)** must place the wrist center at `P_wrist`.
+- **The arm (Joints 1, 2, 3)** must place the wrist center at $$\mathbf{p}_{\text{wrist}}$$.
 - **The wrist (Joints 4, 5, 6)** must orient the tool around that center.
 
 ## 5. Solving Joint 1: Aiming the Arm Plane
@@ -101,18 +102,20 @@ The answer is immediate:
 > **Joint 1 must rotate the arm plane until it passes through the wrist center's horizontal projection.**
 
 From the top-down view, this is simply the horizontal angle to the wrist center:
-```text
-θ1 = atan2(y_w, x_w)
-```
+
+$$
+\theta_1 = \text{atan2}(y_w, x_w)
+$$
 
 ### Shoulder Left and Shoulder Right
 
 But there is a choice. You can aim the arm "forward" toward the wrist center, or you can rotate the base roughly 180 degrees and have the arm reach "backward" to it. These are the **shoulder right** and **shoulder left** configurations — often called "lefty" and "righty."
 
 The second solution is:
-```text
-θ1' = atan2(-y_w, -x_w)
-```
+
+$$
+\theta_1' = \text{atan2}(-y_w, -x_w)
+$$
 
 This is our first pair of solutions.
 
@@ -128,64 +131,82 @@ Inside the arm plane, we have:
 
 - **Point S** — the shoulder. Its position in the plane is fixed by the robot's physical design.
 - **Point W** — the wrist center. We know its coordinates in the plane.
-- **Length L1** — the upper arm, from shoulder to elbow.
-- **Length L2** — the forearm, from elbow to wrist center.
+- **Length $$L_1$$** — the upper arm, from shoulder to elbow.
+- **Length $$L_2$$** — the forearm, from elbow to wrist center.
 
-The unknown is **Point E** — the elbow. We know it must be exactly distance L1 from the shoulder S, and exactly distance L2 from the wrist center W.
+The unknown is **Point E** — the elbow. We know it must be exactly distance $$L_1$$ from the shoulder S, and exactly distance $$L_2$$ from the wrist center W.
 
 This is a triangle: S-E-W. Two sides have known lengths. The third side — the straight-line distance from shoulder to wrist center — we can compute:
-```text
-D = distance from shoulder to wrist center in the plane
-```
+
+$$
+D = \text{distance from shoulder to wrist center in the plane}
+$$
 
 Now we know all three sides of triangle S-E-W. The rest is geometry.
 
 ## 7. Law of Cosines for Joint 3
 
-The elbow angle θ3 is the interior angle at point E — the angle between the upper arm and the forearm.
+The elbow angle $$\theta_3$$ is the interior angle at point E — the angle between the upper arm and the forearm.
 
-The Law of Cosines states that for any triangle with sides a, b, c, where the angle opposite side c is C:
-```text
-c² = a² + b² - 2ab·cos(C)
-```
+The Law of Cosines states that for any triangle with sides $$a$$, $$b$$, $$c$$, where the angle opposite side $$c$$ is $$C$$:
 
-In our triangle, the side opposite the elbow is D (shoulder to wrist). The sides meeting at the elbow are L1 and L2. Therefore:
-```text
-D² = L1² + L2² - 2·L1·L2·cos(θ3)
-```
+$$
+c^2 = a^2 + b^2 - 2ab \cos(C)
+$$
+
+In our triangle, the side opposite the elbow is $$D$$ (shoulder to wrist). The sides meeting at the elbow are $$L_1$$ and $$L_2$$. Therefore:
+
+$$
+D^2 = L_1^2 + L_2^2 - 2 L_1 L_2 \cos(\theta_3)
+$$
 
 Rearranging:
-```text
-cos(θ3) = (L1² + L2² - D²) / (2·L1·L2)
-θ3 = atan2(±√(1 - cos²θ3), cosθ3)
-```
 
-The ± gives us two possible values for θ3 — **elbow up** and **elbow down**. This is our second pair of solutions.
+$$
+\cos(\theta_3) = \frac{L_1^2 + L_2^2 - D^2}{2 L_1 L_2}
+$$
 
-If |cos(θ3)| > 1, the wrist center is too far away. The arm cannot reach it. This is our reachability check.
+$$
+\theta_3 = \text{atan2}\left(\pm\sqrt{1 - \cos^2\theta_3},\; \cos\theta_3\right)
+$$
+
+The $$\pm$$ gives us two possible values for $$\theta_3$$ — **elbow up** and **elbow down**. This is our second pair of solutions.
+
+If $$|\cos\theta_3| > 1$$, the wrist center is too far away. The arm cannot reach it. This is our reachability check.
 
 ## 8. Finding Joint 2
 
-We now know θ3. We need the shoulder angle θ2 — the angle of the upper arm within the arm plane.
+We now know $$\theta_3$$. We need the shoulder angle $$\theta_2$$ — the angle of the upper arm within the arm plane.
 
-With θ3 known, the forward kinematics within the arm plane becomes a linear system in sin(θ2) and cos(θ2). For many robots, this takes the form:
-```text
-r_wrist = -L1·sin(θ2) + L2·sin(θ3 - θ2)
-z_wrist = L1·cos(θ2) + L2·cos(θ2 - θ3)
-```
+With $$\theta_3$$ known, the forward kinematics within the arm plane becomes a linear system in $$\sin\theta_2$$ and $$\cos\theta_2$$. For many robots, this takes the form:
+
+$$
+r_{\text{wrist}} = -L_1 \sin\theta_2 + L_2 \sin(\theta_3 - \theta_2)
+$$
+$$
+z_{\text{wrist}} = L_1 \cos\theta_2 + L_2 \cos(\theta_2 - \theta_3)
+$$
 
 Define:
-```text
-K1 = L1 + L2·cos(θ3)
-K2 = L2·sin(θ3)
-```
+
+$$
+K_1 = L_1 + L_2 \cos\theta_3
+$$
+$$
+K_2 = L_2 \sin\theta_3
+$$
 
 Then:
-```text
-sin(θ2) = (-K1·r_wrist + K2·z_wrist) / D²
-cos(θ2) = ( K2·r_wrist + K1·z_wrist) / D²
-θ2 = atan2(sinθ2, cosθ2)
-```
+
+$$
+\sin\theta_2 = \frac{-K_1 \cdot r_{\text{wrist}} + K_2 \cdot z_{\text{wrist}}}{D^2}
+$$
+$$
+\cos\theta_2 = \frac{K_2 \cdot r_{\text{wrist}} + K_1 \cdot z_{\text{wrist}}}{D^2}
+$$
+$$
+\theta_2 = \text{atan2}(\sin\theta_2, \cos\theta_2)
+$$
 
 ### The Four Arm Solutions
 
@@ -204,54 +225,63 @@ That gives 4 distinct arm configurations, all placing the wrist center at exactl
 
 ## 9. What the Wrist Must Do
 
-The arm has delivered the wrist center to the correct position. The forearm arrives with a particular orientation, determined entirely by θ1, θ2, and θ3. We can compute this orientation using forward kinematics on the first three joints. Call it `R_arm` — a 3×3 rotation matrix.
+The arm has delivered the wrist center to the correct position. The forearm arrives with a particular orientation, determined entirely by $$\theta_1$$, $$\theta_2$$, and $$\theta_3$$. We can compute this orientation using forward kinematics on the first three joints. Call it $$R_{\text{arm}}$$ — a $$3 \times 3$$ rotation matrix.
 
-The TCP needs a specific orientation — `R_TCP` — given as part of the desired pose.
+The TCP needs a specific orientation — $$R_{\text{TCP}}$$ — given as part of the desired pose.
 
-The wrist joints (4, 5, and 6) start from the forearm's orientation `R_arm` and must rotate the tool to the desired orientation `R_TCP`. All of this happens around the fixed wrist center.
-```text
-R_arm · R_wrist = R_TCP
-```
+The wrist joints (4, 5, and 6) start from the forearm's orientation $$R_{\text{arm}}$$ and must rotate the tool to the desired orientation $$R_{\text{TCP}}$$. All of this happens around the fixed wrist center.
+
+$$
+R_{\text{arm}} \cdot R_{\text{wrist}} = R_{\text{TCP}}
+$$
 
 To isolate the wrist's job, we "undo" the forearm orientation:
-```text
-R_wrist = R_armᵀ · R_TCP
-```
 
-`R_wrist` is the desired TCP orientation, expressed in the wrist's own frame.
+$$
+R_{\text{wrist}} = R_{\text{arm}}^T \cdot R_{\text{TCP}}
+$$
+
+$$R_{\text{wrist}}$$ is the desired TCP orientation, expressed in the wrist's own frame.
 
 ### Why the Transpose Is the Inverse
 
 A rotation matrix's **columns** are the axes of the target frame, expressed in the source frame. Its **rows** are the axes of the source frame, expressed in the target frame. If you want the reverse rotation, you need a matrix whose columns are the source's axes expressed in the target — which are exactly the rows of the original matrix, transposed.
 
-So Rᵀ is the inverse because coordinate axes are orthonormal: each has unit length, each is perpendicular to the others. There is no stretching, no skewing. The transpose recovers exactly the inverse.
+So $$R^T$$ is the inverse because coordinate axes are orthonormal: each has unit length, each is perpendicular to the others. There is no stretching, no skewing. The transpose recovers exactly the inverse.
 
 ## 10. Extracting the Wrist Joint Angles
 
 The wrist is typically a Z-Y-Z Euler sequence:
-```text
-R_wrist = Rz(θ4) · Ry(θ5) · Rz(θ6)
-```
 
-Multiplying this out symbolically gives a matrix where each entry is a function of θ4, θ5, θ6. We have the numeric values of all nine entries from R_wrist. We read off the angles.
+$$
+R_{\text{wrist}} = R_z(\theta_4) \cdot R_y(\theta_5) \cdot R_z(\theta_6)
+$$
 
-**θ5** from element (3,3):
-```text
-θ5 = atan2(±√(1 - r₃₃²), r₃₃)
-```
+Multiplying this out symbolically gives a matrix where each entry is a function of $$\theta_4$$, $$\theta_5$$, $$\theta_6$$. We have the numeric values of all nine entries from $$R_{\text{wrist}}$$. We read off the angles.
 
-For non-singular cases (sin(θ5) ≠ 0):
-```text
-θ4 = atan2(r₂₃ / sinθ5, r₁₃ / sinθ5)
-θ6 = atan2(r₃₂ / sinθ5, -r₃₁ / sinθ5)
-```
+**$$\theta_5$$** from element $$(3,3)$$:
 
-**The wrist singularity:** When θ5 = 0 or π, the axes of Joint 4 and Joint 6 become parallel — gimbal lock. Only the sum (or difference) of θ4 and θ6 matters. Set θ4 = 0 (or keep its last known value) and solve for θ6 from the remaining matrix elements.
+$$
+\theta_5 = \text{atan2}\left(\pm\sqrt{1 - r_{33}^2},\; r_{33}\right)
+$$
+
+For non-singular cases ($$\sin\theta_5 \neq 0$$):
+
+$$
+\theta_4 = \text{atan2}\left(\frac{r_{23}}{\sin\theta_5},\; \frac{r_{13}}{\sin\theta_5}\right)
+$$
+
+$$
+\theta_6 = \text{atan2}\left(\frac{r_{32}}{\sin\theta_5},\; -\frac{r_{31}}{\sin\theta_5}\right)
+$$
+
+**The wrist singularity:** When $$\theta_5 = 0$$ or $$\pi$$, the axes of Joint 4 and Joint 6 become parallel — gimbal lock. Only the sum (or difference) of $$\theta_4$$ and $$\theta_6$$ matters. Set $$\theta_4 = 0$$ (or keep its last known value) and solve for $$\theta_6$$ from the remaining matrix elements.
 
 The wrist contributes 2 solutions (flip or no-flip), bringing our total to:
-```text
-2 (shoulder) × 2 (elbow) × 2 (wrist) = 8 configurations
-```
+
+$$
+2 \text{ (shoulder)} \times 2 \text{ (elbow)} \times 2 \text{ (wrist)} = 8 \text{ configurations}
+$$
 
 ---
 
@@ -283,79 +313,107 @@ The Han's E15-PRO is a 6-DOF industrial arm with a spherical wrist. At zero conf
 
 | Symbol | Description |
 |--------|-------------|
-| d1 | Shoulder height offset (base to J2 along Z) |
-| a2 | Upper arm length (J2/J3 to J3/J4) |
-| a3 | Forearm length (J3/J4 to J5/J6) |
-| d6 | Tool length (wrist center to TCP along tool Z) |
+| $$d_1$$ | Shoulder height offset (base to J2 along Z) |
+| $$a_2$$ | Upper arm length (J2/J3 to J3/J4) |
+| $$a_3$$ | Forearm length (J3/J4 to J5/J6) |
+| $$d_6$$ | Tool length (wrist center to TCP along tool Z) |
 
 ## 12. The Arm Equations for This Robot
 
 ### Step 1: Wrist Center
-```text
-P_wrist = p_TCP - d6 · a
-```
-where `a` is the approach vector (third column of R_TCP).
+
+$$
+\mathbf{p}_{\text{wrist}} = \mathbf{p} - d_6 \cdot \mathbf{a}
+$$
+
+where $$\mathbf{a}$$ is the approach vector (third column of $$R_{\text{TCP}}$$).
 
 ### Step 2: Joint 1
-```text
-θ1 = atan2(y_w, x_w)
-```
+
+$$
+\theta_1 = \text{atan2}(y_w, x_w)
+$$
 
 ### Step 3: Project into the Arm Plane
-```text
-r_proj = x_w·cos(θ1) + y_w·sin(θ1)
-z_rel = z_w - d1
-D = √(r_proj² + z_rel²)
-```
+
+$$
+r_{\text{proj}} = x_w \cos\theta_1 + y_w \sin\theta_1
+$$
+$$
+z_{\text{rel}} = z_w - d_1
+$$
+$$
+D = \sqrt{r_{\text{proj}}^2 + z_{\text{rel}}^2}
+$$
 
 ### Step 4: Joint 3 (Law of Cosines)
-```text
-cos(θ3) = (D² - a2² - a3²) / (2·a2·a3)
-θ3 = atan2(±√(1 - cos²θ3), cosθ3)
-```
 
-If |cos(θ3)| > 1, the point is unreachable.
+$$
+\cos\theta_3 = \frac{D^2 - a_2^2 - a_3^2}{2 a_2 a_3}
+$$
+$$
+\theta_3 = \text{atan2}\left(\pm\sqrt{1 - \cos^2\theta_3},\; \cos\theta_3\right)
+$$
+
+If $$|\cos\theta_3| > 1$$, the point is unreachable.
 
 ### Step 5: Joint 2
-```text
-K1 = a2 + a3·cos(θ3)
-K2 = a3·sin(θ3)
 
-sin(θ2) = (-K1·r_proj + K2·z_rel) / D²
-cos(θ2) = ( K2·r_proj + K1·z_rel) / D²
-θ2 = atan2(sinθ2, cosθ2)
-```
+$$
+K_1 = a_2 + a_3 \cos\theta_3
+$$
+$$
+K_2 = a_3 \sin\theta_3
+$$
+
+$$
+\sin\theta_2 = \frac{-K_1 \cdot r_{\text{proj}} + K_2 \cdot z_{\text{rel}}}{D^2}
+$$
+$$
+\cos\theta_2 = \frac{K_2 \cdot r_{\text{proj}} + K_1 \cdot z_{\text{rel}}}{D^2}
+$$
+$$
+\theta_2 = \text{atan2}(\sin\theta_2, \cos\theta_2)
+$$
 
 ## 13. The Wrist Equations for This Robot
 
 ### Step 6: Forearm Orientation
-```text
-R₀₃ = Rz(θ1) · Ry(-θ2) · Ry(θ3)
-```
 
-Note: J2 rotates about -Y at zero configuration, hence Ry(-θ2).
+$$
+R_{03} = R_z(\theta_1) \cdot R_y(-\theta_2) \cdot R_y(\theta_3)
+$$
+
+Note: J2 rotates about -Y at zero configuration, hence $$R_y(-\theta_2)$$.
 
 ### Step 7: Wrist Target
-```text
-R_target = R₀₃ᵀ · R_TCP
-```
+
+$$
+R_{\text{target}} = R_{03}^T \cdot R_{\text{TCP}}
+$$
 
 ### Step 8: Extract Z-Y-Z Euler Angles
 
-The wrist is a Z-Y-Z sequence relative to frame 3. Given the numeric entries of R_target:
-```text
-θ5 = atan2(±√(1 - r₃₃²), r₃₃)
-```
-For sin(θ5) ≠ 0:
-```text
-θ4 = atan2(r₂₃ / sinθ5, r₁₃ / sinθ5)
-θ6 = atan2(r₃₂ / sinθ5, -r₃₁ / sinθ5)
-```
-For sin(θ5) = 0 (singularity):
-```text
-θ4 = 0
-θ6 = atan2(-r₀₁, r₀₀)
-```
+The wrist is a Z-Y-Z sequence relative to frame 3. Given the numeric entries $$r_{ij}$$ of $$R_{\text{target}}$$:
+
+$$
+\theta_5 = \text{atan2}\left(\pm\sqrt{1 - r_{33}^2},\; r_{33}\right)
+$$
+
+For $$\sin\theta_5 \neq 0$$:
+
+$$
+\theta_4 = \text{atan2}\left(\frac{r_{23}}{\sin\theta_5},\; \frac{r_{13}}{\sin\theta_5}\right)
+$$
+$$
+\theta_6 = \text{atan2}\left(\frac{r_{32}}{\sin\theta_5},\; -\frac{r_{31}}{\sin\theta_5}\right)
+$$
+
+For $$\sin\theta_5 = 0$$ (singularity):
+
+$$
+\theta_4 = 0,\quad \theta_6 = \text{atan2}(-r_{01}, r_{00})
+$$
 
 ---
 
@@ -374,22 +432,24 @@ Combining all choices:
 
 ## 15. Implementation Notes
 
-**Reachability check:** If |cos(θ3)| > 1, the wrist center lies outside the arm's reachable workspace. No solution exists.
+**Reachability check:** If $$|\cos\theta_3| > 1$$, the wrist center lies outside the arm's reachable workspace. No solution exists.
 
 **Joint limits:** After computing all valid solutions, filter out any where a joint angle exceeds the robot's physical limits.
 
-**Singularity handling:** When θ5 ≈ 0 or π, the wrist is in gimbal lock. Set θ4 = 0 (or to its last valid value) and solve for θ6.
+**Singularity handling:** When $$\theta_5 \approx 0$$ or $$\pi$$, the wrist is in gimbal lock. Set $$\theta_4 = 0$$ (or to its last valid value) and solve for $$\theta_6$$.
 
 **Solution selection:** When multiple valid solutions remain, choose the one closest to the robot's current joint configuration using circular angle difference:
-```text
-min(|θ_a - θ_b|, 2π - |θ_a - θ_b|)
-```
+
+$$
+\min(|\theta_a - \theta_b|,\; 2\pi - |\theta_a - \theta_b|)
+$$
 
 Sum or weight across all six joints.
 
 **Numerical precision:** The solution is exact in closed form. Any error is purely floating-point roundoff. Testing on the E15-PRO across 100 random poses showed mean position error of 0.005 mm and mean orientation error of 0.000013 rad — effectively machine precision.
 
 ## 16. The Complete Algorithm
+
 ```python
 def inverse_kinematics(pose, tool_length):
     """
@@ -515,21 +575,25 @@ These errors are purely floating-point roundoff in the forward kinematics comput
 
 ## Key Formulas
 
-**Wrist center:** `P_w = p_TCP - d_tool · a`
+**Wrist center:**
+$$\mathbf{p}_w = \mathbf{p}_{\text{TCP}} - d_{\text{tool}} \cdot \mathbf{a}$$
 
-**Joint 1:** `θ1 = atan2(y_w, x_w)`
+**Joint 1:**
+$$\theta_1 = \text{atan2}(y_w, x_w)$$
 
-**Law of Cosines:** `cos(θ3) = (D² - L1² - L2²) / (2·L1·L2)`
+**Law of Cosines:**
+$$\cos\theta_3 = \frac{D^2 - L_1^2 - L_2^2}{2 L_1 L_2}$$
 
-**Wrist target:** `R_wrist = R_armᵀ · R_TCP`
+**Wrist target:**
+$$R_{\text{wrist}} = R_{\text{arm}}^T \cdot R_{\text{TCP}}$$
 
-**Total solutions:** 2 × 2 × 2 = 8
+**Total solutions:** $$2 \times 2 \times 2 = 8$$
 
 ---
 
 ## References
 
-- The Law of Cosines: `c² = a² + b² - 2ab·cos(C)`
+- The Law of Cosines: $$c^2 = a^2 + b^2 - 2ab \cos(C)$$
 - Z-Y-Z Euler angle extraction from rotation matrices
 - Spherical wrist decoupling principle (Pieper, 1968)
 

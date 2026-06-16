@@ -19,6 +19,7 @@ one robot arm and a job to do, Hatch is built for you.
 | Document | What It Covers |
 |----------|---------------|
 | [Architecture](architecture.md) | The derived architecture — every component, every principle, and why they exist |
+| [架构 (Chinese Architecture)](architecture_cn.md) | 推导出来的架构 — 每一个组件、每一条原则，以及它们为何存在 |
 | [Philosophy](philosophy.md) | Why Hatch exists — the Stubborn Student, the refusal to follow, the demand to understand |
 | [哲学 (Chinese Philosophy)](philosophy_cn.md) | 孵的哲学文献 — 固执的学生，十大原则，论形式主义 |
 | [User Guide](user_guide.md) | Getting started, controlling your robot, extending Hatch |

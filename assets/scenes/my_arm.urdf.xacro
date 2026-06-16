@@ -29,6 +29,15 @@
     <child link="torch"/>
   </joint>
 
+  <!-- ===== WELDING TORCH TIP ===== -->
+  <link name="torch_tip" />
+
+  <joint name="wrist_3_link_torch_tip_fixed_joint" type="fixed">
+    <origin xyz="0.0 -0.106 0.367" rpy="0 -0.018 -0.004"/> <!-- Good as on 21 August 2025 -->
+    <parent link="wrist_3_link"/>
+    <child link="torch_tip"/>
+  </joint>
+
   <!-- ===== KEYENCE LASER SCANNER ===== -->
   <joint name="wrist_3_link_lj_v7200_frame" type="fixed">
     <origin xyz="0.062 -0.105 0.3667" rpy="0 ${pi} ${-pi/2}"/>

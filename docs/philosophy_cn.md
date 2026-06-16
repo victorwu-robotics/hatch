@@ -381,10 +381,3 @@ ROS 解决了分布式机器人问题。但大多数机器人应用不是分布�
 ---
 
 *此文献以英文写就，译为中文。原英文版见 philosophy.md。孵 (Hatch) —— 孵化愿景，成就真实。*
-```
-
----
-
-Save as `docs/philosophy_cn.md`. This is the complete Chinese philosophy document — Prologue, Ten Principles, Appendix A (event-driven defense), Appendix B (formalism critique), and Epilogue (classical Chinese essay).
-
-You'll want to add a link to it from `index.md` under a new section. Want me to draft that?

@@ -146,19 +146,21 @@ class UIBuilder:
         """Show about dialog."""
         QMessageBox.about(
             self.parent,
-            "About RoboPlatform",
-            "<h2>RoboPlatform - Digital Twin Visualizer</h2>"
-            "<p>A pure VTK + URDF robot visualization platform.</p>"
-            "<p><b>Version:</b> 2.0.0</p>"
-            "<p><b>Features:</b><br>"
-            "• Three-thread point cloud pipeline<br>"
-            "• Transform Registry (no TF overhead)<br>"
-            "• Event-driven State Channel<br>"
-            "• Direct VTK rendering<br>"
-            "• Pure Python URDF parsing<br>"
-            "• Multiple robot support<br>"
-            "• Customizable grid (size and color)<br>"
-            "• Multiple camera views (Top/Front/Side/Isometric)</p>"
+            "About Hatch (孵)",
+            "<h2>孵 (Hatch) Robotics Platform</h2>"
+            "<p><i>\"A platform is not defined by what it can do. "
+            "It is defined by what it will not do — and why.\"</i></p>"
+            "<p>A principled, event-driven platform for a single robot arm.</p>"
+            "<p><b>Version:</b> 1.0.0</p>"
+            "<p><b>Built on:</b></p>"
+            "• Derived architecture — every component exists because a need required it<br>"
+            "• Event-driven, no polling — CPU sleeps when the robot is idle<br>"
+            "• Everything in URDF — one file, one truth, no launch files<br>"
+            "• Transform Registry — lazy evaluation, no TF overhead<br>"
+            "• StateChannel — decoupled publish/subscribe with history<br>"
+            "• Pure Python — ElementTree URDF parsing, no external robotics libraries<br>"
+            "• Single process, single memory space — no serialization<br>"
+            "• Live 3D visualization with VTK — see what the robot is actually doing"
         )
 
     def create_dock(self, name: str, widget: QWidget, area) -> QDockWidget:

@@ -20,6 +20,7 @@ one robot arm and a job to do, Hatch is built for you.
 |----------|---------------|
 | [Architecture](architecture.md) | The derived architecture — every component, every principle, and why they exist |
 | [Philosophy](philosophy.md) | Why Hatch exists — the Stubborn Student, the refusal to follow, the demand to understand |
+| [哲学 (Chinese Philosophy)](philosophy_cn.md) | 孵的哲学文献 — 固执的学生，十大原则，论形式主义 |
 | [User Guide](user_guide.md) | Getting started, controlling your robot, extending Hatch |
 
 ### Inverse Kinematics
@@ -57,13 +58,14 @@ git clone https://github.com/victorwu-robotics/hatch.git
 cd hatch
 pip install -r requirements.txt
 python -m ui.main_window
-Then: File → Load URDF → select your robot's URDF or xacro file.
+```
+Then: **File → Load URDF →** select your robot's URDF or xacro file.
 
-Status
+## Status
 Active development. Core platform is functional and tested with real hardware
 (UR10, Han's E15-PRO). Documentation is extensive and honest about limitations.
 
 Next priorities: automated tests, configuration system, TCP switching UI,
-Chinese documentation (母语版本).
+additional Chinese documentation (母语版本).
 
 孵 (Hatch) — to incubate. A platform that hatches your vision into reality.

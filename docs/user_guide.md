@@ -228,9 +228,6 @@ Hatch processes `.xacro` files automatically — no separate preprocessing step 
 
 ---
 
-*Next: Controlling Your Robot*
-*(Joint Control, Cartesian Control, Simulation vs. Real modes)*
-
 ## Controlling Your Robot
 
 Once your scene is loaded, the Motion Control panel appears on the right side
@@ -240,15 +237,18 @@ of the window. It has three sections:
 
 At the top of the Motion Control panel, you can:
 
-- **Select Mode**: Choose between Simulate and Real.
-  - **Simulate**: A virtual robot moves in the 3D view. No hardware required.
-    Uses Hatch's built-in IK solver. Safe for testing.
+- **Select Mode**: Choose from three operating modes.
+  - **Simulate (Local IK)**: A virtual robot moves in the 3D view. No hardware
+    required. Uses Hatch's built-in IK solver. Safe for testing.
+  - **Simulate (Real IK)**: Uses the real robot controller's IK solver for more
+    accurate results, but only moves the virtual robot. Requires a connection.
   - **Real**: Connects to physical hardware. Commands move the real robot.
     Requires network connection to the robot controller.
 
 - **Connect to Hardware**: Enter the robot's IP address and click Connect.
   The RTDE frequency defaults to 125 Hz — this works for most UR robots.
-  Once connected, the status indicator turns green.
+  Once connected, the status indicator turns green. Hatch automatically
+  upgrades the IK source from local to real robot solver.
 
 - **Disconnect**: Safely closes the connection to the robot.
 
@@ -261,7 +261,14 @@ The Joint Control tab shows a slider for each joint in the robot arm.
 2. The command goes to the active robot (simulated or real)
 3. The robot moves to the commanded position
 4. The robot publishes its new state
-5. The sliders and 3D view update to reflect the actual position
+5. The 3D view updates to reflect the actual position
+
+**Important: Sliders are input devices, not state displays.** The sliders show
+your commanded position — what you asked the robot to do. The 3D view shows
+what the robot is actually doing. If you need to see the real robot's current
+joint angles, they sync to the sliders once when you connect to hardware or
+switch to Real mode. After that, the sliders operate independently. This
+prevents feedback loops and keeps you in control.
 
 **Tips:**
 - **Home Position**: Returns all joints to their neutral (zero) position
@@ -272,10 +279,9 @@ The Joint Control tab shows a slider for each joint in the robot arm.
 ### Cartesian Control
 
 The Cartesian Control tab lets you move the robot's **Tool Center Point (TCP)**
- - the point in space where a tool would attach to the robot's wrist. Hatch
- automatically detects which link serves as the mounting point by finding the 
- last link in the kinematic chain. For UR robots this is `wrist_3_link`; for
- other robots it is detected from the URDF.
+— the point in space where a tool would attach to the robot's wrist. Hatch
+automatically detects which link serves as the mounting point by finding the 
+last link in the kinematic chain.
 
 **How it works:**
 1. You move a slider → Hatch computes the target TCP pose
@@ -298,19 +304,21 @@ robot's current joint positions. This may differ from the target if:
 **Reset to Current**: Sets the target sliders to match the current TCP pose.
 Useful when you want to make a small adjustment from the current position.
 
-### Simulation vs. Real Modes
+### Operating Modes
 
 | Mode | IK Solver | Robot Moves | Use Case |
 |------|-----------|-------------|----------|
-| Simulate | Hatch's built-in solver | Virtual only | Testing trajectories, learning the interface |
+| Simulate (Local IK) | Hatch's built-in solver | Virtual only | Testing trajectories offline, learning the interface |
+| Simulate (Real IK) | Real robot's controller | Virtual only | Validating IK against real controller before moving hardware |
 | Real | Real robot's controller | Physical hardware | Production use |
 
-**Switching from Simulate to Real**: The robot must be connected. If the real
-robot is at a different position than the simulation, the virtual robot will
-snap to the real robot's position.
+**Switching between modes:** The robot must be connected to use Real IK or
+Real mode. When switching to Real mode, the virtual robot snaps to the real
+robot's current position, and the joint sliders sync once to show where the
+hardware actually is. After that, sliders return to showing your commands.
 
-**Switching from Real to Simulate**: The virtual robot stays at the last known
-real robot position. You can continue testing without the hardware.
+**Switching back to Simulate:** The virtual robot stays at the last known
+position. You can continue testing without the hardware.
 
 ---
 
@@ -337,7 +345,7 @@ The ground grid helps with spatial orientation:
 
 - **Robot links**: Rendered as 3D meshes from the URDF files
 - **Robot position**: Updated in real time as joints move
-- **TCP indicator**: The tool center point is at the wrist_3_link by default
+- **TCP indicator**: The tool center point, auto-detected from the URDF
 - **Grid**: Ground reference plane at z=0
 - **Axes indicator**: Red=X, Green=Y, Blue=Z (bottom-left corner)
 
@@ -380,43 +388,45 @@ sensor mounting. It's all in the URDF. This means:
 
 ---
 
-## Troubleshooting
+## Adding Cameras and Sensors
 
-### My robot appears as red cubes instead of meshes
+Hatch supports RGB-D cameras (Orbbec Gemini 335, Intel RealSense D435) and
+laser scanners (Keyence LJ-V7200) as point cloud sources.
 
-The mesh files couldn't be found. Check:
-1. Are your meshes in the correct package directory? (e.g., `~/hatch/assets/robots/ur10/meshes/`)
-2. Does the URDF use `package://` paths? (not `file://` or relative paths)
-3. Is the package name in the `package://` path correct?
+### Setting Up a Camera
 
-### IK fails or the robot moves to the wrong position
+Include the camera in your scene URDF and mount it to the robot:
 
-The kinematic root might not be detected correctly. Hatch detects the
-true root automatically, but some robot URDFs have unusual structures.
-Check the console for "True root" messages on load.
+```xml
+<xacro:include filename="$(find orbbec_camera)/urdf/gemini_335_336.urdf.xacro"/>
 
-### Connection to real robot fails
+<joint name="wrist_to_camera" type="fixed">
+  <parent link="wrist_3_link"/>
+  <child link="camera_link"/>
+  <origin xyz="0 0 0.05" rpy="0 0 0"/>
+</joint>
+```
 
-- Verify the robot's IP address is correct and reachable
-- Check that the RTDE port (default 50002) is open
-- Ensure no other program is connected to the robot
-- Try increasing the frequency if commands are slow
+Hatch automatically detects the camera's depth optical frame. When the robot
+moves, the point cloud follows correctly.
 
-### The 3D view is slow or stuttering
+### Camera Control Panel
 
-- Reduce the render load: close other 3D applications
-- Larger mesh files take longer to load initially but don't affect animation speed
-- The render loop runs at 60 FPS and only renders when something changes
+- **Start/Stop** — begin or end camera streaming
+- **Camera Type** — switch between available cameras
+- **Resolution** — select from supported resolutions
+- **ROI Settings** — clip point cloud to a 3D bounding box
+- **Transform to World** — toggle world-frame transformation
+
+For full details, see the [Hardware Integration guide](integrating_hardware.md).
 
 ---
-
-*Next: Extending Hatch — Adding Your Own Components*
 
 ## Extending Hatch
 
 Hatch is designed to be extended. Every component you see — the joint sliders,
 the 3D view, the connection panel — was built using the same public APIs
-available to you. This section shows you how.
+available to you.
 
 ### The Event System: How Everything Communicates
 
@@ -427,8 +437,6 @@ Hatch components never call each other directly. They publish events to
 Slider moved → JOINT_COMMAND published → CommandHandler receives → Robot moves
                                                                     ↓
 Robot state changes → ROBOT_STATE published → StateHandler updates model
-                                             → JointControlPanel updates sliders
-                                             → CartesianControlPanel updates display
                                              → KinematicDisplay updates 3D view
 ```
 
@@ -437,12 +445,13 @@ events when something changes.
 
 ### Example: A Simple Position Logger
 
-Let's build a component that logs the robot's TCP position to a file whenever
-it moves. Create `my_logger.py` anywhere on your Python path:
+Create `my_logger.py` anywhere on your Python path:
 
 ```python
 """A simple TCP position logger for Hatch."""
 
+import numpy as np
+from scipy.spatial.transform import Rotation as R
 from core.world_state.event_types import EventType
 
 
@@ -462,14 +471,13 @@ class TCPLogger:
 
         # Initialize the log file with a header
         with open(self._filepath, 'w') as f:
-            f.write("timestamp,x,y,z,roll,pitch,yaw\n")
+            f.write("timestamp,x,y,z,rx,ry,rz\n")
 
         # Subscribe to robot state updates
         self._channel.subscribe(EventType.ROBOT_STATE, self._on_robot_state)
 
     def _on_robot_state(self, event):
         """Called every time the robot state changes."""
-        # Get TCP pose in world frame
         tcp_frame = f"{self._asset_id}_tcp"
         try:
             T = self._registry.get_transform(tcp_frame, "world")
@@ -479,21 +487,18 @@ class TCPLogger:
         x, y, z = T[0, 3], T[1, 3], T[2, 3]
         timestamp = event.data.get('timestamp', 0)
 
-        # Convert rotation matrix to Euler angles
-        import numpy as np
-        from scipy.spatial.transform import Rotation as R
-        rpy = R.from_matrix(T[:3, :3]).as_euler('xyz')
+        # Convert rotation matrix to rotation vector (human-readable)
+        rotvec = R.from_matrix(T[:3, :3]).as_rotvec()
 
         # Append to log file
         with open(self._filepath, 'a') as f:
             f.write(f"{timestamp:.3f},{x:.4f},{y:.4f},{z:.4f},"
-                    f"{rpy[0]:.4f},{rpy[1]:.4f},{rpy[2]:.4f}\n")
+                    f"{rotvec[0]:.4f},{rotvec[1]:.4f},{rotvec[2]:.4f}\n")
 ```
 
-**Wire it into Hatch** by adding a few lines to `MainWindow.__init__`:
+Wire it into Hatch by adding a few lines to `MainWindow.__init__`:
 
 ```python
-# After the robot is loaded, create the logger:
 self.tcp_logger = TCPLogger(
     state_channel=self.state_channel,
     transform_registry=self.transform_registry,
@@ -501,13 +506,7 @@ self.tcp_logger = TCPLogger(
 )
 ```
 
-That's it. Your logger receives every robot state update and writes to a CSV
-file. You can open it in any spreadsheet or analysis tool.
-
 ### Example: A Safety Zone Monitor
-
-Let's build something more useful — a component that publishes a warning
-if the TCP enters a defined zone:
 
 ```python
 """A safety zone monitor that warns when TCP enters restricted areas."""
@@ -519,8 +518,6 @@ from core.world_state.event_types import EventType
 class SafetyZoneMonitor:
     """
     Monitors TCP position and publishes warnings when it enters defined zones.
-
-    Zones are axis-aligned bounding boxes defined in world coordinates.
     """
 
     def __init__(self, state_channel, transform_registry, asset_id):
@@ -534,14 +531,10 @@ class SafetyZoneMonitor:
             "camera_area": (-0.2, 0.2, 0.8, 1.2, 0.0, 0.5),
         }
 
-        # Track which zones the TCP is currently inside
         self._active_zones = set()
-
-        # Subscribe to robot state
         self._channel.subscribe(EventType.ROBOT_STATE, self._on_robot_state)
 
     def _on_robot_state(self, event):
-        """Check TCP position against all zones."""
         tcp_frame = f"{self._asset_id}_tcp"
         try:
             T = self._registry.get_transform(tcp_frame, "world")
@@ -554,7 +547,6 @@ class SafetyZoneMonitor:
             inside = (xmin <= x <= xmax and ymin <= y <= ymax and zmin <= z <= zmax)
 
             if inside and zone_name not in self._active_zones:
-                # TCP entered the zone
                 self._active_zones.add(zone_name)
                 self._channel.publish(
                     EventType.ERROR_OCCURRED,
@@ -565,9 +557,7 @@ class SafetyZoneMonitor:
                     },
                     source="safety_zone_monitor"
                 )
-
             elif not inside and zone_name in self._active_zones:
-                # TCP left the zone
                 self._active_zones.discard(zone_name)
 ```
 
@@ -594,9 +584,6 @@ T = registry.get_transform("ur10_tcp", "world")
 position = T[:3, 3]
 rotation = T[:3, :3]
 
-# Get the frame chain between two frames
-chain = registry.get_chain("ur10_tcp", "ur10_base_link")
-
 # Be notified when transforms change
 def on_transform_changed(frame_name, transform):
     print(f"{frame_name} moved to {transform[:3, 3]}")
@@ -610,7 +597,7 @@ registry.register_callback(on_transform_changed)
 |-------------|----------------------|
 | `ROBOT_STATE` | Robot joint positions or TCP pose changed |
 | `ROBOT_LOADED` | A new robot was loaded |
-| `MODE_SWITCHED` | User switched between Simulate and Real |
+| `MODE_SWITCHED` | User switched between operating modes |
 | `CONNECTION_ESTABLISHED` | Connected to hardware |
 | `CONNECTION_LOST` | Connection to hardware dropped |
 | `ERROR_OCCURRED` | Something went wrong |
@@ -623,18 +610,14 @@ registry.register_callback(on_transform_changed)
 
 ### Design Principles for Extensions
 
-When building your own components, follow the same principles Hatch uses:
-
 **Be an observer, not a controller.** Subscribe to events to know what's
 happening. Don't modify the kinematic model or transform registry directly —
 those are owned by `StateHandler`.
 
-**Publish, don't call.** If your component detects something worth sharing
-(a warning, a measurement, a state change), publish an event. Don't call
-another component's methods directly.
+**Publish, don't call.** If your component detects something worth sharing,
+publish an event. Don't call another component's methods directly.
 
-**Clean up after yourself.** If your component subscribes to events, make
-sure to unsubscribe when it's destroyed:
+**Clean up after yourself.** Unsubscribe when your component is destroyed:
 
 ```python
 def cleanup(self):
@@ -645,58 +628,54 @@ def cleanup(self):
 vectors (`[rx, ry, rz]`) because they are human-readable. Use
 `scipy.spatial.transform.Rotation` for conversions.
 
-### When to Modify Hatch Itself
+---
 
-Extensions like the examples above work without changing Hatch's source code.
-Consider modifying Hatch itself when:
+## Troubleshooting
 
-- You need a new UI panel (dock widget in the main window)
-- You're adding support for a new robot brand or protocol
-- You've built something that every user would benefit from
-- You've found a bug or performance issue
+### My robot appears as red cubes instead of meshes
 
-Before contributing, read the Architecture Document to understand the
-principles that guide design decisions.
+The mesh files couldn't be found. Check:
+1. Are your meshes in the correct package directory? (e.g., `~/hatch/assets/robots/ur10/meshes/`)
+2. Does the URDF use `package://` paths? (not `file://` or relative paths)
+3. Is the package name in the `package://` path correct?
+
+### IK fails or the robot moves to the wrong position
+
+The kinematic root might not be detected correctly. Hatch detects the
+true root automatically, but some robot URDFs have unusual structures.
+Check the console for "True root" messages on load.
+
+### Connection to real robot fails
+
+- Verify the robot's IP address is correct and reachable
+- Check that the RTDE port (default 50002) is open
+- Ensure no other program is connected to the robot
+
+### The 3D view is slow or stuttering
+
+- Reduce the render load: close other 3D applications
+- Larger mesh files take longer to load initially but don't affect animation speed
+- The render loop runs at 60 FPS and only renders when something changes
+
+### My sliders don't match the robot's position
+
+This is by design. Sliders show your commanded position, not the robot's
+actual state. The 3D view shows where the robot really is. Sliders sync
+to the robot once when you connect or switch to Real mode, then operate
+independently. This prevents feedback loops.
 
 ---
 
-## Getting Help
+## Further Reading
 
-### Where Things Live
-
-| If you need to | Look here |
-|---------------|-----------|
-| Load a different robot | File → Load URDF |
-| Connect to hardware | Motion Control → Robot Connection |
-| Move individual joints | Motion Control → Joint Control |
-| Move the TCP | Motion Control → Cartesian Control |
-| Change the view | View menu or toolbar buttons |
-| Adjust grid size/color | View → Grid Settings |
-
-### Common Questions
-
-**Q: Can I load two robots at once?**
-
-Not in the current version. Hatch follows "one robot per session" to keep
-the architecture simple. Restart Hatch to load a different robot.
-
-**Q: Can I save the current robot state?**
-
-Yes — build a component that subscribes to `ROBOT_STATE` and saves the
-joint positions (see the TCP Logger example above).
-
-**Q: Does Hatch support cameras?**
-
-Camera support is under development. The architecture has a designed
-extension point for sensors. See the Architecture Document for details.
-
-**Q: How do I calibrate my sensor positions?**
-
-Sensor calibration is planned but not yet available. Currently, sensor
-positions come from the URDF file. For precise applications, pre-calibrate
-your URDF transforms before loading.
+| Document | What It Covers |
+|----------|---------------|
+| [Architecture](architecture.md) | The derived architecture — every component, every principle, and why they exist |
+| [Philosophy](philosophy.md) | Why Hatch exists — the Stubborn Student, the refusal to follow |
+| [Inverse Kinematics in Hatch](inverse_kinematics.md) | An intuitive guide to 6-DOF IK with worked example and implementation reference |
+| [Integrating Hardware](integrating_hardware.md) | Robot drivers, cameras, sensors — the event-driven pattern and case studies |
+| [Technical Notes](technical_notes.md) | Kinematic model vs. transform registry, URDF root detection, mesh loading |
 
 ---
 
-*This guide covers Hatch v1.0. For more detail, see the Architecture Document.*
-*Contributions and questions welcome.*
+*This guide covers Hatch v1.0. Contributions and questions welcome.*

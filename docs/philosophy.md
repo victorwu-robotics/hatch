@@ -1,6 +1,6 @@
 # Hatch (孵) Architecture Document
 
-## Prelude: My Original Intention
+## Origin Story
 In the beginning, I knew nothing about robots and robotics. My thinking was very simple.
 
 I didn't even know what a pose was. I thought: when I know the coordinate I want the robot tip to move to, I just give it that coordinate, and it moves there. This should be very simple.
@@ -12,6 +12,11 @@ After digging a little deeper, I realized there is orientation on top of positio
 It was a voyage of learning without a mentor.
 
 Every stage was a surprise. Nobody warned me. No mentor guided me. I learned by hitting walls.
+
+For my welding cell, the seam was a known curve on a steel plate. I needed
+the robot to trace it precisely, at a constant speed, with the torch at a
+fixed angle. I didn't need a planner to find a path through unknown space.
+I needed a driver to execute the path I had already defined.
 
 I was lonely. I didn't know who to turn to or where to look for answers.
 
@@ -48,7 +53,8 @@ optional — and should be. Hatch keeps them separate. If you want motion planni
 you add it as an extension. It never forces itself on you.
 
 ---
-This taught me a fundamental lesson: a tool should not be smarter than its user. If the user defines a path, the robot should follow that path. If the user wants a specific configuration, the robot should use that configuration. Intelligence the user didn't ask for is not intelligence — it is interference.
+
+This taught me a fundamental lesson: A tool that makes decisions the user didn't ask for is not intelligent — it is insubordinate. If the user defines a path, the robot should follow that path. If the user wants a specific configuration, the robot should use that configuration. Intelligence the user didn't ask for is not intelligence — it is interference.
 
 But this does not mean motion planning and collision avoidance have no value. There are situations where we genuinely need them.
 
@@ -192,6 +198,14 @@ You are invited.
 
 *— The Stubborn Student*
 *Hatch (孵)*
+
+---
+
+These experiences — the loneliness of learning without a mentor, the
+disappointment of tools that solved problems I didn't have, the danger
+of automation that acts without understanding — shaped ten principles.
+Each one was discovered through failure, not decreed from a design
+document. Together they form the foundation of Hatch.
 
 ---
 

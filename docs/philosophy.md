@@ -1,5 +1,79 @@
 # Hatch (孵) Architecture Document
 
+## Prelude: My Original Intention
+In the beginning, I knew nothing about robots and robotics. My thinking was very simple.
+
+I didn't even know what a pose was. I thought: when I know the coordinate I want the robot tip to move to, I just give it that coordinate, and it moves there. This should be very simple.
+
+Then I discovered that nothing like that exists.
+
+After digging a little deeper, I realized there is orientation on top of position — the concept of a pose. Later, I understood that things were not as simple as I thought — because of inverse kinematics. I had been thinking in terms of forward kinematics. I never knew there was such a thing as IK, nor the complexity and difficulty of finding joint angles.
+
+It was a voyage of learning without a mentor.
+
+Every stage was a surprise. Nobody warned me. No mentor guided me. I learned by hitting walls.
+
+I was lonely. I didn't know who to turn to or where to look for answers.
+
+Fortunately, the Internet already existed. I could think of reasonable questions, search with reasonable terms, and hope to find clues.
+
+When I found ROS, I was so happy. Someone had built something. There were drivers. There was a community. There were answers.
+
+But the happiness didn't last.
+
+---
+
+ROS was solving a different problem. It was built for warehouses full of robots and computers. It had distributed nodes, message serialization, launch files, and — most painfully for me — motion planning.
+
+For an engineering project, motion planning is unnecessary. My welding environment was known. The seam was fixed. The robot moves from A to B to C along a path I defined. There are no surprises.
+
+But ROS included motion planning because they wanted to build a robot that could move through any unforeseeable space. Their Descartes package tried to find paths in Cartesian space. I wasted a great deal of time trying to use it, without knowing that a six-axis arm can reach the same pose in up to eight different configurations. Shoulder left or right. Elbow up or down. Wrist flipped or not.
+
+Descartes, trying to be helpful, might choose one configuration for waypoint 1 and a different configuration for waypoint 2. The robot, moving between them, swings its elbow through space — potentially through the workpiece, through a fixture, through a person.
+
+The planner avoided a collision that didn't exist by creating a collision that did.
+
+---
+
+And MoveIt — the standard ROS interface for robot arms — was built around motion
+planning. Every tutorial, every example, every API path assumed I wanted to plan.
+I couldn't find a way to use its driver and IK solver without the planner coming
+along. Whether it was technically possible or not, the architecture didn't make
+it possible *for me* — and that's what matters when you're a user trying to get
+work done.
+
+A good architecture separates what the user might not need from what they must
+have. The driver is essential. The IK solver is essential. Motion planning is
+optional — and should be. Hatch keeps them separate. If you want motion planning,
+you add it as an extension. It never forces itself on you.
+
+---
+This taught me a fundamental lesson: a tool should not be smarter than its user. If the user defines a path, the robot should follow that path. If the user wants a specific configuration, the robot should use that configuration. Intelligence the user didn't ask for is not intelligence — it is interference.
+
+But this does not mean motion planning and collision avoidance have no value. There are situations where we genuinely need them.
+
+When a humanoid robot enters a home, reaching for a cup on a cluttered table, it needs collision avoidance. But it also needs to know: which configuration am I in? If I change configurations to avoid this obstacle, where will my elbow go? Will I knock over the vase behind me?
+
+This requires understanding. This is why I — the Stubborn Student — place so much emphasis on understanding.
+
+Hatch is not against motion planning. Hatch is against **blind** motion planning.
+
+---
+
+This platform exists so that the next person's journey need not be so lonely.
+
+For a welding cell, you don't need motion planning. You need a teach pendant and a device driver. Hatch gives you that.
+
+For a humanoid in a home, you will need motion planning. But you will need to understand configurations, inverse kinematics, and what your planner is actually doing first. Hatch teaches you that understanding.
+
+Hatch is not against automation. It is against automation whose behavior the user does not understand. The Stubborn Student's creed applies at every scale: from a single weld seam to a humanoid in a kitchen.
+
+---
+
+— The Stubborn Student
+孵 (Hatch)
+
+
 ---
 
 ## Prologue: On Understanding

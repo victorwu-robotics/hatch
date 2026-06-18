@@ -13,6 +13,8 @@ was discovered, not decreed. This is what it means to be a **derived architectur
 
 ---
 
+![Hatch Architecture Overview](images/hatch_top_level_architecture.pdf)
+
 ## Part One: The Scene
 
 ### Need: I must describe my robot and its world

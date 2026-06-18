@@ -496,7 +496,7 @@ def create_diagram():
             bbox=dict(boxstyle='round,pad=0.3', facecolor='white', edgecolor='gray', alpha=0.8))
 
     # Save and show
-    plt.savefig('hatch_top_level_architecture.pdf', format='pdf',
+    plt.savefig('hatch_top_level_architecture.png', format='png',
                 facecolor='white', edgecolor='none',
                 bbox_inches=None, pad_inches=0) # No bbox padding
     print("Diagram saved to hatch_top_level_architecture.pdf")

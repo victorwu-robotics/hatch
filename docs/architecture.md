@@ -13,7 +13,7 @@ was discovered, not decreed. This is what it means to be a **derived architectur
 
 ---
 
-![Hatch Architecture Overview](images/hatch_top_level_architecture.pdf)
+![Hatch Architecture Overview](images/hatch_top_level_architecture.png)
 
 ## Part One: The Scene
 

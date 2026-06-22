@@ -6,6 +6,8 @@ title: Hatch (孵) — Robotics Platform
 
 ![Architecture Diagram](images/hatch_architecture_a3.png)
 
+![Hatch Event Flow](images/hatch_event_flow.png)
+
 **A single-process, event-driven robotics platform for one robot arm.**
 
 ---

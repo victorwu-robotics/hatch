@@ -417,15 +417,6 @@ def create_event_flow_diagram():
         y2 = steps[i+1][0] + 0.35
         draw_arrow(ax, CENTER_X, y1, CENTER_X, y2, color='black', lw=1.5)
 
-    # Side annotation
-    ax.text(6.5, 3.8, 'UI Panel also receives\nROBOT_STATE → updates\nslider positions', 
-            fontsize=8, ha='left', va='center', style='italic', color='gray',
-            bbox=dict(boxstyle='round,pad=0.2', facecolor='white', 
-                     edgecolor='gray', alpha=0.8))
-
-    draw_arrow(ax, CENTER_X + 3, 4.8, 6.5, 3.8, 
-               color='gray', lw=1, connectionstyle="arc3,rad=0.3")
-
     # Save
     plt.savefig('hatch_event_flow.png', 
                 dpi=DPI, bbox_inches=None, pad_inches=0,

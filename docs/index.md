@@ -1,72 +1,81 @@
-# 孵 (Hatch) Robotics Platform
+---
+title: Hatch (孵) — Robotics Platform
+---
 
-> *"A platform is not defined by what it can do. It is defined by what it will not do — and why."*
+# Hatch (孵)
 
-Hatch is a lightweight, event-driven robotics platform for a single robot arm.
-It gives you a control panel, a live 3D view, and a clean Python API — without
-the complexity of ROS.
+![Architecture Diagram](images/hatch_top_level_architecture.png)
 
-**Hatch is for those who cannot afford ROS.** Not just financially — the
-cognitive complexity, the learning curve, the maintenance burden. If you have
-one robot arm and a job to do, Hatch is built for you.
+**A single-process, event-driven robotics platform for one robot arm.**
 
 ---
 
-## Documentation
+## For the Young Engineer
 
-### Core
+If you are about to use a robot arm for the first time, you are where I was. You have the hardware. You have the task. You do not yet have the mental model.
 
-| Document | What It Covers |
-|----------|---------------|
-| [Architecture](architecture.md) | The derived architecture — every component, every principle, and why they exist |
-| [架构 (Chinese Architecture)](architecture_cn.md) | 推导出来的架构 — 每一个组件、每一条原则，以及它们为何存在 |
-| [Philosophy](philosophy.md) | Why Hatch exists — the Stubborn Student, the refusal to follow, the demand to understand |
-| [哲学 (Chinese Philosophy)](philosophy_cn.md) | 孵的哲学文献 — 固执的学生，十大原则，论形式主义 |
-| [User Guide](user_guide.md) | Getting started, controlling your robot, extending Hatch |
+This is normal. This is correct. The mental model is not trivial.
 
-### Inverse Kinematics
+Hatch is my attempt to give you what I did not have: a transparent space where every concept is visible, every movement is inspectable, and every decision is yours.
 
-| Document | What It Covers |
-|----------|---------------|
-| [Inverse Kinematics in Hatch](inverse_kinematics.md) | An intuitive guide with worked example and implementation reference |
+- **Move one joint at a time.** See the pose change. That is *joint space*.
+- **Move the tool in XYZ.** See the joints solve. That is *Cartesian space* and *Inverse Kinematics*.
+- **See the transform tree update in real time.** That is *knowing where everything is*.
+- **See every configuration, every limit, every possibility.** That is *understanding before trusting*.
 
-### Hardware Integration
+Use Hatch to learn. Then use whatever framework fits your production needs. The understanding you build here will serve you in any system.
 
-| Document | What It Covers |
-|----------|---------------|
-| [Integrating Hardware](integrating_hardware.md) | Robot drivers, cameras, sensors — the event-driven pattern, RTDE reference, path execution, camera pipeline, and the Keyence reverse-engineering case study |
-
-### Technical Notes
-
-| Document | What It Covers |
-|----------|---------------|
-| [Technical Notes](technical_notes.md) | Kinematic model vs. transform registry, fixed chain tail, URDF root detection, DAE mesh loading |
-
-### Architecture History
-
-| Version | Link |
-|---------|------|
-| V1.0 (original) | [architecture_v1.md](architecture_v1.md) |
-| V2.0 (the fire) | [philosophy.md](philosophy.md) |
-| V3.0 (current) | [architecture.md](architecture.md) |
+[Hatch is pre-flight. The flight is yours.](#philosophy)
 
 ---
 
-## Quick Start
+## Try Hatch in 5 Minutes
 
 ```bash
 git clone https://github.com/victorwu-robotics/hatch.git
 cd hatch
+python -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 python -m ui.main_window
 ```
-Then: **File → Load URDF →** select your robot's URDF or xacro file.
 
-## Status
-Active development. Core platform is functional and tested with real hardware
-(UR10, Han's E15-PRO). Documentation is extensive and honest about limitations.
+File → Load URDF → Select your robot → Move a slider → See it move.
 
-Next priorities: automated tests, configuration system, TCP switching UI,
-additional Chinese documentation (母语版本).
+Full Getting Started Guide →
+What Hatch Is
+Table
+Principle	What It Means
+Single Process	One Python process. One memory space. No distributed systems.
+Event-Driven	No polling. The timer is the only driver.
+Everything in URDF	The scene description is the single source of truth.
+Visualizer as Mind-Prying Tool	See every transform, every state, every decision.
+UI Separate from Services	Panels publish events. They do not control.
+Full Architecture →
+Documentation Paths
+Table
+I want to...	Start here
+Try Hatch now	Getting Started (30 min)
+Understand the philosophy	Philosophy (10 min summary, 2 hr deep)
+Understand the architecture	Architecture (diagram + walkthrough)
+Connect real hardware	Integrating Hardware
+Extend Hatch	API Reference
+Read the story	Technical Notes
+Principles
+#0 Individuals Before Groups | #1 Single Process | #2 Event-Driven | #3 Visualizer as Mind-Prying Tool | #4 Everything in URDF | #5 Space = TransformRegistry | #6 Time = StateChannel | #7 Movements as Models | #8 Pure Python | #9 UI Separate from Services | #10 One Robot Per Session
+Full Principles →
+plain
 
-孵 (Hatch) — to incubate. A platform that hatches your vision into reality.
+---
+
+## **Where "For the Young Engineer" Goes**
+
+| Location | Purpose |
+|----------|---------|
+| **`index.md`** (top) | First thing visitors see — sets the tone |
+| **`philosophy.md`** (top, before Origin Story) | Deeper context for readers who want the full story |
+| **`getting-started.md`** (introduction) | Reminds learners why they are here |
+
+---
+
+Should I proceed with **Recommendation 2: Create `getting-started.md`**? Or would you like to refine the `index.md` draft first?

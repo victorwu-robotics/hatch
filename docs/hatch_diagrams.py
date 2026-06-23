@@ -228,7 +228,7 @@ def create_architecture_diagram():
     # StateHandler
     statehandler_x = CENTER_X
     statehandler_y = LAYER_Y['robot'] - 1.1
-    statehandler_w = 13
+    statehandler_w = 8
     statehandler_h = 1.0
 
     draw_bubble(ax, statehandler_x, statehandler_y, statehandler_w, statehandler_h,
@@ -266,7 +266,7 @@ def create_architecture_diagram():
                    border_color='#155724', pad=BUBBLE_PAD)
         viz_positions.append((x, y, w, h))
         draw_arrow(ax, mainwindow_x, mainwindow_bottom, x, y + h/2,
-                   color='gray', lw=1, label='creates' if i == 0 else None, label_fraction=0.85)
+                   color='gray', lw=1, label='creates' if i == 0 else None, label_fraction=0.8)
 
     # Arrow from StateHandler to KinematicDisplay
     draw_arrow(ax, statehandler_x, statehandler_y - statehandler_h/2,

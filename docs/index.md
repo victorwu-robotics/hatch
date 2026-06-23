@@ -51,7 +51,7 @@ python -m ui.main_window
 | Principle |	What It Means |
 |-----------|-----------------|
 | Single Process | One Python process. One memory space. No distributed systems. |
-| Event-Driven	No polling. | The timer is the only driver. |
+| Event-Driven	No polling. | No polling. Actions happen in response to events — move a slider, robot moves; receive a frame, display updates. Nothing happens without a reason. |
 | Everything in URDF | The scene description is the single source of truth. |
 | Visualizer as Mind-Prying Tool | See every transform, every state, every decision. |
 | UI Separate from Services | Panels publish events. They do not control.|
@@ -69,16 +69,3 @@ python -m ui.main_window
 | Extend Hatch | [API Reference](api_reference.md) |
 | Read the story | [Technical Notes](technical_notes.md) |
 
-## Principles
-
-- Individuals before groups
-- A single process, single memory space
-- Event-driven, no polling
-- The visualizer as a mind-prying tool — see everything, hide nothing
-- Everything in URDF
-- Space is the TransformRegistry
-- Time is the StateChannel
-- Movements are models
-- Pure Python
-- The UI separate from services
-- One robot, one session

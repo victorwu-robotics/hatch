@@ -27,7 +27,7 @@ Hatch is my attempt to give you what I did not have: a transparent space where e
 
 Use Hatch to learn. Then use whatever framework fits your production needs. The understanding you build here will serve you in any system.
 
-[Hatch is pre-flight. The flight is yours.](#philosophy)
+*Hatch is pre-flight. The flight is yours.*
 
 ---
 

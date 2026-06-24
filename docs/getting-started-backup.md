@@ -1,3 +1,4 @@
+
 # Getting Started with Hatch
 
 **Time:** 30 minutes  
@@ -99,32 +100,16 @@ After loading:
 
 ---
 
-## Step 4: Check the Mode (1 minute)
+## Step 4: Move the Robot in Joint Space (5 minutes)
 
-Before moving anything, check the **Mode** dropdown in the Motion Control panel.
-
-| Mode | What It Does | When to Use |
-|------|-------------|-------------|
-| **Simulate** | Local IK solver, no hardware connection | Learning, testing, debugging |
-| **Real** | Connects to physical robot via RTDE | Production, actual movement |
-
-**For this tutorial:** Select **Simulate**.
-
-> **Why this matters:** In Simulate mode, you are safe. The robot exists only in software. In Real mode, your commands move physical hardware.
-
----
-
-## Step 5: Move the Robot in Joint Space (5 minutes)
-
-![Joint Control](images/joint_control.png)
-
-Click the **Joint Control** tab.
+In the **Joint Control** tab:
 
 | Control | What It Does |
 |---------|-------------|
-| **Joint sliders** | Drag or scroll to move one joint |
-| **Home Position** | Return all joints to neutral |
-| **Zero All** | Set all joints to zero |
+| **Shoulder Pan Joint** | Rotates the base of the arm left/right |
+| **Shoulder Lift Joint** | Lifts the upper arm up/down |
+| **Elbow Joint** | Bends the elbow |
+| **Wrist 1, 2, 3** | Orient the tool |
 
 **Try this:**
 1. Drag the **Shoulder Lift Joint** slider to -1.0
@@ -132,7 +117,7 @@ Click the **Joint Control** tab.
 3. Drag the **Elbow Joint** slider to -1.5
 4. Watch the elbow bend
 
-> **What you learn:** Each slider is your **intent** — a value you want the joint to reach. The 3D view shows the **result** — the robot's actual pose after applying your intent. The slider and the robot state are connected by the forward kinematics engine, but they are not the same thing. The slider is input; the 3D view is output.
+> **What you learn:** Each slider controls one motor. The 3D view shows the result. The slider value is your **command** — the 3D view shows the **actual state**. They are not the same thing.
 
 **Key buttons:**
 - **Home Position** — Returns all joints to neutral
@@ -140,68 +125,30 @@ Click the **Joint Control** tab.
 
 ---
 
-## Step 6: Move the Robot in Cartesian Space (5 minutes)
-
-![Cartesian Control](images/cartesian_control.png)
+## Step 5: Move the Robot in Cartesian Space (5 minutes)
 
 Click the **Cartesian Control** tab.
 
-Each axis has a **slider** (coarse) and **[-] [+]** buttons (fine). Both control the same target value.
-
 | Control | What It Does |
 |---------|-------------|
-| **X, Y, Z sliders** | Drag or scroll to move the tool tip in 3D space (meters) |
-| **RX, RY, RZ sliders** | Drag or scroll to rotate the tool |
-| **[-] [+] buttons** | Click to move one exact step in that axis |
-| **Linear Step** | Choose precision for X, Y, Z: 0.0001, 0.001, 0.01, or 0.1 meters |
-| **Angular Step** | Choose precision for RX, RY, RZ: 0.001, 0.01, 0.1, or 1 (degrees or radians) |
-| **degrees / radians** | Toggle display unit for rotation. Internal commands always use radians. |
-| **Reset to Current** | Snap target back to the robot's actual pose |
-
-**Linear step reference:**
-
-| Step | Distance |
-|------|----------|
-| **0.0001** | 0.1 mm |
-| **0.001** | 1 mm |
-| **0.01** | 1 cm |
-| **0.1** | 10 cm |
-
-**Angular step reference (displayed unit):**
-
-| Step | Degrees | Radians |
-|------|---------|---------|
-| **0.001** | 0.001° | 0.001 rad |
-| **0.01** | 0.01° | 0.01 rad |
-| **0.1** | 0.1° | 0.1 rad |
-| **1** | 1° | 1 rad |
+| **X, Y, Z** | Move the tool tip in 3D space (meters) |
+| **RX, RY, RZ** | Rotate the tool (rotation vectors, radians) |
 
 **Try this:**
-1. Ensure **Mode** is still **Simulate**
-2. Set **Linear Step** to **0.01** (1 cm)
-3. Set **Angular Step** to **0.1** and select **degrees**
-4. Drag the **X slider** right — robot reaches forward
-5. Now click **[+]** next to X twice — robot moves exactly 2 cm more
-6. Click **[+]** next to RZ three times — tool rotates 0.3°
+1. Set **Step Size** to 1cm
+2. Click the **X+** button repeatedly
+3. Watch the robot reach forward in the 3D view
+4. Observe the joint sliders updating automatically — this is **Inverse Kinematics**
 
-> **What you learn:** The slider gets you close quickly. The buttons count exact steps. One click = one step size. No guessing. As you drag or click, Hatch continuously solves Inverse Kinematics to find joint angles that reach your target. The 3D view updates in real time. The **Auto-move enabled** label confirms the solver is running.
+> **What you learn:** Cartesian control moves the tool tip. Hatch solves the joint angles for you. You see both the tool position and the joint configuration that achieves it.
 
-**Degrees vs Radians:**
-- Select **degrees** for intuitive rotation values (90°, 180°)
-- Select **radians** for precision work (π/2, π)
-- The toggle only changes **display** — all internal commands and robot communication use **radians**, the standard in robotics
-
-**What you do NOT see:**
-- Joint angles. The Cartesian tab shows target pose, not joint values. The Joint Control and Cartesian Control tabs are mutually exclusive — you cannot see both at once.
-- The 3D view and **Current TCP** display are your feedback.
-
-**If the robot stops moving:**
-- You may have dragged into an unreachable pose (IK failure)
-- Click **Reset to Current** to recover
+**Key buttons:**
+- **Reset to Current** — Sets target to match current pose
+- **Auto-move enabled** — Updates robot in real time as you adjust
 
 ---
 
-## Step 7: Inspect the Robot (5 minutes)
+## Step 6: Inspect the Robot (5 minutes)
 
 **Left panel: Joint Frames**
 
@@ -213,29 +160,20 @@ Check **Show All** to see coordinate frames on every link.
 | **Green axis** | Y | Left/right in that link's frame |
 | **Blue axis** | Z | Up/down in that link's frame |
 
-![Joint Frames](images/joint_frames.png)
-
-**Check a frame** in the Joint Frames list to see its real-time position and rotation. The display updates the next time the robot moves.
+**Hover over a frame** to see its real-time position and rotation.
 
 > **What you learn:** Every frame comes from the URDF. What you see is exactly what the robot knows. There is no hidden state.
 
 ---
 
-## Step 8: Connect to Real Hardware (Optional, 5 minutes)
+## Step 7: Switch to Real Hardware (Optional, 5 minutes)
 
 When you are ready to control a physical robot:
 
-![Robot Connection](images/robot_connection.png)
-
-1. **Robot Connection** panel → Enter the robot's IP address (default: 192.168.1.10)
-2. Click **Connect to Robot**
-3. Once connected, the virtual robot snaps to the real robot's pose
-4. All sliders — both Joint Control and Cartesian Control — snap to the real robot's values
-
-> **What happens:** Hatch silently switches to using the **real robot's IK solver** (factory-calibrated parameters) instead of the local analytic solver. The Mode dropdown still shows **Simulate**. At this stage, moving the virtual robot does **not** move the real robot — but the IK solutions are now computed by the real robot controller, giving you a more accurate TCP pose.
-
-5. When you are confident, select **Mode: Real**
-6. Now your commands move the physical robot
+1. **Robot Connection** panel → Enter IP address (default: 192.168.1.10)
+2. **Mode** dropdown → Select **"Real"**
+3. Click **Connect to Robot**
+4. Move a slider — the physical robot moves
 
 > **Warning:** Ensure the robot workspace is clear. Hatch does not have collision detection. You are responsible for safety.
 
@@ -247,12 +185,10 @@ When you are ready to control a physical robot:
 |---------|---------------|
 | **Joint space** | Joint Control sliders |
 | **Cartesian space** | Cartesian Control tab |
-| **Inverse Kinematics** | Cartesian control — solver runs in real time |
-| **Forward kinematics** | 3D view, Frame Panel |
+| **Inverse Kinematics** | Cartesian control updating joint sliders |
 | **Digital twin** | 3D view matching robot state |
 | **URDF as scene** | Robot loaded from URDF, frames from URDF |
 | **Event-driven** | Slider moves → robot updates (no polling) |
-| **UI separate from services** | Panels publish events; they do not command |
 
 ---
 
@@ -280,3 +216,37 @@ When you are ready to control a physical robot:
 ---
 
 *Hatch is pre-flight. The flight is yours.*
+
+---
+
+## **Key Features of This Tutorial**
+
+| Feature | Why It Matters |
+|---------|---------------|
+| **Time estimates per step** | User knows commitment |
+| **Screenshots referenced** | Visual confirmation at each step |
+| **"What you see" explanations** | Connects UI to concepts |
+| **"What you learn" callouts** | Reinforces the educational mission |
+| **Troubleshooting section** | Reduces frustration |
+| **No principle numbers** | Consistent with your new style |
+
+---
+
+## **What You Need to Provide**
+
+| Item | Your Action |
+|------|-------------|
+| **Screenshots** | Take and save to `docs/images/` |
+| **Example URDF path** | Confirm `assets/robots/ur10/` exists |
+| **Default robot IP** | Confirm 192.168.1.10 is correct |
+| **Time estimates** | Adjust if steps take longer/shorter |
+
+---
+
+## **Questions for You**
+
+1. **Should I include the camera pipeline** (Point Cloud loading) in this tutorial, or keep it separate?
+2. **Should I mention the Joint Frame panel** (showing/hiding link frames) or is that too advanced?
+3. **Should there be a "Quick Start"** (5 min) vs this "Getting Started" (30 min)?
+
+Shall I refine this draft or proceed to the next recommendation?

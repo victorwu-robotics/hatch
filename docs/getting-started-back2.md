@@ -116,15 +116,14 @@ Before moving anything, check the **Mode** dropdown in the Motion Control panel.
 
 ## Step 5: Move the Robot in Joint Space (5 minutes)
 
-![Joint Control](images/joint_control.png)
-
 Click the **Joint Control** tab.
 
 | Control | What It Does |
 |---------|-------------|
-| **Joint sliders** | Drag or scroll to move one joint |
-| **Home Position** | Return all joints to neutral |
-| **Zero All** | Set all joints to zero |
+| **Shoulder Pan Joint** | Rotates the base of the arm left/right |
+| **Shoulder Lift Joint** | Lifts the upper arm up/down |
+| **Elbow Joint** | Bends the elbow |
+| **Wrist 1, 2, 3** | Orient the tool |
 
 **Try this:**
 1. Drag the **Shoulder Lift Joint** slider to -1.0
@@ -142,8 +141,6 @@ Click the **Joint Control** tab.
 
 ## Step 6: Move the Robot in Cartesian Space (5 minutes)
 
-![Cartesian Control](images/cartesian_control.png)
-
 Click the **Cartesian Control** tab.
 
 Each axis has a **slider** (coarse) and **[-] [+]** buttons (fine). Both control the same target value.
@@ -151,45 +148,27 @@ Each axis has a **slider** (coarse) and **[-] [+]** buttons (fine). Both control
 | Control | What It Does |
 |---------|-------------|
 | **X, Y, Z sliders** | Drag or scroll to move the tool tip in 3D space (meters) |
-| **RX, RY, RZ sliders** | Drag or scroll to rotate the tool |
+| **RX, RY, RZ sliders** | Drag or scroll to rotate the tool (rotation vectors, radians) |
 | **[-] [+] buttons** | Click to move one exact step in that axis |
-| **Linear Step** | Choose precision for X, Y, Z: 0.0001, 0.001, 0.01, or 0.1 meters |
-| **Angular Step** | Choose precision for RX, RY, RZ: 0.001, 0.01, 0.1, or 1 (degrees or radians) |
-| **degrees / radians** | Toggle display unit for rotation. Internal commands always use radians. |
+| **Step size** | Choose precision: 0.0001, 0.001, 0.01, or 0.1 (meters or degrees) |
 | **Reset to Current** | Snap target back to the robot's actual pose |
 
-**Linear step reference:**
+**Step size reference:**
 
-| Step | Distance |
-|------|----------|
-| **0.0001** | 0.1 mm |
-| **0.001** | 1 mm |
-| **0.01** | 1 cm |
-| **0.1** | 10 cm |
-
-**Angular step reference (displayed unit):**
-
-| Step | Degrees | Radians |
-|------|---------|---------|
-| **0.001** | 0.001° | 0.001 rad |
-| **0.01** | 0.01° | 0.01 rad |
-| **0.1** | 0.1° | 0.1 rad |
-| **1** | 1° | 1 rad |
+| Step | Linear | Angular |
+|------|--------|---------|
+| **0.0001** | 0.1 mm | 0.001° |
+| **0.001** | 1 mm | 0.01° |
+| **0.01** | 1 cm | 0.1° |
+| **0.1** | 10 cm | 1° |
 
 **Try this:**
 1. Ensure **Mode** is still **Simulate**
-2. Set **Linear Step** to **0.01** (1 cm)
-3. Set **Angular Step** to **0.1** and select **degrees**
-4. Drag the **X slider** right — robot reaches forward
-5. Now click **[+]** next to X twice — robot moves exactly 2 cm more
-6. Click **[+]** next to RZ three times — tool rotates 0.3°
+2. Select step size **0.01** (1 cm / 0.1°)
+3. Drag the **X slider** right — robot reaches forward
+4. Now click **[+]** next to X twice — robot moves exactly 2 cm more
 
 > **What you learn:** The slider gets you close quickly. The buttons count exact steps. One click = one step size. No guessing. As you drag or click, Hatch continuously solves Inverse Kinematics to find joint angles that reach your target. The 3D view updates in real time. The **Auto-move enabled** label confirms the solver is running.
-
-**Degrees vs Radians:**
-- Select **degrees** for intuitive rotation values (90°, 180°)
-- Select **radians** for precision work (π/2, π)
-- The toggle only changes **display** — all internal commands and robot communication use **radians**, the standard in robotics
 
 **What you do NOT see:**
 - Joint angles. The Cartesian tab shows target pose, not joint values. The Joint Control and Cartesian Control tabs are mutually exclusive — you cannot see both at once.
@@ -213,29 +192,20 @@ Check **Show All** to see coordinate frames on every link.
 | **Green axis** | Y | Left/right in that link's frame |
 | **Blue axis** | Z | Up/down in that link's frame |
 
-![Joint Frames](images/joint_frames.png)
-
-**Check a frame** in the Joint Frames list to see its real-time position and rotation. The display updates the next time the robot moves.
+**Hover over a frame** to see its real-time position and rotation.
 
 > **What you learn:** Every frame comes from the URDF. What you see is exactly what the robot knows. There is no hidden state.
 
 ---
 
-## Step 8: Connect to Real Hardware (Optional, 5 minutes)
+## Step 8: Switch to Real Hardware (Optional, 5 minutes)
 
 When you are ready to control a physical robot:
 
-![Robot Connection](images/robot_connection.png)
-
-1. **Robot Connection** panel → Enter the robot's IP address (default: 192.168.1.10)
-2. Click **Connect to Robot**
-3. Once connected, the virtual robot snaps to the real robot's pose
-4. All sliders — both Joint Control and Cartesian Control — snap to the real robot's values
-
-> **What happens:** Hatch silently switches to using the **real robot's IK solver** (factory-calibrated parameters) instead of the local analytic solver. The Mode dropdown still shows **Simulate**. At this stage, moving the virtual robot does **not** move the real robot — but the IK solutions are now computed by the real robot controller, giving you a more accurate TCP pose.
-
-5. When you are confident, select **Mode: Real**
-6. Now your commands move the physical robot
+1. **Robot Connection** panel → Enter IP address (default: 192.168.1.10)
+2. **Mode** dropdown → Select **"Real"**
+3. Click **Connect to Robot**
+4. Move a slider — the physical robot moves
 
 > **Warning:** Ensure the robot workspace is clear. Hatch does not have collision detection. You are responsible for safety.
 

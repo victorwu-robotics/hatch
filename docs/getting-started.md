@@ -9,7 +9,7 @@
 
 ### What You Need
 
-- A computer running Linux (Ubuntu 20.04+ recommended), Windows, or macOS
+- A computer running Ubuntu 20.04+ (recommended)
 - Python 3.10 or higher
 - A URDF or XACRO file for your robot (or use the example in `assets/robots/`)
 
@@ -32,7 +32,7 @@ cd hatch
 
 # Create a virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt

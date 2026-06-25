@@ -296,6 +296,59 @@ KinematicDisplay sets _needs_render = True
 VisualizerEngine renders on next timer tick
 ```
 
+### Mode State Machine
+
+Hatch has three modes, not two. The mode dropdown in the UI shows `Simulate` and `Real`, but internally there is a third state: `SIMULATE_REAL_IK`.
+
+## Mode State Machine
+
+```
+                    ┌─────────────────┐
+                    │  SIMULATE_LOCAL │
+                    │  (local IK,     │
+                    │   virtual only) │
+                    └──┬───────────┬──┘
+                       │           ▴    
+                    connect        │
+                (real robot)   disconnect
+                       │           │
+                       ▼           │
+                    ┌──┴───────────┴──┐
+                    │ SIMULATE_REAL_IK│
+                    │ (real IK,       │
+                    │  virtual only)  │
+                    └────────┬────────┘
+                             │
+                    switch to REAL
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │      REAL       │
+                    │ (real IK,       │
+                    │  real movement) │
+                    └─────────────────┘
+                             │
+                    switch to SIMULATE
+                             │
+                             └────► sync virtual robot to real position
+                                   (prevents jump when returning to sim)
+```
+
+| Mode | What It Means | Safety |
+|------|-------------|--------|
+| `SIMULATE_LOCAL` | Local IK solver, virtual robot only | Cannot move real robot |
+| `SIMULATE_REAL_IK` | Real robot's IK solver, virtual robot only | Validates IK accuracy before motion |
+| `REAL` | Real IK solver, real robot moves | Hardware moves — use with caution |
+
+**Transitions:**
+
+- `SIMULATE_LOCAL` → `SIMULATE_REAL_IK`: Connect to real robot (RTDE available)
+- `SIMULATE_REAL_IK` → `SIMULATE_LOCAL`: Disconnect from real robot
+- `SIMULATE_REAL_IK` → `REAL`: User switches to Real mode
+- `REAL` → `SIMULATE_LOCAL`: User switches to Simulate mode (virtual robot syncs to real position)
+
+**Key safety property:** You cannot enter `REAL` mode without first passing through `SIMULATE_REAL_IK`. This ensures you verify the real robot's IK accuracy before commanding motion.
+
 A single owner of state updates. No duplicate registrations. No missed
 updates. No race conditions.
 
@@ -579,6 +632,16 @@ Single owner of state updates.**
 
 ---
 
+## Data Flow Diagram
+
+The event flow (above) shows *control* — how a user action propagates through the system. The data flow shows *state* — how information moves as the robot moves.
+
+![Hatch Data Flow](images/hatch_data_flow_diagram.png)
+
+**Key invariant:** `StateHandler` is the *only* component that writes to `KinematicModel` and `TransformRegistry` after initial load. All other components read.
+
+**Key performance property:** When the robot is stationary, the render loop checks one boolean per display and returns. No VTK operations. No transform recomputation. CPU usage approaches zero.
+---
 ## Directory Structure
 
 ```

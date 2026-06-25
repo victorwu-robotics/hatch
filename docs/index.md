@@ -1,35 +1,22 @@
 ---
-title: Hatch (孵) — Robotics Platform
+layout: default
+title: Hatch (孵) 🐣
 ---
 
 # Hatch (孵) 🐣
 
-![Architecture Diagram](images/hatch_architecture_a3.png)
+> A single-process, event-driven robotics application development platform.
+> One robot. One URDF. No polling.
 
-![Hatch Event Flow](images/hatch_event_flow.png)
-
-**A single-process, event-driven robotics platform for one robot arm.**
-
----
-
-## For the Young Engineer
-
-If you are about to use a robot arm for the first time, you are where I was. You have the hardware. You have the task. You do not yet have the mental model.
-
-This is normal. This is correct. The mental model is not trivial.
-
-Hatch is my attempt to give you what I did not have: a transparent space where every concept is visible, every movement is inspectable, and every decision is yours.
-
-- **Move one joint at a time.** See the pose change. That is *joint space*.
-- **Move the tool in XYZ.** See the joints solve. That is *Cartesian space* and *Inverse Kinematics*.
-- **See the transform tree update in real time.** That is *knowing where everything is*.
-- **See every configuration, every limit, every possibility.** That is *understanding before trusting*.
-
-Use Hatch to learn. Then use whatever framework fits your production needs. The understanding you build here will serve you in any system.
-
-*Hatch is pre-flight. The flight is yours.*
+**Recommended OS:** Ubuntu 20.04. Windows and macOS have not been tested.
 
 ---
+
+## What It Looks Like
+
+*[SCREENSHOT: Main window with a UR10 loaded, joint sliders visible, 3D view showing the robot]*
+
+Hatch loads any URDF, solves IK in real time, and controls real hardware — all in a single process, without polling loops, and with direct VTK visualization.
 
 ## Try Hatch in 5 Minutes
 
@@ -42,30 +29,72 @@ pip install -r requirements.txt
 python -m ui.main_window
 ```
 
-**File → Load URDF →** Select your robot's URDF or xacro file
+**Load a robot:** File → Load URDF → select a `.urdf` or `.xacro` file.
 
-[Full Getting Started Guide →](getting-started.md)
+**Move it:** Drag joint sliders — the 3D view updates in real time.
 
-## What Hatch Is
+**Connect to hardware (optional):**
+```bash
+pip install ur-rtde  # for Universal Robots
+# In Hatch: Robots → Connect → enter robot IP → switch to Real mode
+```
 
-| Principle |	What It Means |
-|-----------|-----------------|
-| Single Process | One Python process. One memory space. No distributed systems. |
-| Event-Driven	No polling. | No polling. Actions happen in response to events — move a slider, robot moves; receive a frame, display updates. Nothing happens without a reason. |
-| Everything in URDF | The scene description is the single source of truth. |
-| Visualizer as Mind-Prying Tool | See every transform, every state, every decision. |
-| UI Separate from Services | Panels publish events. They do not control.|
+*[SCREENSHOT: File → Load URDF dialog with a URDF selected]*
 
-[Full Architecture →](architecture.md)
+## Architecture at a Glance
+
+Three core abstractions everything else builds on:
+
+| Abstraction | Purpose | File |
+|-------------|---------|------|
+| **TransformRegistry** | All spatial relationships, lazy-evaluated | `core/world_state/transform_registry.py` |
+| **StateChannel** | All events, publish/subscribe, no polling | `core/world_state/state_channel.py` |
+| **KinematicModel** | Pure Python URDF parsing + FK/IK | `core/kinematics/kinematic_model.py` |
+
+*[SCREENSHOT: Simplified data flow diagram — see [Architecture](architecture.md)]*
+
+## Principles (Summary)
+
+These principles were discovered through derivation — each one demanded by a need that arose during development.
+
+| # | Principle | Discovered From |
+|---|-----------|---------------|
+| 0 | Individuals Before Groups | Need: one robot, one session |
+| 1 | Single Process, Single Memory Space | Need: no serialization overhead |
+| 2 | Event-Driven, No Polling | Need: decoupled communication |
+| 3 | Visualizer as Mind-Prying Tool | Need: see the robot's true state |
+| 4 | Everything in URDF | Need: describe the scene |
+| 5 | Space = TransformRegistry | Need: know where everything is |
+| 6 | Time = StateChannel | Need: components must communicate |
+| 7 | Movements as Models | Need: commands as data |
+| 8 | Pure Python | Need: rapid development |
+| 9 | UI Separate from Services | Need: controls without coupling |
+| 10 | One Robot Per Session | Need: clean boundaries |
+
+See [Philosophy](philosophy.md) for the full derivation from first principles.
+
+## Hardware Support
+
+| Hardware | Status | Notes |
+|----------|--------|-------|
+| Simulated Robot | ✅ Full | IK solving, state publishing, no hardware needed |
+| Universal Robots (UR) | ✅ Working | RTDE interface via `ur-rtde` |
+| Orbbec Camera | ✅ Working | — |
+| Keyence Laser Scanner | ✅ Working | — |
+| RealSense Camera | 🔄 Planned | URDF-mounted, no point cloud yet |
 
 ## Documentation Paths
 
-| I want to... | Start here |
-|--------------|------------|
-| Try Hatch now | [Getting Started](getting-started.md) (30 min) |
-| Understand the philosophy | [Philosophy](philosophy.md) (10 min summary, 2 hr deep) |
-| Understand the architecture | [Architecture](architecture.md) (diagram + walkthrough) |
-| Connect real hardware | [Integrating Hardware](integrating_hardware.md) |
-| Extend Hatch | [API Reference](api_reference.md) |
-| Read the story | [Technical Notes](technical_notes.md) |
+| I want to… | Start here |
+|------------|-----------|
+| Try Hatch now | [Getting Started](getting_started.md) (30 min) |
+| Understand the philosophy | [Philosophy](philosophy.md) |
+| Understand the architecture | [Architecture](architecture.md) |
+| Read deep technical notes | [Technical Notes](technical_notes.md) |
+| Extend Hatch | [Developer Guide](developer_guide.md) |
+| Look up API details | [API Reference](api_reference.md) |
+| Fix a problem | [Troubleshooting](troubleshooting.md) |
 
+---
+
+*Hatch (孵) — Built to understand. Version 1.0.0. MIT License.*

@@ -173,7 +173,7 @@ All components communicate via these events only:
 | `ROBOT_LOADED` | `{'asset_id': str, 'kinematic_model': KinematicModel}` | RobotManager | MainWindow, StateHandler, UI panels |
 | `JOINT_COMMAND` | `{'positions': List[float], 'names': Optional[List[str]]}` | JointControlPanel | CommandHandler |
 | `CARTESIAN_COMMAND` | `{'pose': np.ndarray, 'frame': str}` | CartesianControlPanel | CommandHandler |
-| `MODE_SWITCH_REQUEST` | `{'mode': 'simulate' \| 'real'}` | RobotConnectionPanel | CommandHandler |
+| `MODE_SWITCH_REQUEST` | `{'mode': 'simulate' | 'real'}` | RobotConnectionPanel | CommandHandler |
 | `MODE_SWITCHED` | `{'mode': str}` | CommandHandler | UI panels |
 | `ROBOT_STATE` | `{'joint_positions': List[float], 'tcp_pose': List[float], 'timestamp': float, 'source': str}` | SimulatedRobot, RealRobot | StateHandler, UI panels |
 | `CONNECTION_ESTABLISHED` | `{'message': str}` | RealRobot | CommandHandler, UI panels |

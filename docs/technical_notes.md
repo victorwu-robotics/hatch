@@ -50,19 +50,19 @@ world coordinates after applying the robot's mounting position.
 
 ```
 Kinematic Model (robot base coordinates)
-    ↓
-    compute_link_transforms()
-    ↓
-    all transforms relative to base_link
-    ↓
-    _update_registry()  ← applies world offset
-    ↓
+ ↓
+ compute_link_transforms()
+ ↓
+ all transforms relative to base_link
+ ↓
+ _update_registry() ← applies world offset
+ ↓
 Transform Registry (world coordinates)
-    ↓
-    add world offset to base_link
-    ↓
-    compute all child transforms recursively
-    ↓
+ ↓
+ add world offset to base_link
+ ↓
+ compute all child transforms recursively
+ ↓
 Visualizer (renders in world coordinates)
 ```
 
@@ -132,36 +132,25 @@ or sliders to show incorrect values.
 
 ```
 Real robot moves (via command or external)
-    ↓
+ ↓
 RTDE publishes ROBOT_STATE (joint angles in robot base coordinates)
-    ↓
+ ↓
 StateHandler receives ROBOT_STATE
-    ↓
+ ↓
 ┌─────────────────────────────────────────────┐
 │ Two updates must happen:                    │
 │ 1. Kinematic Model: update_state(positions) │
 │ 2. Transform Registry: receives from        │
 │    kinematic model via StateHandler         │
 └─────────────────────────────────────────────┘
-    ↓
+ ↓
 Visualizer updates (world coordinates)
-    ↓
+ ↓
 (Optional) UI sliders sync (on mode switch only)
 ```
 
 If step 1 is missing, the kinematic model becomes stale. UI sliders will show
 incorrect values even though the visualizer looks correct.
-
-### 1.8 Ownership Checklist
-
-| Question | Answer |
-|----------|--------|
-| What coordinate system does the kinematic model use? | Robot base coordinates (base_link at origin) |
-| What coordinate system does the transform registry use? | World coordinates (fixed origin) |
-| Who applies the world offset? | Transform registry, when registering `robot_base_link` |
-| Why do UI sliders sometimes show different values than the visualizer? | Sliders show user intent; visualizer shows reality |
-| When switching to Real mode, what must be updated? | Kinematic model (from robot state), then UI sliders (from kinematic model) |
-| What happens if `ROBOT_STATE` updates the registry but not the kinematic model? | Visualizer correct, UI sliders stale |
 
 ---
 
@@ -238,11 +227,11 @@ The Universal Robots UR10 URDF has this structure:
 
 ```
 world
-  └── base_link (first link, kinematic root? NO)
-        └── base_inertia (fixed joint, 180° rotation)
-              └── shoulder_pan_joint (FIRST MOVING JOINT)
-                    └── shoulder_link
-                          └── ...
+ └── base_link (first link, kinematic root? NO)
+     └── base_inertia (fixed joint, 180° rotation)
+         └── shoulder_pan_joint (FIRST MOVING JOINT)
+             └── shoulder_link
+                 └── ...
 ```
 
 | Frame | Type | Purpose |
@@ -274,8 +263,8 @@ point** to the world — not the kinematic root.
 **Step 4:** The transform chain:
 ```
 world → base_link (mounting position, user-defined)
-   → base_inertia (fixed offset, may include 180°)
-       → shoulder_pan_joint (moving)
+      → base_inertia (fixed offset, may include 180°)
+      → shoulder_pan_joint (moving)
 ```
 
 For IK: use `base_inertia` as the root frame. For visualization: apply all
@@ -283,7 +272,7 @@ transforms from `world`.
 
 ```python
 def find_true_root(urdf_tree):
-    """Find the true kinematic root: parent of first non-fixed joint."""
+    # Find the true kinematic root: parent of first non-fixed joint
     for joint in urdf_tree.findall('joint'):
         joint_type = joint.get('type')
         if joint_type in ['revolute', 'continuous', 'prismatic']:
@@ -395,8 +384,7 @@ fallback to displaying all links as frames when no arm chain exists.
 
 **Preprocessor Macro Handling** (`core/urdf_preprocessor.py`): The preprocessor
 requires both a macro definition and a macro call in the file. For standalone
-sensor loading, a `<xacro:macro_name prefix=""/>` call must be present after
-the macro definition.
+sensor loading, a macro call must be present after the macro definition.
 
 ### 4.6 Lessons
 

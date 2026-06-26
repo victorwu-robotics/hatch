@@ -1,463 +1,467 @@
 # Integrating Hardware with Hatch
 
-This document covers everything you need to add a robot, camera, or sensor to Hatch.
-It begins with the core driver pattern — event-driven, no polling — and builds
-through reference implementations, camera integration, and a real-world case study
-of reverse-engineering a proprietary sensor.
+This guide covers how to connect external hardware to Hatch: robot arms,
+cameras, and sensors. It focuses on the **event-driven integration pattern**
+that Hatch uses for all hardware, and provides case studies of real
+integrations.
+
+**Recommended OS:** Ubuntu 20.04. Windows and macOS have not been tested.
 
 ---
 
-# Part I: The Event-Driven Driver Pattern
+## The Event-Driven Pattern
 
-## 1.1 Why Not Stream Continuously?
+All hardware in Hatch follows the same pattern:
 
-Hatch's Principle is: **Event-Driven, No Polling.** This is not a slogan. It is a
-hard rule discovered through failure.
-
-Ask of any component: *"Does it ever do work when nothing has changed?"* If yes,
-it is not event-driven.
-
-Most robotics platforms stream data continuously. ROS nodes publish at fixed rates.
-Drivers read sensors in loops. This works when components are separate processes
-on separate machines. But Hatch is a single process. Every "event" triggers a
-cascade of in-process computation. Streaming data at 125Hz into a single-process
-application is not event-driven — it's a denial-of-service attack on your own GUI.
-
-The event-driven alternative: fetch state only when something changed. A command was
-sent. A path was started. A sensor was triggered. When the event ends, the fetching
-stops. The CPU returns to idle.
-
-## 1.2 The RTDE Case Study
-
-This is the story of how we learned Principle #2 the hard way — by breaking Hatch,
-then fixing it, then understanding why the fix was correct.
-
-### The Original Problem
-
-Hatch needed to control a real UR10 robot via RTDE (Real-Time Data Exchange).
-A Python library (`ur-rtde`) provides the interface. The original driver had a
-method `_update_state_from_rtde()` that fetched the latest joint positions. It was
-called exactly once — during `connect()`, to verify the connection. After that,
-it was never called again.
-
-The user moved a slider. The real robot moved. But nobody asked the robot where
-it was now. The virtual robot stayed frozen at its initial position.
-
-**The problem was not that the robot failed to move. It moved. The problem was
-that Hatch never asked it where it went.**
-
-### The Wrong Fix
-
-The obvious fix: call `_update_state_from_rtde()` in a continuous loop at 125Hz.
-The robot streams data, so we should read it.
-
-```python
-def receive_loop():
-    while not stop:
-        if connected:
-            _update_state_from_rtde()  # blocks until data arrives
+```
+Hardware Driver (your code)
+    ↓
+Publishes events via StateChannel
+    ↓
+Hatch components receive and act on them
 ```
 
-This worked. The virtual robot synced to the real robot. The display updated.
-But everything became sluggish. The GUI froze. Sliders wouldn't move.
+The driver does not call Hatch methods directly. It publishes events.
+Hatch subscribes to those events. This keeps the driver decoupled from
+the platform.
 
-The loop didn't burn CPU waiting for data — `getActualQ()` blocks at the OS level.
-But when data arrived (125 times per second, every 8 milliseconds), the following
-chain reaction fired:
+### What the Driver Must Do
 
-1. Qt signal emitted
-2. `ROBOT_STATE` event published
-3. `StateHandler` updates kinematic model (forward kinematics on all links)
-4. `StateHandler` updates `TransformRegistry` (23+ frames recomputed)
-5. `TransformRegistry` fires callbacks to `KinematicDisplay`
-6. `KinematicDisplay` updates VTK actors for all links
-7. `KinematicDisplay` sets `_needs_render = True`
-8. `VisualizerEngine` renders the frame
+1. **Connect to hardware** (network, USB, serial, etc.)
+2. **Read data** continuously in a background thread
+3. **Publish events** when data arrives or state changes
+4. **Handle disconnections** gracefully
 
-Hundreds of Python function calls, NumPy matrix multiplications, and VTK pipeline
-updates — every 8 milliseconds — whether the robot moved or not.
+### What the Driver Must NOT Do
 
-**The loop burned CPU processing data that hadn't changed.**
-
-### The Event-Driven Insight
-
-The robot does not move by itself. It moves because Hatch sent it a command.
-The user dragged a slider. `JOINT_COMMAND` was published. The robot moved.
-
-That is the event. The user acted. The robot responded.
-
-Between commands, the robot is stationary. There is no event. Nothing happens.
-Nothing should happen. The CPU should sleep.
-
-**The true event-driven approach:**
-
-1. User moves slider → `JOINT_COMMAND` event
-2. `CommandHandler` sends command to robot
-3. Robot moves
-4. **Fetch state once** — call `_update_state_from_rtde()`
-5. Publish `ROBOT_STATE` with new joint positions
-6. `StateHandler` updates model and registry (once)
-7. Display renders the new pose (once)
-8. **Done. Nothing else happens until the next command.**
-
-No loop. No streaming. No redundant processing.
-
-### The Lesson
-
-The event is not "data arrived on the RTDE socket." That is an implementation
-detail of the transport layer. The event is "the user commanded the robot to move."
-State should be fetched in response to that event — not on a timer, not in a loop,
-not continuously.
-
-This is Principle #2 in action: **Event-Driven, No Polling.**
+- Import Hatch UI components
+- Call `RobotManager` or `KinematicModel` directly
+- Modify the `TransformRegistry` directly
+- Block the main thread
 
 ---
 
-## 1.3 The Command-Response Pattern (Reference)
+## Connecting to a UR Robot
 
-The RTDE driver implements a blocking command-response pattern. State is published
-only when it changes — after each command completes.
+Hatch uses `ur_rtde` to communicate with Universal Robots. The connection is automatic -- no program needs to run on the teach pendant.
 
-### Joint Command
+**Requirements:**
+- Robot powered on, brake released
+- e-Series: Remote Control Mode enabled (PolyScope -> Settings -> System -> Remote Control)
+- Same network, ports 30001-30004 open
 
-```python
-def send_joint_command(self, positions):
-    """Move robot to target joint positions. Blocks until complete."""
-    success = self._rtde_c.moveJ(positions, speed=0.5, acceleration=0.5)
-    if success:
-        time.sleep(0.05)              # Brief pause for controller
-        self._update_state_from_rtde() # Fetch new state once
-    return success
+**Steps:**
+1. Enter robot IP in Hatch's Robot Connection panel
+2. Click Connect
+
+`ur_rtde` automatically uploads its control script to the robot. The robot moves when you command it.
+
+**If connection fails:**
+- Press **Stop** on teach pendant to clear stuck script from crashed session
+- Verify network: `ping ROBOT_IP`
+- Check firewall: ports 30001-30004
+
+**Advanced: External Control URCap**
+
+Only needed if you want to mix Python control with pendant logic (waits, I/O triggers). See [Universal Robots GitHub](https://github.com/UniversalRobots/Universal_Robots_ExternalControl) for installation.
+
+---
+
+## Case Study: The RTDE Driver
+
+The Universal Robots RTDE (Real-Time Data Exchange) driver is the most
+complex hardware integration in Hatch. It serves as a reference for all
+other hardware drivers.
+
+### The Challenge
+
+UR robots communicate via RTDE, a high-frequency binary protocol. The
+protocol requires:
+- A persistent TCP connection
+- Continuous data streaming at 125-500 Hz
+- Thread-safe access from the main UI thread
+- Graceful handling of connection drops and robot protective stops
+
+### The Solution: Event-Driven Threading
+
+class URRobotDriver(QObject):
+    """UR robot driver using RTDE protocol."""
+
+    # Qt signals for thread-safe communication
+    state_received = pyqtSignal(dict)  # Emitted when new state arrives
+    connection_established = pyqtSignal(str)
+    connection_lost = pyqtSignal(str)
+
+    def __init__(self, state_channel):
+        super().__init__()
+        self._channel = state_channel
+        self._rtde_c = None
+        self._rtde_r = None
+        self._running = False
+        self._thread = None
+
+    def connect(self, ip, frequency=500.0):
+        """Connect to robot and start background thread."""
+        self._rtde_c = RTDEControlInterface(ip, frequency)
+        self._rtde_r = RTDEReceiveInterface(ip, frequency)
+
+        self._running = True
+        self._thread = threading.Thread(target=self._read_loop)
+        self._thread.start()
+
+        self.connection_established.emit(f"Connected to {ip}")
+
+    def _read_loop(self):
+        """Background thread: continuously read robot state."""
+        while self._running:
+            try:
+                state = self._rtde_r.getRobotStatus()
+                self.state_received.emit(state)
+            except Exception as e:
+                self.connection_lost.emit(str(e))
+                break
+            time.sleep(0.002)  # 500 Hz
+
+    def _on_state_received(self, state):
+        """Called in main thread via signal."""
+        self._channel.publish(
+            EventType.ROBOT_STATE,
+            data={
+                'joint_positions': state['actual_q'],
+                'tcp_pose': state['actual_TCP_pose'],
+                'timestamp': time.time(),
+                'source': 'ur_rtde'
+            },
+            source='ur_rtde'
+        )
+
+    def move_joints(self, positions):
+        """Send joint command to robot."""
+        if self._rtde_c:
+            self._rtde_c.moveJ(positions, speed=1.0, acceleration=1.0)
+
+### Key Design Decisions
+
+**Thread separation:** The background thread reads from RTDE continuously.
+The main thread receives data via Qt signals. This prevents the UI from
+freezing during network operations.
+
+**Signal bridging:** `pyqtSignal` is the only Qt mechanism used in the
+driver. It bridges the background thread to the main thread safely.
+
+**Event publishing:** The driver never calls Hatch methods. It publishes
+`ROBOT_STATE` events. `StateHandler` subscribes and updates the model.
+
+**Connection state:** The driver emits `connection_established` and
+`connection_lost` signals. The UI subscribes and updates the connection
+panel.
+
+---
+
+## Case Study: The Camera Pipeline
+
+The camera pipeline demonstrates how to integrate a sensor that produces
+continuous data streams.
+
+### The Challenge
+
+RGB-D cameras produce:
+- Color images (1920x1080, 30 FPS)
+- Depth images (640x480, 30 FPS)
+- Point clouds (variable size, 30 FPS)
+
+All of this must happen without blocking the UI thread.
+
+### The Solution: Three-Stage Pipeline
+
+```
+Camera Hardware
+    ↓ (USB/Network)
+Camera Driver (background thread)
+    ↓ (raw frames)
+Frame Processor (background thread)
+    ↓ (point cloud)
+StateChannel.publish(POINT_CLOUD)
+    ↓
+PointCloudDisplay (main thread, via signal)
 ```
 
-### Cartesian Command
+### Stage 1: Camera Driver
+
+class CameraDriver(QObject):
+    """Background thread that reads from camera hardware."""
+
+    frame_ready = pyqtSignal(np.ndarray, np.ndarray)  # color, depth
+
+    def __init__(self, device_id=0):
+        super().__init__()
+        self._device_id = device_id
+        self._running = False
+
+    def start(self):
+        self._cap = cv2.VideoCapture(self._device_id)
+        self._running = True
+        threading.Thread(target=self._capture_loop).start()
+
+    def _capture_loop(self):
+        while self._running:
+            ret, color = self._cap.read()
+            if ret:
+                depth = self._capture_depth()  # Device-specific
+                self.frame_ready.emit(color, depth)
+
+### Stage 2: Frame Processor
+
+class FrameProcessor(QObject):
+    """Converts depth frames to point clouds."""
+
+    point_cloud_ready = pyqtSignal(np.ndarray)  # Nx3 array
+
+    def __init__(self, camera_intrinsics):
+        super().__init__()
+        self._intrinsics = camera_intrinsics
+
+    def process_frame(self, color, depth):
+        """Called when new frame arrives."""
+        points = self._depth_to_pointcloud(depth, self._intrinsics)
+        self.point_cloud_ready.emit(points)
+
+    def _depth_to_pointcloud(self, depth, K):
+        """Vectorized depth-to-point-cloud conversion."""
+        # ... implementation ...
+        return points  # Nx3 array
+
+### Stage 3: Point Cloud Publisher
+
+class PointCloudPublisher:
+    """Publishes point clouds to Hatch's event system."""
+
+    def __init__(self, state_channel, transform_registry, camera_frame):
+        self._channel = state_channel
+        self._registry = transform_registry
+        self._camera_frame = camera_frame
+
+    def publish(self, points):
+        """Transform points to world frame and publish."""
+        T = self._registry.get_transform(self._camera_frame, "world")
+        points_world = (T[:3, :3] @ points.T + T[:3, 3:4]).T
+
+        self._channel.publish(
+            EventType.POINT_CLOUD,
+            data={
+                'points': points_world,
+                'frame': 'world',
+                'timestamp': time.time(),
+                'source': self._camera_frame
+            },
+            source='camera_pipeline'
+        )
+
+### Wiring It Together
 
 ```python
-def send_cartesian_command(self, pose_list):
-    """Move robot to target Cartesian pose. Blocks until complete."""
-    success = self._rtde_c.moveL(pose_list, speed=0.5, acceleration=0.5)
-    if success:
-        time.sleep(0.05)
-        self._update_state_from_rtde()
-    return success
-```
-
-### The `ROBOT_STATE` Event
-
-After each command, the driver publishes:
-
-```python
-self._channel.publish(
-    EventType.ROBOT_STATE,
-    data={
-        'joint_positions': final_q,
-        'tcp_pose': final_tcp,
-        'timestamp': time.time()
-    },
-    source="real_robot"
+# In MainWindow or your initialization code:
+camera = CameraDriver(device_id=0)
+processor = FrameProcessor(K=load_camera_intrinsics())
+publisher = PointCloudPublisher(
+    state_channel=state_channel,
+    transform_registry=registry,
+    camera_frame="camera_depth_optical_frame"
 )
+
+# Connect the pipeline
+camera.frame_ready.connect(processor.process_frame)
+processor.point_cloud_ready.connect(publisher.publish)
+
+# Start capturing
+camera.start()
 ```
+
+### Key Design Decisions
+
+**Thread separation:** Camera I/O happens in a background thread. Processing
+happens in another thread. Only the final publish happens in the main thread.
+
+**No direct calls:** The pipeline uses Qt signals between stages. The final
+stage publishes to `StateChannel`. No component knows about the others.
+
+**Transform lookup:** The publisher queries `TransformRegistry` for the
+camera's current pose. As the robot moves, the point cloud automatically
+follows.
 
 ---
 
-## 1.4 Path Execution: Scoped Streaming
+## Case Study: The Keyence Laser Scanner
 
-For path following — where the robot must trace a continuous trajectory of dozens
-or hundreds of poses — a single blocking call per point would be too slow. The
-visualizer must track the robot's motion in real time.
+The Keyence LJ-V7200 integration demonstrates how to reverse-engineer a
+proprietary protocol and integrate it into Hatch.
 
-Hatch uses **scoped streaming**: a temporary receive stream that exists only for
-the duration of the path.
+### The Challenge
 
-### The Pattern
+Keyence provides a Windows-only SDK with no Linux support. The protocol is
+proprietary binary over TCP. The documentation is in Japanese and English,
+but omits critical details about coordinate systems and data formats.
 
-```python
-def execute_path(self, pose_list):
-    """Execute a path of poses with real-time state updates."""
-    # 1. Open receive stream (start fetching state at ~30Hz)
-    self._rtde_r.start_streaming()
+### The Solution: Protocol Reverse-Engineering
 
-    # 2. Send all poses except the last asynchronously
-    for pose in pose_list[:-1]:
-        self._rtde_c.moveL(pose, speed, acc, async=True)
+class KeyenceDriver(QObject):
+    """Keyence LJ-V7200 laser scanner driver."""
 
-    # 3. Send final pose — blocking, waits for completion
-    self._rtde_c.moveL(pose_list[-1], speed, acc)
+    profile_ready = pyqtSignal(np.ndarray)  # 2D profile points
 
-    # 4. Close receive stream
-    self._rtde_r.stop_streaming()
-```
+    def __init__(self, state_channel):
+        super().__init__()
+        self._channel = state_channel
+        self._socket = None
 
-During the stream, each state update publishes a `ROBOT_STATE` event. The
-visualizer tracks the real robot's motion. When the path completes, the stream
-closes. No more state updates. The platform returns to idle.
+    def connect(self, ip, port=24685):
+        """Connect to Keyence controller."""
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._socket.connect((ip, port))
 
-### Why This Is Still Event-Driven
+        # Send initialization command (reverse-engineered)
+        init_cmd = bytes([0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+        self._socket.send(init_cmd)
 
-The receive stream is scoped to the path execution event. It starts when the path
-begins and stops when the path ends. Between paths, nothing streams. No component
-outside the driver knows a stream existed — they only see `ROBOT_STATE` events,
-which arrive at ~30Hz during motion and stop when motion stops.
+        threading.Thread(target=self._read_loop).start()
 
-### Guidance for Other Robot Brands
+    def _read_loop(self):
+        """Read profiles from Keyence controller."""
+        while True:
+            header = self._socket.recv(16)
+            if len(header) < 16:
+                break
 
-Every industrial robot has a different protocol. The principle is the same:
+            data_len = struct.unpack('<I', header[4:8])[0]
+            data = self._socket.recv(data_len)
 
-| Brand | Protocol | Approach |
-|-------|----------|----------|
-| Universal Robots | RTDE | Blocking or asynchronous moves |
-| KUKA | KRL via EthernetKRL | Submit program, poll status register during path |
-| ABB | RAPID via EGM/RI | Streaming position commands |
-| Fanuc | Karel via socket | Submit TP program, poll registers |
+            profile = self._parse_profile(data)
+            self.profile_ready.emit(profile)
 
-Each driver must implement `execute_path()` using whatever the protocol provides.
-The platform doesn't care how it works — it only sees `ROBOT_STATE` events.
+    def _parse_profile(self, data):
+        """Parse binary profile data into point array."""
+        # Keyence sends packed 16-bit unsigned integers
+        # Each value is a Z height in 0.1 micrometer units
+        # X positions are implied by the profile index
 
----
+        values = np.frombuffer(data, dtype=np.uint16)
+        z = values * 0.0001  # Convert to millimeters
 
-# Part II: Adding a Camera
+        # X positions: Keyence sends 800 points per profile
+        x = np.linspace(-20.0, 20.0, len(z))  # -20mm to +20mm
 
-## 2.1 Camera Pipeline Architecture
+        # Filter invalid points (Keyence uses 0xFFFF for no data)
+        valid = values != 0xFFFF
+        return np.column_stack([x[valid], np.zeros(np.sum(valid)), z[valid]])
 
-Hatch supports RGB-D cameras (Orbbec Gemini 335, Intel RealSense D435) as
-point cloud sources. The pipeline follows the event-driven architecture:
+### Key Design Decisions
 
-```
-CameraDriver.capture_raw_pointcloud()
-    ↓ raw (N,3) points in optical frame
-PointCloudProcessor.process_frame()
-    ↓ ROI clipping, world transform
-PointCloudRenderer.update_point_cloud()
-    ↓ zero-copy VTK update, sets _needs_render = True
-VisualizerEngine (60Hz timer)
-    ↓ checks _needs_render, calls Render()
-Screen
-```
+**Protocol reverse-engineering:** The Keyence protocol was captured using
+Wireshark and analyzed byte-by-byte. The initialization command, data format,
+and coordinate system were all determined experimentally.
 
-Everything runs in the main thread — no separate threads, no signal queues.
+**Coordinate transformation:** Keyence uses a right-handed coordinate system
+with Z up. Hatch uses the same convention, but the scanner's mounting position
+must be specified in the URDF.
 
-## 2.2 Setting Up a Camera in Your URDF
-
-Include the camera's URDF and mount it to your robot. For an Orbbec Gemini 335:
-
-```xml
-<!-- Include the camera definition -->
-<xacro:include filename="$(find orbbec_camera)/urdf/gemini_335_336.urdf.xacro"/>
-
-<!-- Mount the camera to the robot wrist -->
-<joint name="wrist_to_camera" type="fixed">
-  <parent link="wrist_3_link"/>
-  <child link="camera_link"/>
-  <origin xyz="0 0 0.05" rpy="0 0 0"/>
-</joint>
-```
-
-Hatch automatically detects the depth optical frame by scanning link names
-for `depth_optical_frame`. The detected frame is used to query the
-`TransformRegistry` for the camera's world transform. As the robot moves,
-the point cloud follows correctly.
-
-## 2.3 Performance and Tuning
-
-At 640×360 resolution, the Orbbec Gemini 335 produces ~210,000 points per frame:
-
-| Stage | Time |
-|-------|------|
-| Capture | ~9ms |
-| Process (ROI + transform) | ~8ms |
-| Render (VTK) | ~38ms |
-| **Total** | **~55ms (~18 FPS)** |
-
-**For higher frame rates, downsample:**
-
-```python
-if len(points) > 50000:
-    indices = np.random.choice(len(points), 50000, replace=False)
-    points = points[indices]
-    colors = colors[indices]
-```
-
-**Point size tuning:**
-
-```python
-self.actor.GetProperty().SetPointSize(2)  # Default
-self.actor.GetProperty().SetPointSize(3)  # Larger for better visibility
-```
-
-## 2.4 Adding a New Camera Type
-
-1. Create a driver file in `drivers/camera/` inheriting from `BaseCameraDriver`
-2. Implement `start_streaming()`, `capture_raw_pointcloud()`, `stop_streaming()`
-3. Register the camera in `CameraManager.available_cameras`
-4. Add resolution presets in `CameraManager.camera_resolutions`
-
-The processor and renderer work with any camera that produces (N,3) float32
-points and (N,3) uint8 colors — no changes needed.
+**Error handling:** The driver handles connection drops, invalid data, and
+timeouts gracefully. It publishes `ERROR_OCCURRED` events when something
+goes wrong.
 
 ---
 
-# Part III: Case Study — The Keyence Laser Scanner
+## Adding Your Own Hardware
 
-## 3.1 The Challenge
+To add a new sensor or actuator to Hatch:
 
-The Keyence LJ-V7200 laser scanner has no public protocol documentation.
-Keyence distributes their driver as a Windows DLL. To use it on Ubuntu with
-Python, we had to reverse-engineer the TCP protocol from a ROS-Industrial C++
-driver and trial-and-error testing.
+1. **Create a driver class** that inherits `QObject` (if using Qt signals)
+   or runs in a plain Python thread (if not)
 
-This case study records what we got wrong, what we learned, and the principles
-that emerged.
+2. **Connect to hardware** in a background thread
 
-## 3.2 Four Mistakes We Made
+3. **Publish events** via `StateChannel` when data arrives
 
-### Mistake 1: Continuous Streaming vs. On-Demand Requests
+4. **Subscribe to events** if your hardware needs commands (e.g., `JOINT_COMMAND`)
 
-**What we tried:** Open a TCP connection and read profiles in a continuous loop.
-The scanner blasts data at over 1000 profiles per second. We tried to keep up
-with a `while True` loop.
+5. **Clean up** on disconnect: stop threads, close sockets, unsubscribe
 
-**Why it failed:** The scanner's firehose overwhelmed the OS TCP buffer. When
-the buffer filled, the scanner dropped the connection. We also tried draining
-the buffer with non-blocking reads, but new data arrived faster than we could
-drain it, freezing the GUI.
+### Example: A Simple Force Sensor
 
-**The correct approach:** On-demand request-response. Open the connection once.
-Send a trigger only when you need a profile. Read exactly one response. The
-scanner is silent between requests.
+class ForceSensor(QObject):
+    """Simple force sensor driver."""
 
-### Mistake 2: The Double-Line Artifact (20-Bit Unpacking)
+    force_received = pyqtSignal(np.ndarray)  # [fx, fy, fz, tx, ty, tz]
 
-**What we saw:** The scanner profile appeared as two separate parallel lines
-instead of one continuous surface. Z values alternated between two numbers.
+    def __init__(self, state_channel, serial_port='/dev/ttyUSB0'):
+        super().__init__()
+        self._channel = state_channel
+        self._serial = serial.Serial(serial_port, baudrate=115200)
+        self._running = False
 
-**The cause:** The Keyence packs two 20-bit signed depth values into 5 bytes.
-The middle byte is shared — its high nibble belongs to point 0, its low nibble
-to point 1. Our unpacking misassigned these nibbles.
+    def start(self):
+        self._running = True
+        threading.Thread(target=self._read_loop).start()
 
-**The fix:**
+    def _read_loop(self):
+        while self._running:
+            line = self._serial.readline().decode().strip()
+            if line:
+                forces = np.array([float(x) for x in line.split(',')])
+                self.force_received.emit(forces)
 
-```python
-p0 = ((b2 & 0x0F) << 16) | (b1 << 8) | b0
-p1 = (b4 << 12) | (b3 << 4) | (b2 >> 4)
-```
+                self._channel.publish(
+                    EventType.FORCE_TORQUE,
+                    data={
+                        'forces': forces[:3],
+                        'torques': forces[3:],
+                        'timestamp': time.time(),
+                        'source': 'force_sensor'
+                    },
+                    source='force_sensor'
+                )
 
-### Mistake 3: The Phantom 0.26208 Depth
-
-**What we saw:** The profile contained a depth value of exactly 0.26208 meters,
-even when the scanner was pointed at empty space.
-
-**The cause:** The Keyence uses `-524285` as an error code for out-of-range
-pixels. Our unit conversion multiplied this by a scaling factor and flipped
-the sign, producing `+0.26208`. We were displaying the scanner's error flag
-as if it were a real measurement.
-
-**The physics check:** The LJ-V7200 has a measurement range of 100mm ±20mm.
-A value of 262mm is physically impossible — more than double the sensor's range.
-
-**The fix:**
-
-```python
-INVALID_LOWER_BOUND = -524280
-valid_mask = (raw_z > INVALID_LOWER_BOUND) & (raw_z != 0)
-```
-
-### Mistake 4: The 60-Byte ACK Confusion
-
-**What we saw:** When using the 00 00 00 00 single-profile command, the
-scanner responded with exactly 60 bytes instead of the expected 2000+ byte
-profile.
-
-**The cause:** The 60-byte response was a Command Acknowledgment (ACK) —
-the scanner confirming it received the trigger. We were treating the ACK as
-profile data. The 00 00 00 00 command is not a profile request — it is an
-initialization command that switches the controller from continuous
-streaming mode to blocking mode. It only needs to be sent once at the start
-of a session.
-
-**The resolution:** After sending 00 00 00 00 once to initialize blocking
-mode, all subsequent 01 01 00 00 requests return a full profile immediately
-and the scanner waits silently between triggers. No separate fetch step needed.
-
-## 3.3 The Final Architecture
-
-```
-Application calls capture_profiles(count=200, interval=0.1)
-    ↓
-Driver opens TCP socket (once)
-    ↓
-Send initialization: 00 00 00 00 (switches controller to blocking mode)
-    ↓
-For each profile:
-    sendall(01 01 00 00)    # Now blocking — returns one profile
-    recv(4) → response size
-    recv(size) → profile data
-    unpack 20-bit → raw Z values
-    filter invalid points (-524285)
-    convert to meters
-    flip to optical convention
-    return (points, colors)
-    sleep(interval)
-    ↓
-Driver closes TCP socket
-```
-
-**Key constants:**
-- `KEYENCE_FUNDAMENTAL_LENGTH_UNIT = 1e-8` (0.01 µm per step)
-- `KEYENCE_INVALID_LOWER_BOUND = -524280`
-- Trigger command ends with `01 01 00 00` (streaming mode, single response)
-- Response header: 84 bytes, profile data follows
-- 800 points per profile for the LJ-V7200
-
-## 3.4 Lessons for Sensor Integration
-
-1. **Don't assume continuous streaming is the only mode.** Many industrial
-   sensors support on-demand request-response but don't document it publicly.
-
-2. **Error codes can look like real data after unit conversion.** Always
-   identify and filter error flags before scaling. Check physical limits.
-
-3. **Persistent connections are better than per-request connections.**
-   Keep the socket open for the duration of the task.
-
-4. **Sleep between requests, not during reads.** The socket should be read
-   as soon as data arrives. Pacing happens between requests.
-
-5. **Reverse-engineering requires multiple sources.** The ROS-Industrial C++
-   driver gave us the protocol structure. Physical testing with a target
-   object confirmed the results. No single source had the complete answer.
-
-6. **When the sensor has no public documentation, every value is suspect
-   until verified against physical reality.** The `0.26208` was mathematically
-   correct but physically impossible. The double line was algorithmically valid
-   but geometrically wrong. Only testing against a real object could distinguish
-   correct behavior from plausible-looking errors.
+    def stop(self):
+        self._running = False
+        self._serial.close()
 
 ---
 
-## Summary
+## Common Pitfalls
 
-The event-driven pattern is not just for robot arms. It applies to every piece
-of hardware Hatch integrates. The question is always the same:
+### Blocking the Main Thread
 
-> *"Does this component ever do work when nothing has changed?"*
+**Don't:** Read from hardware in the main thread.
 
-If the answer is yes, it is not event-driven. The RTDE driver learned this
-by breaking the GUI. The Keyence driver learned it by drowning in a firehose
-of profiles. Both arrived at the same pattern: persistent connection, on-demand
-requests, idle between events.
+**Do:** Use a background thread and Qt signals to communicate with the main thread.
 
-This is Principle #2 in hardware. It is the same principle that governs the
-UI, the render loop, and the transform registry. One rule, applied everywhere.
+### Forgetting to Unsubscribe
+
+**Don't:** Subscribe to events and never unsubscribe.
+
+**Do:** Call `channel.unsubscribe()` in your cleanup method.
+
+### Modifying Hatch State Directly
+
+**Don't:** Call `robot_manager.move_joints()` from your driver.
+
+**Do:** Publish `ROBOT_STATE` events and let `StateHandler` update the model.
+
+### Hardcoded Paths and IPs
+
+**Don't:** Hardcode device IPs or serial ports.
+
+**Do:** Accept them as constructor arguments or read from configuration.
 
 ---
 
-*This document combines the Event-Driven Drivers case study, Non-Polling RTDE
-Driver reference, Path Execution guide, Camera Integration guide, and Keyence
-Scanner reverse-engineering chronicle into a single hardware integration guide.*
-```
+## Further Reading
+
+| Document | What It Covers |
+|----------|---------------|
+| [User Guide](user_guide.md) | Using Hatch -- scene creation, robot control, 3D view |
+| [Architecture](architecture.md) | How Hatch works internally -- components, principles, event flow |
+| [Technical Notes](technical_notes.md) | Deep dives on coordinate systems, URDF parsing, mesh loading |
 
 ---
 
-This is the full `integrating_hardware.md`. It preserves all the content from the five source documents, organized under a clear three-part structure. The RTDE story leads because it's the strongest narrative and establishes the pattern that the camera and Keyence sections reinforce.
-
-Do you want to adjust anything, or shall we move on to the next merge — `technical_notes.md`?
+*This guide covers Hatch v1.0 hardware integration. Contributions welcome.*

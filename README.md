@@ -1,18 +1,14 @@
 # Hatch (孵) 🐣
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python&logoColor=white)
-
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-20.04-orange?style=for-the-badge&logo=ubuntu&logoColor=white)
-
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
-
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge)
 
-
-> A single-process, event-driven robotics application development platform.
+> An incubator for robotic ideas.
 > One robot. One URDF. No polling.
 
-[Quick Start](#quick-start) · [Architecture](docs/architecture.md) · [Philosophy](docs/philosophy.md) · [Developer Guide](docs/developer_guide.md) · [Troubleshooting](docs/troubleshooting.md)
+[Quick Start](#quick-start) · [Documentation](#documentation) · [Architecture](docs/architecture.md) · [Philosophy](docs/philosophy.md)
 
 ---
 
@@ -41,12 +37,12 @@ python -m ui.main_window
 
 **Connect to hardware (optional):**
 ```bash
-pip install ur-rtde  # uncomment in requirements.txt
+pip install ur-rtde  # for Universal Robots
 # In Hatch: Robots → Connect → enter robot IP → switch to Real mode
+# No program needed on the teach pendant — ur_rtde handles it automatically
 ```
 
 ![File → Load URDF dialog with a URDF selected](docs/images/URDF_selected.png)
-
 
 ## Architecture at a Glance
 
@@ -78,7 +74,7 @@ These principles were discovered through derivation — each one demanded by a n
 | 9 | UI Separate from Services | Need: controls without coupling |
 | 10 | One Robot Per Session | Need: clean boundaries |
 
-See [docs/philosophy.md](docs/philosophy.md) for the full derivation from first principles.
+See [docs/philosophy](docs/philosophy.md) for the full derivation from first principles.
 
 ## Hardware Support
 
@@ -86,18 +82,21 @@ See [docs/philosophy.md](docs/philosophy.md) for the full derivation from first 
 |----------|--------|-------|
 | Simulated Robot | ✅ Full | IK solving, state publishing, no hardware needed |
 | Universal Robots (UR) | ✅ Working | RTDE interface via `ur-rtde` |
-| RealSense Camera | 🔄 Planned | URDF-mounted, no point cloud yet |
 | Orbbec Camera | ✅ Working | — |
 | Keyence Laser Scanner | ✅ Working | — |
+| RealSense Camera | 🔄 Planned | URDF-mounted, no point cloud yet |
 
-## Next Steps
+## Documentation
 
-- **New user?** → [Quick Start Guide](docs/quick_start.md)
-- **Want to understand why?** → [Architecture Document](docs/architecture.md)
-- **Want to extend Hatch?** → [Developer Guide](docs/developer_guide.md)
-- **Hitting problems?** → [Troubleshooting](docs/troubleshooting.md)
-- **Want the story?** → [Philosophy](docs/philosophy.md)
+| I want to... | Read this | Time |
+|-------------|-----------|------|
+| **Install Hatch and move my first robot** | [User Guide](docs/user_guide.md) | 30 min |
+| **Understand why Hatch exists** | [Philosophy](docs/philosophy.md) | 10 min |
+| **Understand how it works internally** | [Architecture](docs/architecture.md) | 45 min |
+| **Connect a robot, camera, or sensor** | [Integrating Hardware](docs/integrating_hardware.md) | 30 min |
+| **Read deep technical implementation notes** | [Technical Notes](docs/technical_notes.md) | 20 min per section |
+| **Fix a problem** | [User Guide → Troubleshooting](docs/user_guide.md#troubleshooting) | 5 min |
 
 ---
 
-*Hatch (孵) 🐣 — Built to understand. Version 1.0.0. MIT License.* 
+*Hatch (孵) 🐣 — An incubator for robotic ideas. Version 1.0.0. MIT License.*

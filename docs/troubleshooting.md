@@ -88,10 +88,11 @@ print(ik.wrist_type)  # Should match your robot
 **Symptoms:** "Connection failed after N attempts" or timeout.
 
 **Checks:**
-1. Verify robot IP (ping it)
-2. Verify RTDE is enabled on robot controller (PolyScope: Settings → System → Remote Control → Enable)
-3. Check firewall — ports 30002 (control) and 30004 (RTDE receive) must be open
-4. Try increasing `max_retries` in `URRobotDriver.connect()`
+1. **Verify robot is in Remote Control Mode** (e-Series: PolyScope → Settings → System → Remote Control)
+2. **Verify IP addresses** — robot and Hatch machine on same subnet, reachable via `ping`
+3. **Press Stop on teach pendant** — clears stuck script from previous crashed session
+4. **Check firewall** — ports 30001-30004 must be open
+5. Try increasing `max_retries` in `URRobotDriver.connect()`
 
 ### Connection drops during operation
 
@@ -100,9 +101,9 @@ print(ik.wrist_type)  # Should match your robot
 **Causes:**
 - Network instability (WiFi)
 - Robot controller reboot or protective stop
-- RTDE frequency mismatch
+- Previous session crashed, script still running
 
-**Fix:** Increase `max_retries`, use wired connection, check robot controller logs.
+**Fix:** Press **Stop** on teach pendant, then reconnect. Use wired connection if possible.
 
 ---
 

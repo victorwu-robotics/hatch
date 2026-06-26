@@ -18,7 +18,7 @@
 
 Hatch loads any URDF, solves IK in real time, and controls real hardware — all in a single process, without polling loops, and with direct VTK visualization.
 
-## Quick Start (5 minutes)
+## Quick-Start (5 minutes)
 
 **Recommended OS:** Ubuntu 20.04. Windows and macOS have not been tested.
 
@@ -74,7 +74,7 @@ These principles were discovered through derivation — each one demanded by a n
 | 9 | UI Separate from Services | Need: controls without coupling |
 | 10 | One Robot Per Session | Need: clean boundaries |
 
-See [docs/philosophy](docs/philosophy.md) for the full derivation from first principles.
+See [philosophy](docs/philosophy.md) for the full derivation from first principles.
 
 ## Hardware Support
 

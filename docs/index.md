@@ -78,7 +78,7 @@ These principles were discovered through derivation — each one demanded by a n
 | 9 | UI Separate from Services | Need: controls without coupling |
 | 10 | One Robot Per Session | Need: clean boundaries |
 
-See [docs/philosophy](philosophy.md) for the full derivation from first principles.
+See [philosophy](philosophy.md) for the full derivation from first principles.
 
 ## Hardware Support
 
@@ -94,12 +94,12 @@ See [docs/philosophy](philosophy.md) for the full derivation from first principl
 
 | I want to... | Read this | Time |
 |-------------|-----------|------|
-| **Install Hatch and move my first robot** | [User Guide](docs/user_guide.md) | 30 min |
-| **Understand why Hatch exists** | [Philosophy](docs/philosophy.md) | 10 min |
-| **Understand how it works internally** | [Architecture](docs/architecture.md) | 45 min |
-| **Connect a robot, camera, or sensor** | [Integrating Hardware](docs/integrating_hardware.md) | 30 min |
-| **Read deep technical implementation notes** | [Technical Notes](docs/technical_notes.md) | 20 min per section |
-| **Fix a problem** | [User Guide → Troubleshooting](docs/user_guide.md#troubleshooting) | 5 min |
+| **Install Hatch and move my first robot** | [User Guide](user_guide.md) | 30 min |
+| **Understand why Hatch exists** | [Philosophy](philosophy.md) | 10 min |
+| **Understand how it works internally** | [Architecture](architecture.md) | 45 min |
+| **Connect a robot, camera, or sensor** | [Integrating Hardware](integrating_hardware.md) | 30 min |
+| **Read deep technical implementation notes** | [Technical Notes](technical_notes.md) | 20 min per section |
+| **Fix a problem** | [User Guide → Troubleshooting](user_guide.md#troubleshooting) | 5 min |
 
 ---
 

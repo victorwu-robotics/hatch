@@ -2,8 +2,6 @@
 layout: default
 title: Hatch (孵) 🐣
 ---
-{% include_relative ../README.md %}
-
 # Hatch (孵) 🐣
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python&logoColor=white)

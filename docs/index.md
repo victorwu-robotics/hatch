@@ -12,7 +12,7 @@ title: Hatch (孵) 🐣
 > An incubator for robotic ideas.
 > One robot. One URDF. No polling.
 
-[Quick Start](#quick-start) · [Documentation](#documentation) · [Architecture](architecture.md) · [Philosophy](philosophy.md)
+[Quick Start](#quick-start-5-minutes) · [Documentation](#documentation) · [Architecture](architecture.md) · [Philosophy](philosophy.md)
 
 ---
 

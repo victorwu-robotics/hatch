@@ -8,7 +8,7 @@
 > An incubator for robotic ideas.
 > One robot. One URDF. No polling.
 
-[Quick Start](#quick-start) · [Documentation](#documentation) · [Architecture](docs/architecture.md) · [Philosophy](docs/philosophy.md)
+[Quick Start](#quick-start-5-minutes) · [Documentation](#documentation) · [Architecture](docs/architecture.md) · [Philosophy](docs/philosophy.md)
 
 ---
 
@@ -18,7 +18,7 @@
 
 Hatch loads any URDF, solves IK in real time, and controls real hardware — all in a single process, without polling loops, and with direct VTK visualization.
 
-## Quick-Start (5 minutes)
+## Quick Start (5 minutes)
 
 **Recommended OS:** Ubuntu 20.04. Windows and macOS have not been tested.
 

@@ -1,14 +1,27 @@
 # Hatch (孵) 🐣
 
+> An incubator for robotic ideas.  
+> One robot. One URDF. No polling.
+
 ![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-20.04-orange?style=for-the-badge&logo=ubuntu&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge)
 
-> An incubator for robotic ideas.
-> One robot. One URDF. No polling.
+---
 
-[Quick Start](#quick-start-5-minutes) · [Documentation](#documentation) · [Architecture](docs/architecture.md) · [Philosophy](docs/philosophy.md)
+## What is Hatch?
+
+Hatch is a single‑process, event‑driven platform for developing robot arm applications.  
+Load any URDF, solve IK in real time, and control real hardware — all without polling loops, without ROS, and with direct VTK visualization.
+
+**What makes it different?**
+- **Everything is an event** — no polling, no busy‑waiting.
+- **The URDF is the scene** — no separate world files, no launch files.
+- **The architecture is derived** — every component exists because a need demanded it.
+
+> *“A tool that makes decisions the user didn’t ask for is not intelligent — it is insubordinate.”*  
+> — The Stubborn Student, [Philosophy](docs/philosophy.md)
 
 ---
 
@@ -16,11 +29,9 @@
 
 ![Main window with a UR10 loaded](docs/images/main_window_ur10_loaded.png)
 
-Hatch loads any URDF, solves IK in real time, and controls real hardware — all in a single process, without polling loops, and with direct VTK visualization.
+---
 
-## Quick Start (5 minutes)
-
-**Recommended OS:** Ubuntu 20.04. Windows and macOS have not been tested.
+## Quick Start (2 minutes)
 
 ```bash
 git clone https://github.com/victorwu-robotics/hatch.git
@@ -30,73 +41,35 @@ source venv/bin/activate
 pip install -r requirements.txt
 python -m ui.main_window
 ```
+**Load a robot:** File → Load URDF → select a .urdf or .xacro file.
+**Move it:** Drag the joint sliders — the 3D view updates in real time.
+**Connect to hardware (optional):** pip install ur-rtde, enter the robot’s IP, and switch to Real mode.
 
-**Load a robot:** File → Load URDF → select a `.urdf` or `.xacro` file.
-
-**Move it:** Drag joint sliders — the 3D view updates in real time.
-
-**Connect to hardware (optional):**
-```bash
-pip install ur-rtde  # for Universal Robots
-# In Hatch: Robots → Connect → enter robot IP → switch to Real mode
-# No program needed on the teach pendant — ur_rtde handles it automatically
-```
-
-![File → Load URDF dialog with a URDF selected](docs/images/URDF_selected.png)
-
-## Architecture at a Glance
-
-Three core abstractions everything else builds on:
-
-| Abstraction | Purpose | File |
-|-------------|---------|------|
-| **TransformRegistry** | All spatial relationships, lazy-evaluated | `core/world_state/transform_registry.py` |
-| **StateChannel** | All events, publish/subscribe, no polling | `core/world_state/state_channel.py` |
-| **KinematicModel** | Pure Python URDF parsing + FK/IK | `core/kinematics/kinematic_model.py` |
-
-![Hatch (孵) 🐣 Data Flow](docs/images/hatch_data_flow_diagram.png)
-
-## Principles (Summary)
-
-These principles were discovered through derivation — each one demanded by a need that arose during development, not decreed in advance.
-
-| # | Principle | Discovered From |
-|---|-----------|---------------|
-| 0 | Individuals Before Groups | Need: one robot, one session |
-| 1 | Single Process, Single Memory Space | Need: no serialization overhead |
-| 2 | Event-Driven, No Polling | Need: decoupled communication |
-| 3 | Visualizer as Mind-Prying Tool | Need: see the robot's true state |
-| 4 | Everything in URDF | Need: describe the scene |
-| 5 | Space = TransformRegistry | Need: know where everything is |
-| 6 | Time = StateChannel | Need: components must communicate |
-| 7 | Movements as Models | Need: commands as data |
-| 8 | Pure Python | Need: rapid development |
-| 9 | UI Separate from Services | Need: controls without coupling |
-| 10 | One Robot Per Session | Need: clean boundaries |
-
-See [philosophy](docs/philosophy.md) for the full derivation from first principles.
-
-## Hardware Support
-
-| Hardware | Status | Notes |
-|----------|--------|-------|
-| Simulated Robot | ✅ Full | IK solving, state publishing, no hardware needed |
-| Universal Robots (UR) | ✅ Working | RTDE interface via `ur-rtde` |
-| Orbbec Camera | ✅ Working | — |
-| Keyence Laser Scanner | ✅ Working | — |
-| RealSense Camera | 🔄 Planned | URDF-mounted, no point cloud yet |
+>**For a full walkthrough with screenshots**, see the [Quick Start Guide](docs/quick_start.md).
 
 ## Documentation
 
-| I want to... | Read this | Time |
-|-------------|-----------|------|
-| **Install Hatch and move my first robot** | [User Guide](docs/user_guide.md) | 30 min |
-| **Understand why Hatch exists** | [Philosophy](docs/philosophy.md) | 10 min |
-| **Understand how it works internally** | [Architecture](docs/architecture.md) | 45 min |
-| **Connect a robot, camera, or sensor** | [Integrating Hardware](docs/integrating_hardware.md) | 30 min |
-| **Read deep technical implementation notes** | [Technical Notes](docs/technical_notes.md) | 20 min per section |
-| **Fix a problem** | [User Guide → Troubleshooting](docs/user_guide.md#troubleshooting) | 5 min |
+| If you are... | Start here... |
+|---------------|---------------|
+| New to Hatch and just want to see it work | quick_start.md (2 min) |
+| An end user who will use Hatch daily | user_guide.md (30–60 min) |
+| Interested in the story and philosophy | philosophy.md (10–30 min) |
+| An advanced user who wants to understand how it works internally | architecture.md (45–60 min) |
+| A developer debugging a technical issue | technical_notes.md (15–30 min per section) |
+| A hardware integrator adding a new robot, camera, or sensor | integrating_hardware.md (30–60 min) |
+| A contributor adding a new UI panel, display, or service | developer_guide.md (30–45 min) |
+| Looking for method signatures and API details | api_reference.md (reference) |
+| Learning or reviewing 6‑DOF inverse kinematics | inverse_kinematics.md (30–60 min) |
 
 ---
 
-*Hatch (孵) 🐣 — An incubator for robotic ideas. Version 1.0.0. MIT License.*
+## License & Status
+- License: MIT — free to use, modify, and distribute.
+
+- Status: Active development. Version 1.0.0.
+
+- Recommended OS: Ubuntu 20.04. Windows and macOS are untested.
+
+---
+
+Hatch (孵) 🐣 — built to understand, built to see.

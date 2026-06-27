@@ -41,9 +41,9 @@ source venv/bin/activate
 pip install -r requirements.txt
 python -m ui.main_window
 ```
-**Load a robot:** File → Load URDF → select a .urdf or .xacro file.
-**Move it:** Drag the joint sliders — the 3D view updates in real time.
-**Connect to hardware (optional):** pip install ur-rtde, enter the robot’s IP, and switch to Real mode.
+**Load a robot:** File → Load URDF → select a .urdf or .xacro file.  
+**Move it:** Drag the joint sliders — the 3D view updates in real time.  
+**Connect to hardware (optional):** pip install ur-rtde, enter the robot’s IP, and switch to **Real** mode.
 
 >**For a full walkthrough with screenshots**, see the [Quick Start Guide](docs/quick_start.md).
 

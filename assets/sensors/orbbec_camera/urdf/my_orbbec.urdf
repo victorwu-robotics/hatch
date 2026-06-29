@@ -1,0 +1,188 @@
+<?xml version="1.0"?>
+<!-- Simplified URDF for Orbbec Gemini camera - Inertial properties removed -->
+<robot name="gemini_335">
+  <!-- Virtual root link -->
+  <link name="base_link"/>
+  
+  <!-- Main camera body -->
+  <link name="camera_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="-0.01587 -0.025 -0.0125"/>
+      <geometry>
+        <mesh filename="file:///home/victor/OrbbecSDK_ROS1/meshes/gemini335_336/camera_link.STL"/>
+      </geometry>
+      <material name="camera_material">
+        <color rgba="0.8 0.8 0.8 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="file:///home/victor/OrbbecSDK_ROS1/meshes/gemini335_336/camera_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  
+  <!-- Connect virtual root to camera -->
+  <joint name="base_link_to_camera_link" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <origin rpy="0 0 0" xyz="0.01587 0.025 0.0125"/>
+  </joint>
+  
+  <!-- Bottom screw frame -->
+  <link name="camera_bottom_screw_frame">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="file:///home/victor/OrbbecSDK_ROS1/meshes/gemini335_336/camera_bottom_screw_frame.STL"/>
+      </geometry>
+      <material name="screw_material">
+        <color rgba="0.792 0.82 0.933 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="file:///home/victor/OrbbecSDK_ROS1/meshes/gemini335_336/camera_bottom_screw_frame.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="camera_bottom_screw_frame_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="-0.01587 -0.025 -0.0125"/>
+    <parent link="camera_link"/>
+    <child link="camera_bottom_screw_frame"/>
+  </joint>
+  
+  <!-- Depth sensor frame (MUST be defined before IR/color frames reference it) -->
+  <link name="camera_depth_frame">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="file:///home/victor/OrbbecSDK_ROS1/meshes/gemini335_336/camera_depth_frame.STL"/>
+      </geometry>
+      <material name="sensor_material">
+        <color rgba="0.5 0.25 0.25 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="file:///home/victor/OrbbecSDK_ROS1/meshes/gemini335_336/camera_depth_frame.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="camera_depth_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+    <parent link="camera_link"/>
+    <child link="camera_depth_frame"/>
+  </joint>
+  
+  <!-- Depth optical frame (standard ROS frame for depth data) -->
+  <link name="camera_depth_optical_frame"/>
+  
+  <joint name="camera_depth_optical_joint" type="fixed">
+    <origin rpy="-1.5707963267949 0 -1.5707963267949" xyz="0 0 0"/>
+    <parent link="camera_depth_frame"/>
+    <child link="camera_depth_optical_frame"/>
+  </joint>
+  
+  <!-- Left IR frame -->
+  <link name="camera_left_ir_frame">
+    <visual>
+      <!-- FIXED: Changed from xyz="-25 0 0" (25 meters!) to plausible offset -->
+      <origin rpy="0 0 0" xyz="-0.025 0 0"/>
+      <geometry>
+        <mesh filename="file:///home/victor/OrbbecSDK_ROS1/meshes/gemini335_336/camera_left_ir_frame.STL"/>
+      </geometry>
+      <material name="sensor_material"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="file:///home/victor/OrbbecSDK_ROS1/meshes/gemini335_336/camera_left_ir_frame.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="camera_left_ir_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+    <parent link="camera_depth_frame"/>
+    <child link="camera_left_ir_frame"/>
+  </joint>
+  
+  <!-- Left IR optical frame -->
+  <link name="camera_left_ir_optical_frame"/>
+  
+  <joint name="camera_left_ir_optical_joint" type="fixed">
+    <origin rpy="-1.5707963267949 0 -1.5707963267949" xyz="0 0 0"/>
+    <parent link="camera_left_ir_frame"/>
+    <child link="camera_left_ir_optical_frame"/>
+  </joint>
+  
+  <!-- Right IR frame -->
+  <link name="camera_right_ir_frame">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="file:///home/victor/OrbbecSDK_ROS1/meshes/gemini335_336/camera_right_ir_frame.STL"/>
+      </geometry>
+      <material name="sensor_material"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="file:///home/victor/OrbbecSDK_ROS1/meshes/gemini335_336/camera_right_ir_frame.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="camera_right_ir_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 -0.05 0"/>
+    <parent link="camera_depth_frame"/>
+    <child link="camera_right_ir_frame"/>
+  </joint>
+  
+  <!-- Right IR optical frame -->
+  <link name="camera_right_ir_optical_frame"/>
+  
+  <joint name="camera_right_ir_optical_joint" type="fixed">
+    <origin rpy="-1.5707963267949 0 -1.5707963267949" xyz="0 0 0"/>
+    <parent link="camera_right_ir_frame"/>
+    <child link="camera_right_ir_optical_frame"/>
+  </joint>
+  
+  <!-- Color/RGB frame -->
+  <link name="camera_color_frame">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="file:///home/victor/OrbbecSDK_ROS1/meshes/gemini335_336/camera_color_frame.STL"/>
+      </geometry>
+      <material name="sensor_material"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="file:///home/victor/OrbbecSDK_ROS1/meshes/gemini335_336/camera_color_frame.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="camera_color_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0.001663 -0.014005 0.000005"/>
+    <parent link="camera_depth_frame"/>
+    <child link="camera_color_frame"/>
+  </joint>
+  
+  <!-- Color optical frame (standard ROS frame for RGB data) -->
+  <link name="camera_color_optical_frame"/>
+  
+  <joint name="camera_color_optical_joint" type="fixed">
+    <origin rpy="-1.5707963267949 0 -1.5707963267949" xyz="0 0 0"/>
+    <parent link="camera_color_frame"/>
+    <child link="camera_color_optical_frame"/>
+  </joint>
+</robot>

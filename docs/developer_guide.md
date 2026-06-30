@@ -450,5 +450,22 @@ Always close network connections and file handles in your cleanup method.
 
 5. **Never block the main thread** — use QTimer and background threads for long operations.
 
+---
+
+## Directory Structure
+
+hatch/  
+├── core/ # Core services (TransformRegistry, StateChannel, KinematicModel)  
+│ ├── kinematics/ # Forward/Inverse kinematics  
+│ └── world_state/ # TransformRegistry, StateChannel, EventTypes  
+├── drivers/ # Robot drivers (SimulatedRobot, RealRobot, UR bridge)  
+├── displays/ # VTK visualizations (KinematicDisplay)  
+├── viz/ # VisualizerEngine, VTK render window  
+├── ui/ # MainWindow, panels, menus  
+├── assets/ # URDF files, meshes, scenes  
+└── tests/ # Unit tests (recommended)  
+
+---
+
 Hatch (孵) 🐣 — built to understand, built to see.
 

@@ -401,6 +401,41 @@ sensor loading, a macro call must be present after the macro definition.
 
 ---
 
+## 5. Package Path Resolution
+
+Hatch resolves `package://` URIs in URDF files using a search path.
+
+**Search order:**
+1. The directory containing the URDF file you loaded
+2. The parent and grandparent directories of the URDF file
+3. `~/hatch/assets/` and its subdirectories (`robots/`, `sensors/`, `ugv/`, `tools/`, `scenes/`)
+
+**How it works internally:**
+
+```python
+def resolve_package_path(package_name, relative_path, urdf_dir):
+    # Check URDF directory
+    candidate = os.path.join(urdf_dir, package_name, relative_path)
+    if os.path.exists(candidate):
+        return candidate
+
+    # Check parent directories
+    parent = os.path.dirname(urdf_dir)
+    while parent and parent != '/':
+        candidate = os.path.join(parent, package_name, relative_path)
+        if os.path.exists(candidate):
+            return candidate
+        parent = os.path.dirname(parent)
+
+    # Check assets directory
+    assets_root = os.path.expanduser('~/hatch/assets')
+    for subdir in ['robots', 'sensors', 'ugv', 'tools', 'scenes']:
+        candidate = os.path.join(assets_root, subdir, package_name, relative_path)
+        if os.path.exists(candidate):
+            return candidate
+
+    raise FileNotFoundError(f"Could not resolve {package_name}/{relative_path}")
+
 *This document combines the Kinematic Model vs Transform Registry guide, Fixed
 Chain Tail specification, URDF Processing note, and DAE Mesh Loading post-mortem
 into a single technical reference.*

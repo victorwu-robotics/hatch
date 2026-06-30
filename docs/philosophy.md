@@ -92,19 +92,7 @@ The crow follows. The crowd drifts. The current carries.
 
 But the one who understands — they choose their own direction.
 
-### The Two Worlds
-
-| Physical World                   | Emotional World          |
-| -------------------------------- | ------------------------ |
-| Laplace transforms for stability | Empathy for connection   |
-| Orthogonal matrix inverse        | Trust that is reciprocal |
-| PCA for variance                 | Wisdom from experience   |
-| Rotation vectors for clarity     | Honesty in communication |
-
-Both require **understanding**, not just formalism.
-
-You cannot solve stability with Laplace if you do not feel what poles mean.
-You cannot truly connect if you only recite the word "love."
+The physical world and the emotional world both require understanding — not just formalism.
 
 ### The Trap of Formalism
 
@@ -607,35 +595,7 @@ Understanding → Formalization → Accumulation → Loss of Understanding → R
 
 We are often in the **loss phase** — surrounded by formalisms we no longer understand.
 
-### B.2 Case Study: Quaternions
-
-| Phase                 | Quaternion Journey                                                                       |
-| --------------------- | ---------------------------------------------------------------------------------------- |
-| Understanding         | Hamilton discovers 4D complex numbers (1843). Understands rotation in 3D space.          |
-| Formalization         | Multiplication rules, normalization, interpolation algorithms.                           |
-| Accumulation          | ROS, game engines, spacecraft guidance systems adopt quaternions. "Standard practice."   |
-| Loss of Understanding | Most users cannot glance at `[0.707, 0, 0, 0.707]` and visualize a 90° rotation about X. |
-| Rediscovery           | Engineers ask: "Why not rotation vectors? `[1.57, 0, 0]` is immediately clear."          |
-
-**The quaternion test:** If you cannot explain what a number means to a beginner, the representation is wrong.
-
-Quaternions fail this test. Hatch uses rotation vectors.
-
-### B.3 Case Study: ROS Complexity
-
-| Formalisms            | Accumulated Complexity              | Hatch Rediscovery                   |
-| --------------------- | ----------------------------------- | ----------------------------------- |
-| DDS discovery         | Network debugging, XML profiles     | Single process, direct calls        |
-| Message serialization | `.msg` files, code generation       | Python objects, no serialization    |
-| `tf2` tree            | Hundreds of frames, lookup latency  | TransformRegistry, lazy evaluation  |
-| Launch files          | YAML, Python, XML hybrids           | Direct orchestration in main window |
-| Quaternions           | Conversion every time they are used | Rotation vectors, human-readable    |
-
-ROS solves distributed robotics. But most robotics is not distributed. Most robotics is **one robot, one computer, one engineer**.
-
-Hatch is for that engineer.
-
-### B.4 The Danger of Formalisms
+### B.2 The Danger of Formalisms
 
 Formalisms are not evil. They are tools. But tools can become **cages**.
 
@@ -648,21 +608,9 @@ Formalisms are not evil. They are tools. But tools can become **cages**.
 
 Hatch rejects accumulated complexity. Every component must be derived from first principles, not copied from convention.
 
-### B.5 The Same Cycle in AI
+### B.3 Hatch's Position
 
-| Phase                 | AI Journey                                                        |
-| --------------------- | ----------------------------------------------------------------- |
-| Understanding         | Humans understand language, reasoning, causality.                 |
-| Formalization         | Statistics become matrices, transformers, billions of parameters. |
-| Accumulation          | LLMs generate fluent text.                                        |
-| Loss of Understanding | Engineers ask: "Does it actually understand?"                     |
-| Rediscovery           | Explainable AI, Causal AI, Grounding.                             |
-
-The cycle continues. We are teaching machines to understand what humans have forgotten.
-
-### B.6 Hatch's Position
-
-> *"No formalism shall be used without understanding. If you cannot explain what a number means to a beginner, the representation is wrong."*
+> *"No formalism shall be used without understanding. If you cannot explain what a number means to a beginner, the representation is inappropriate for that context."*
 
 Hatch is not anti-formalism. It is anti- **blind formalism**.
 
@@ -675,7 +623,7 @@ Hatch is not anti-formalism. It is anti- **blind formalism**.
 | Single robot per session  | Multi-robot complexity without need    |
 | URDF as single scene file | Separate world/launch/config files     |
 
-### B.7 The Purist's Question
+### B.4 The Purist's Question
 
 Before adding any formalism to Hatch, ask:
 

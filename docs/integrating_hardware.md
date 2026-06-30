@@ -81,9 +81,12 @@ protocol requires:
 - Continuous data streaming at 125-500 Hz
 - Thread-safe access from the main UI thread
 - Graceful handling of connection drops and robot protective stops
-
+---
+> **Note on CB3 vs. e‑Series:** On e‑Series robots, the RTDE control script is removed automatically when the connection closes. On CB3 robots, the script remains on the robot until you press **Stop** on the teach pendant. Always press **Stop** before reconnecting after a crashed session.
+---
 ### The Solution: Event-Driven Threading
 
+```python
 class URRobotDriver(QObject):
     """UR robot driver using RTDE protocol."""
 
@@ -139,6 +142,7 @@ class URRobotDriver(QObject):
         """Send joint command to robot."""
         if self._rtde_c:
             self._rtde_c.moveJ(positions, speed=1.0, acceleration=1.0)
+```
 
 ### Key Design Decisions
 
@@ -188,6 +192,7 @@ PointCloudDisplay (main thread, via signal)
 
 ### Stage 1: Camera Driver
 
+```python
 class CameraDriver(QObject):
     """Background thread that reads from camera hardware."""
 
@@ -209,9 +214,13 @@ class CameraDriver(QObject):
             if ret:
                 depth = self._capture_depth()  # Device-specific
                 self.frame_ready.emit(color, depth)
+```
 
 ### Stage 2: Frame Processor
 
+> **Camera intrinsics:** You must provide the camera's intrinsic matrix (focal length, principal point, distortion coefficients). These are typically obtained from the camera manufacturer's SDK or by calibrating the camera using a checkerboard pattern.
+
+```python
 class FrameProcessor(QObject):
     """Converts depth frames to point clouds."""
 
@@ -230,9 +239,10 @@ class FrameProcessor(QObject):
         """Vectorized depth-to-point-cloud conversion."""
         # ... implementation ...
         return points  # Nx3 array
-
+```
 ### Stage 3: Point Cloud Publisher
 
+```python
 class PointCloudPublisher:
     """Publishes point clouds to Hatch's event system."""
 
@@ -256,7 +266,7 @@ class PointCloudPublisher:
             },
             source='camera_pipeline'
         )
-
+```
 ### Wiring It Together
 
 ```python

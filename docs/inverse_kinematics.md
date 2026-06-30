@@ -84,6 +84,70 @@ This is the second critical insight. The spherical wrist separates the positioni
 
 ---
 
+## 3.1 Denavit–Hartenberg Parameters: A Standardized Language
+
+Every robot arm can be described by a set of four numbers for each joint: the **Denavit–Hartenberg (DH) parameters**. These parameters define the geometric relationship between consecutive joint axes.
+
+### The Four Parameters
+
+| Parameter | Symbol | Meaning |
+|-----------|--------|---------|
+| Link length | $ a_i $ | Distance along $ X_i $ from $ Z_i $ to $ Z_{i+1} $ |
+| Link twist | $ \alpha_i $ | Angle about $ X_i $ from $ Z_i $ to $ Z_{i+1} $ |
+| Link offset | $ d_i $ | Distance along $ Z_i $ from $ X_{i-1} $ to $ X_i $ |
+| Joint angle | $ \theta_i $ | Angle about $ Z_i $ from $ X_{i-1} $ to $ X_i $ |
+
+For a **revolute joint**, $ \theta_i $ is the variable (the joint angle). The other three parameters are fixed constants of the robot's physical design.
+
+> The modified DH convention used in Hatch follows:  
+> **Craig, J. J. (2018). *Introduction to Robotics: Mechanics and Control* (4th ed.). Pearson.**  
+> In this convention, the transformation from frame $ i-1 $ to frame $ i $ is:
+> 
+> $$
+> T_i^{i-1} = \text{Rot}(Z, \theta_i) \cdot \text{Trans}(Z, d_i) \cdot \text{Trans}(X, a_i) \cdot \text{Rot}(X, \alpha_i)
+> $$
+> 
+> This ordering simplifies the kinematic analysis of serial chain robots and is widely used in modern robotics software.
+
+### Why DH Matters for IK
+
+The analytical IK solver in this document does **not** require you to manually enter DH parameters — it derives the geometry directly from the URDF. However, understanding DH parameters is useful for:
+
+- **Comparing robots:** The DH table tells you at a glance how two robot arms differ.
+- **Debugging IK:** If your robot moves in unexpected ways, checking the DH parameters (derived from the URDF) can reveal misaligned frames.
+- **Writing custom IK solvers:** If you implement a new solver, DH parameters are the standard input format.
+
+### How Hatch Uses DH
+
+Hatch extracts the DH parameters **automatically** from the URDF during loading:
+
+```python
+# In KinematicModel._build_dh_table()
+# For each joint in the arm chain:
+#   - Find the parent link
+#   - Compute a, alpha, d, theta from the URDF's joint origin and axis
+#   - Store them in a table
+```
+
+The analytical IK solver uses these derived parameters internally to compute forward kinematics and solve inverse kinematics. You never need to supply them manually.
+
+>Note: Hatch uses the modified DH convention (Craig's convention) to match the URDF's frame definitions. This is a common choice in modern robotics software.
+
+**Example: DH Table for a 6‑DOF Robot**  
+
+|Joint | $ a_i $ | $ \alpha_i $ | $  d_i $ | $ \theta_i $ |
+|------|---------|--------------|----------|--------------|
+| J1 | 0 | 90° | $ d_1 $ | $ \theta_1 $ |
+| J2 | $ a_2 $ | 0° | 0 | $ \theta_2 $ |
+| J3 | $ a_3 $ | 0° | 0 | $ \theta_3 $ |
+| J4 | 0 | -90° | $ d_4 $ | $ \theta_4 $ |
+| J5 | 0 | 90° | 0 | $ \theta_5 $ |
+| J6 | 0 | 0° | $ d_6 $ | $ \theta_6 $ |
+​
+ 
+This table corresponds to a **spherical wrist** robot with a shoulder, elbow, and three intersecting wrist axes. The fixed parameters ($ a_i $, $ \alpha_i $, $ d_i $) are derived from the URDF; the joint angles $ \theta_i $ are the variables the IK solver computes.
+
+---
 # Part II: The Decoupling Strategy
 
 ## 4. Starting from the TCP

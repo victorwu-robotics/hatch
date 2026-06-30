@@ -12,7 +12,7 @@ title: Hatch (孵) 🐣
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge)
 
-[Quick Start](#quick-start-5-minutes) · [Documentation](#documentation) · [Architecture](architecture.md) · [Philosophy](philosophy.md)
+[Quick Start](#quick-start-2-minutes) · [Documentation](#documentation) · [Architecture](architecture.md) · [Philosophy](philosophy.md)
 
 ---
 

@@ -21,7 +21,7 @@ Load any URDF, solve IK in real time, and control real hardware — all without 
 - **The architecture is derived** — every component exists because a need demanded it.
 
 > *“A tool that makes decisions the user didn’t ask for is not intelligent — it is insubordinate.”*  
-> — The Stubborn Student, [Philosophy](philosophy.md)
+> — The Stubborn Student, [Philosophy](/docs/philosophy.md)
 
 ---
 
@@ -51,15 +51,15 @@ python -m ui.main_window
 
 | If you are... | Start here... |
 |---------------|---------------|
-| New to Hatch and just want to see it work | [quick_start.md](quick_start.md) (2 min) |
-| An end user who will use Hatch daily | [user_guide.md](user_guide.md) (30–60 min) |
-| Interested in the story and philosophy | [philosophy.md](philosophy.md) (10–30 min) |
-| An advanced user who wants to understand how it works internally | [architecture.md](architecture.md) (45–60 min) |
-| A developer debugging a technical issue | [technical_notes.md](technical_notes.md) (15–30 min per section) |
-| A hardware integrator adding a new robot, camera, or sensor | [integrating_hardware.md](integrating_hardware.md) (30–60 min) |
-| A contributor adding a new UI panel, display, or service | [developer_guide.md](developer_guide.md) (30–45 min) |
-| Looking for method signatures and API details | [api_reference.md](api_reference.md) (reference) |
-| Learning or reviewing 6‑DOF inverse kinematics | [inverse_kinematics.md](inverse_kinematics.md) (30–60 min) |
+| New to Hatch and just want to see it work | [quick_start.md](docs/quick_start.md) (2 min) |
+| An end user who will use Hatch daily | [user_guide.md](docs/user_guide.md) (30–60 min) |
+| Interested in the story and philosophy | [philosophy.md](docs/philosophy.md) (10–30 min) |
+| An advanced user who wants to understand how it works internally | [architecture.md](docs/architecture.md) (45–60 min) |
+| A developer debugging a technical issue | [technical_notes.md](docs/technical_notes.md) (15–30 min per section) |
+| A hardware integrator adding a new robot, camera, or sensor | [integrating_hardware.md](docs/integrating_hardware.md) (30–60 min) |
+| A contributor adding a new UI panel, display, or service | [developer_guide.md](docs/developer_guide.md) (30–45 min) |
+| Looking for method signatures and API details | [api_reference.md](docs/api_reference.md) (reference) |
+| Learning or reviewing 6‑DOF inverse kinematics | [inverse_kinematics.md](docs/inverse_kinematics.md) (30–60 min) |
 
 
 ## License & Status

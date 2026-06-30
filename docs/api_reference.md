@@ -397,5 +397,5 @@ class RobotInterface(ABC):
 
 ---
 
-Hatch (孵) 🐣 — built to understand, built to see.
+Hatch (孵) 🐣 — Precision in code. Understanding in mind.
 

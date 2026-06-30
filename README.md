@@ -60,7 +60,7 @@ python -m ui.main_window
 | A contributor adding a new UI panel, display, or service | [developer_guide.md](docs/developer_guide.md) (30–45 min) |
 | Looking for method signatures and API details | [api_reference.md](docs/api_reference.md) (reference) |
 | Learning or reviewing 6‑DOF inverse kinematics | [inverse_kinematics.md](docs/inverse_kinematics.md) (30–60 min) |
-
+| Looking for version history and what's new | [`CHANGELOG.md`](CHANGELOG.md) (1 min) |
 
 ## License & Status
 - **License:** MIT — free to use, modify, and distribute.

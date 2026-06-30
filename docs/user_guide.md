@@ -243,6 +243,20 @@ Hatch reads the complete scene URDF and uses the optical frame as defined.
 
 ## 6. Troubleshooting
 
+## 6.1 Installation Troubleshooting
+
+| Problem | Likely Cause | Fix |
+|---------|-------------|-----|
+| **`ModuleNotFoundError: No module named 'vtk'`** | VTK not installed or version mismatch | Check `pip freeze | grep vtk` matches `requirements.txt`. Reinstall: `pip install --upgrade vtk` |
+| **`qt.qpa.plugin: Could not load the Qt platform plugin "xcb"`** | Qt platform plugin missing or misconfigured | On Linux: `export QT_QPA_PLATFORM=xcb` before running Hatch. On headless servers, install `xvfb` and run: `xvfb-run python -m ui.main_window` |
+| **`ImportError: libGL.so.1: cannot open shared object file`** | OpenGL library missing on headless Linux | Install: `sudo apt update && sudo apt install libgl1-mesa-glx` |
+| **`ur_rtde` not found when connecting to UR robot** | `ur-rtde` not installed | Install: `pip install ur-rtde` |
+| **Python version error (e.g., `SyntaxError`)** | Python version < 3.8 or > 3.11 | Hatch requires Python 3.8–3.11. Check with `python --version`. Use `pyenv` or a virtual environment. |
+| **`pip install -r requirements.txt` fails** | Dependency conflict or outdated pip | Upgrade pip: `pip install --upgrade pip`. Then retry. If using a fresh virtual environment, ensure it is activated. |
+---
+
+## 6.2 Runtime Troubleshooting
+
 | Problem | Likely Cause | Fix |
 |---------|--------------|-----|
 | **Robot appears as red cubes instead of meshes** | Mesh files not found | Check package:// paths. Place meshes in the correct package directory. |
@@ -253,7 +267,6 @@ Hatch reads the complete scene URDF and uses the optical frame as defined.
 | **Sliders don’t match robot’s position** | By design — sliders show commands, not state | The 3D view shows the robot’s actual state. Sliders sync only on connection and mode switch. |
 
 ---
-
 ## 7. Further Reading
 
 | If you want to… | Read this… |

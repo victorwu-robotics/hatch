@@ -685,4 +685,4 @@ $$R_{\text{wrist}} = R_{\text{arm}}^T \cdot R_{\text{TCP}}$$
 
 ---
 
-*This document combines "Seeing Inverse Kinematics" (the intuitive guide) and "Analytical Inverse Kinematics for 6-DOF Spherical Wrist Robot" (the reference implementation). The pedagogical approach teaches understanding; the worked example grounds it in a real robot; the pseudocode provides the implementation blueprint.*
+*Hatch (孵) 🐣 Seeing the geometry is solving the problem.*

@@ -467,5 +467,5 @@ hatch/
 
 ---
 
-Hatch (孵) 🐣 — built to understand, built to see.
+Hatch (孵) 🐣 —  built to extend, built to share.
 

@@ -58,4 +58,4 @@ Choose the document that matches your goal.
 
 ---
 
-*Hatch (孵) 🐣 — built to understand, built to see.*
+*Hatch (孵) 🐣 — Choose your path. Understand your robot.*

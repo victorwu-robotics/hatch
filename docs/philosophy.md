@@ -1,56 +1,56 @@
 # Hatch (孵) Architecture Document
 
 ## Origin Story
-In the beginning, I knew nothing about robots and robotics. My thinking was very simple.
+**In the beginning**, I knew nothing about robots and robotics. My thinking was very simple.
 
-I didn't even know what a pose was. I thought: when I know the coordinate I want the robot tip to move to, I just give it that coordinate, and it moves there. This should be very simple.
+I didn't even know what a **pose** was. I thought: when I know the coordinate I want the robot tip to move to, I just give it that coordinate, and it moves there. This should be very simple.
 
 Then I discovered that nothing like that exists.
 
-After digging a little deeper, I realized there is orientation on top of position — the concept of a pose. Later, I understood that things were not as simple as I thought — because of inverse kinematics. I had been thinking in terms of forward kinematics. I never knew there was such a thing as IK, nor the complexity and difficulty of finding joint angles.
+After digging a little deeper, I realized there is **orientation** on top of **position** — the concept of a **pose**. Later, I understood that things were not as simple as I thought — because of **inverse kinematics**. I had been thinking in terms of **forward kinematics**. I never knew there was such a thing as **IK**, nor the complexity and difficulty of finding joint angles.
 
 It was a voyage of learning without a mentor.
 
-Every stage was a surprise. Nobody warned me. No mentor guided me. I learned by hitting walls.
+Every stage was a surprise. Nobody warned me. No mentor guided me. I **learned by hitting walls**.
 
 For my welding cell, the seam was a known curve on a steel plate. I needed
-the robot to trace it precisely, at a constant speed, with the torch at a
-fixed angle. I didn't need a planner to find a path through unknown space.
-I needed a driver to execute the path I had already defined.
+the robot to trace it precisely, at a **constant speed**, with the torch at a
+**fixed angle**. I didn't need a **planner** to find a path through unknown space.
+I needed a **driver** to execute the path I had already defined.
 
 I was lonely. I didn't know who to turn to or where to look for answers.
 
-Fortunately, the Internet already existed. I could think of reasonable questions, search with reasonable terms, and hope to find clues.
+Fortunately, the **Internet** already existed. I could think of reasonable questions, search with reasonable terms, and hope to find clues.
 
-When I found ROS, I was so happy. Someone had built something. There were drivers. There was a community. There were answers.
+When I found **ROS**, I was so happy. Someone had built something. There were drivers. There was a community. There were answers.
 
 But the happiness didn't last.
 
 ---
 
-ROS was solving a different problem. It was built for warehouses full of robots and computers. It had distributed nodes, message serialization, launch files, and — most painfully for me — motion planning.
+ROS was solving a different problem. It was built for warehouses **full of robots and computers**. It had **distributed nodes**, **message serialization**, **launch files**, and — most painfully for me — **motion planning**.
 
-For an engineering project, motion planning is unnecessary. My welding environment was known. The seam was fixed. The robot moves from A to B to C along a path I defined. There are no surprises.
+For an **engineering project**, motion planning is unnecessary. My welding environment was known. The seam was fixed. The robot moves from A to B to C along a path I defined. There are no surprises.
 
-But ROS included motion planning because they wanted to build a robot that could move through any unforeseeable space. Their Descartes package tried to find paths in Cartesian space. I wasted a great deal of time trying to use it, without knowing that a six-axis arm can reach the same pose in up to eight different configurations. Shoulder left or right. Elbow up or down. Wrist flipped or not.
+But ROS included motion planning because they wanted to build a robot that could move through any unforeseeable space. Their **Descartes** package tried to **find paths in Cartesian space**. I wasted a great deal of time trying to use it, without knowing that a six-axis arm can reach the same pose in up to eight different configurations. **Shoulder left or right**. **Elbow up or down**. **Wrist flipped or not**.
 
 Descartes, trying to be helpful, might choose one configuration for waypoint 1 and a different configuration for waypoint 2. The robot, moving between them, swings its elbow through space — potentially through the workpiece, through a fixture, through a person.
 
-The planner avoided a collision that didn't exist by creating a collision that did.
+The planner avoided **a collision that didn't exist** by creating **a collision that did**.
 
 ---
 
-And MoveIt — the standard ROS interface for robot arms — was built around motion
+And **MoveIt** — the standard ROS interface for robot arms — was built around motion
 planning. Every tutorial, every example, every API path assumed I wanted to plan.
 I couldn't find a way to use its driver and IK solver without the planner coming
 along. Whether it was technically possible or not, the architecture didn't make
 it possible *for me* — and that's what matters when you're a user trying to get
 work done.
 
-A good architecture separates what the user might not need from what they must
-have. The driver is essential. The IK solver is essential. Motion planning is
-optional — and should be. Hatch keeps them separate. If you want motion planning,
-you add it as an extension. It never forces itself on you.
+A good architecture **separates** what the user might **not need** from what they **must
+have**. **The driver is essential**. **The IK solver is essential**. Motion planning is
+**optional** — and should be. Hatch keeps them separate. **If you want motion planning,
+you add it as an extension**. It never forces itself on you.
 
 ---
 
@@ -185,7 +185,7 @@ You are invited.
 ---
 
 *— The Stubborn Student*
-*Hatch (孵)*
+*Hatch (孵) 🐣*
 
 ---
 
@@ -203,7 +203,7 @@ document. Together they form the foundation of Hatch.
 
 Hatch is not a collection of tools. It is a **derived architecture** — a system where every component exists because a principle demanded it.
 
-The name **Hatch (孵)** represents the moment a new robot comes to life. The right side of the character (孚) signifies incubation and nurturing — bringing ideas into existence through careful development.
+The name **Hatch (孵) 🐣** represents the moment a new robot comes to life. The right side of the character (孚) signifies incubation and nurturing — bringing ideas into existence through careful development.
 
 ---
 
@@ -286,12 +286,11 @@ In Hatch, the URDF file is not just a robot description. It is the complete defi
 The URDF standard implicitly assumes `base_link` is the kinematic root. Many real robots violate this assumption.
 
 **Example: Universal Robots UR10**
-
 ```
 world
-  └── base_link (mounting point, first link)
-        └── base_inertia (fixed joint, 180° rotation about Z)
-              └── shoulder_pan_joint (FIRST MOVING JOINT)
+└── base_link (mounting point, first link)
+└── base_inertia (fixed joint, 180° rotation about Z)
+└── shoulder_pan_joint (FIRST MOVING JOINT)
 ```
 
 The true kinematic root is the parent of the first moving joint — `base_inertia`, not `base_link`. The 180° rotation means the entire kinematic chain is flipped relative to `base_link`. Using `base_link` as the kinematic root produces wrong inverse kinematics.
@@ -310,26 +309,25 @@ Hatch detects the true root automatically:
 The `TransformRegistry` supports `FrameStatus.DYNAMIC` — frames whose transforms change during operation. Currently this serves robot joints. In future versions, it will also serve runtime-discovered objects.
 
 ### The Extension Point
-
 ```
 Sensor (camera/lidar)
-    ↓ publishes
+↓ publishes
 DETECTED_OBJECT event
-    ↓
+↓
 Perception module processes
-    ↓ calls
+↓ calls
 TransformRegistry.register_frame(
-    name="detected_object_1",
-    transform=T_world_to_object,
-    status=DYNAMIC,
-    parent="world",
-    description="Detected by camera_1 at timestamp X"
+name="detected_object_1",
+transform=T_world_to_object,
+status=DYNAMIC,
+parent="world",
+description="Detected by camera_1 at timestamp X"
 )
-    ↓
+↓
 Collision monitor (future) subscribes to registry callbacks
-    ↓ evaluates
+↓ evaluates
 "Is any robot link within safety margin of any DYNAMIC frame?"
-    ↓ if yes
+↓ if yes
 Publishes SAFETY_STOP event
 ```
 
@@ -339,248 +337,11 @@ This is a **designed extension point, not current capability.** The `FrameStatus
 
 ---
 
-## The Core Services
+## Appendix A: On Formalism and Understanding — Why Hatch Rejects Accumulated Complexity
 
-| Service             | Principle | Responsibility                                                |
-| ------------------- | --------- | ------------------------------------------------------------- |
-| `TransformRegistry` | #5        | Store and compute relative transforms. Lazy evaluation. Callbacks for change notification. |
-| `StateChannel`      | #6        | Publish/subscribe event bus with optional history.            |
-| `MeshLoader`        | #3, #9    | Load and cache mesh files (STL, OBJ, PLY, DAE). Pure service, no actors. |
-| `RobotManager`      | #4, #10   | Load URDF, manage robot lifecycle, own robot instances. No Qt signals. |
-| `StateHandler`      | #7        | Subscribe to ROBOT_STATE. Update kinematic model and transform registry. Single owner of runtime state updates. |
-| `CommandHandler`    | #2, #7    | Route commands (joint, cartesian, mode switch) to active robot. |
-| `SimulatedRobot`    | #7        | Execute commands in simulation. Solve IK. Publish state. Pure Python. |
-| `RealRobot`         | —         | Bridge to hardware via RTDE. Qt used internally for thread-safe driver communication. |
-
----
-
-## The UI Layer (Pure Presentation)
-
-| Component               | Responsibility                                                                                |
-| ----------------------- | --------------------------------------------------------------------------------------------- |
-| `MainWindow`            | Create services and engine. Wire components. Subscribe only to window-level events (errors).  |
-| `UIBuilder`             | Create all menus, panels, docks.                                                              |
-| `JointControlPanel`     | Display sliders for each joint. Publish `JOINT_COMMAND`. Subscribe to `ROBOT_STATE` for display. |
-| `CartesianControlPanel` | Display sliders for X,Y,Z,RX,RY,RZ. Publish `CARTESIAN_COMMAND`. Subscribe to `ROBOT_STATE` for display. |
-| `RobotConnectionPanel`  | IP input, Connect button, Mode selector. Calls `RobotManager` for commands. Subscribes to `CONNECTION_ESTABLISHED`, `CONNECTION_LOST`, `MODE_SWITCHED` for display. |
-| `MotionContainer`       | Combine connection panel + Joint/Cartesian control tabs.                                      |
-| `RobotsMenu`            | Show current robot (read-only). Subscribe to `ROBOT_LOADED`.                                  |
-| `FileMenu`              | Load URDF, Save Screenshot, Exit.                                                             |
-
----
-
-## The Event Flow
-
-```
-User moves slider
-    ↓
-UI Panel publishes COMMAND event
-    ↓
-StateChannel distributes event
-    ↓
-CommandHandler receives, routes to active robot
-    ↓
-Robot executes command, publishes ROBOT_STATE
-    ↓
-StateHandler receives ROBOT_STATE
-    ↓
-StateHandler updates KinematicModel (recomputes FK)
-    ↓
-StateHandler updates TransformRegistry (new link transforms)
-    ↓
-TransformRegistry notifies callbacks
-    ↓
-KinematicDisplay receives callback, sets _needs_render = True
-    ↓
-VisualizerEngine's 60Hz timer checks _needs_render
-    ↓
-If dirty: VTK renders frame. Flag cleared.
-    ↓
-ROBOT_STATE also received by UI panels
-    ↓
-UI panels update slider positions and value labels
-```
-
-**No direct calls between UI and model. No polling. Single render path.**
-
----
-
-## Directory Structure
-
-```
-hatch/
-├── core/
-│   ├── mesh_loader.py           # Pure mesh loading service
-│   ├── robot_manager.py         # Robot lifecycle (no Qt)
-│   ├── command_handler.py       # Command routing
-│   ├── mode.py                  # Mode enum
-│   ├── state_handler.py         # Single owner of model + registry updates
-│   ├── kinematics/
-│   │   ├── kinematic_model.py   # URDF parsing, FK, true root detection
-│   │   ├── ik_solver.py         # IK solver wrapper with base compensation
-│   │   └── ur_ik_solver.py      # Parameterized analytical IK for UR robots
-│   └── world_state/
-│       ├── transform_registry.py
-│       ├── state_channel.py
-│       └── event_types.py
-│
-├── drivers/
-│   ├── robot_arm/
-│   │   ├── robot_interface.py   # Plain ABC (no Qt)
-│   │   ├── base_robot_arm.py    # Driver-internal ABC (no Qt)
-│   │   ├── simulated_robot.py   # Pure Python simulation
-│   │   ├── real_robot.py        # Hardware bridge (Qt for signal handling)
-│   │   └── ur_rtde_bridge.py    # RTDE driver (Qt signal holder)
-│
-├── displays/
-│   └── kinematic_display.py     # VTK visualization
-│
-├── viz/
-│   └── visualizer_engine.py     # VTK render window, grid, camera
-│
-├── ui/
-│   ├── main_window.py           # Application entry point
-│   ├── ui_builder.py            # Menu and dock construction
-│   ├── menus/
-│   │   ├── file_menu.py
-│   │   ├── view_menu.py
-│   │   ├── robots_menu.py
-│   │   └── camera_menu.py
-│   ├── panels/
-│   │   ├── joint_control_panel.py
-│   │   ├── cartesian_control_panel.py
-│   │   ├── robot_connection_panel.py
-│   │   ├── motion_container.py
-│   │   ├── grid_control_panel.py
-│   │   └── view_controls_panel.py
-│   └── managers/
-│       └── camera_manager.py
-│
-├── assets/
-│   └── robots/                  # URDF files
-│
-└── tests/                       # Unit tests (recommended)
-    ├── test_transform_registry.py
-    ├── test_state_channel.py
-    └── test_kinematic_model.py
-```
-
----
-
-## Event Types Reference
-
-| Event                    | Direction       | Data                                     | Publisher |
-| ------------------------ | --------------- | ---------------------------------------- | --------- |
-| `ROBOT_LOAD_REQUEST`     | UI → System     | `{urdf_path, robot_id}`                  | FileMenu |
-| `ROBOT_LOADED`           | System → All    | `{asset_id, urdf_path, kinematic_model}` | RobotManager |
-| `ROBOT_UNLOAD_REQUEST`   | UI → System     | `{robot_id}`                             | FileMenu |
-| `JOINT_COMMAND`          | UI → System     | `{positions, names}`                     | JointControlPanel |
-| `CARTESIAN_COMMAND`      | UI → System     | `{pose (4x4), frame}`                    | CartesianControlPanel |
-| `MODE_SWITCH_REQUEST`    | UI → System     | `{mode: "simulate_local" or "real"}`     | RobotConnectionPanel |
-| `MODE_SWITCHED`          | System → All    | `{mode}`                                 | CommandHandler |
-| `CONNECTION_REQUEST`     | UI → System     | `{ip, frequency}`                        | RobotConnectionPanel (via RobotManager) |
-| `CONNECTION_ESTABLISHED` | System → All    | `{message}`                              | RealRobot |
-| `CONNECTION_LOST`        | System → All    | `{message}`                              | RealRobot |
-| `DISCONNECTION_REQUEST`  | UI → System     | —                                        | RobotConnectionPanel (via RobotManager) |
-| `ROBOT_STATE`            | Robot → All     | `{joint_positions, tcp_pose, timestamp}` | SimulatedRobot, RealRobot |
-| `ERROR_OCCURRED`         | Any → UI        | `{error}`                                | Any component |
-
----
-
-## Mode States
-
-| Mode               | IK Source           | Robot Movement | Description                                |
-| ------------------ | ------------------- | -------------- | ------------------------------------------ |
-| `SIMULATE_LOCAL`   | Local IK solver     | Virtual only   | Test kinematics without hardware            |
-| `SIMULATE_REAL_IK` | Real robot's solver | Virtual only   | Validate IK against real controller         |
-| `REAL`             | Real robot's solver | Real hardware  | Full operation                              |
-
----
-
-## Appendix A: On Event-Driven Architecture and the Main Loop
-
-### A.1 The Clarification
-
-Principle #2 states: *"Event-driven, no polling."*
-
-An experienced engineer might ask: *"Doesn't every application have a main loop?"*
-
-**Yes.** Hatch runs on Qt, which provides `QApplication.exec_()` — an event loop. The distinction is not whether a loop exists, but **who drives it**.
-
-### A.2 What "No Polling" Means
-
-| Pattern                            | Forbidden   | Reason                            |
-| ---------------------------------- | ----------- | --------------------------------- |
-| `while True: check()`              | ✅ Forbidden | Spins CPU, wastes energy          |
-| `if not data: continue`            | ✅ Forbidden | Same as above                     |
-| `time.sleep(0.01); check()`        | ✅ Forbidden | Still polling, just slower        |
-| `QTimer.timeout.connect(handler)`  | ✅ Allowed   | Event-driven, OS wakes on timer   |
-| `signal.connect(handler)`          | ✅ Allowed   | Event-driven, OS wakes on input   |
-| `StateChannel.subscribe(callback)` | ✅ Allowed   | Event-driven, callback on publish |
-| `get_transform()` lazy evaluation  | ✅ Allowed   | Computed on demand, no loop       |
-
-### A.3 The Qt Event Loop
-
-Qt's `app.exec_()` is not polling. It uses operating system primitives (select, epoll, WaitForMultipleObjects) to **block** until an event occurs:
-
-```python
-# Simplified — Qt's actual implementation is more complex
-while running:
-    event = wait_for_event()  # ← Blocks, CPU sleeps
-    dispatch(event)
-```
-
-When the application is idle, the thread sleeps. The CPU can be used by other processes or enter low-power states.
-
-### A.4 Hatch's Use of the Event Loop
-
-| Component           | Mechanism                | Polling?                            |
-| ------------------- | ------------------------ | ----------------------------------- |
-| UI sliders          | Qt signals               | No (OS wakes on input)              |
-| Command publishing  | `StateChannel.publish()` | No (direct call from event handler) |
-| Robot state updates | `StateChannel.publish()` | No (called when state changes)      |
-| Render loop         | `QTimer` (60Hz)          | No (Qt manages timerfd) — checks dirty flag, sleeps when clean |
-| Transform queries   | Lazy evaluation          | No (computed on demand)             |
-| File loading        | User action              | No (triggered by menu click)        |
-
-### A.5 The Render Loop: A Special Case
-
-The `VisualizerEngine` runs a 60Hz `QTimer`. This might look like polling. It is not. The timer callback checks a `_needs_render` flag on each display. If no display needs rendering, the callback returns immediately — no VTK operations, no transform recomputation. The flag is set only when `TransformRegistry` callbacks fire (i.e., when a transform actually changed). When nothing is moving, the render loop does nothing except check one boolean per display.
-
-### A.6 Lazy Evaluation
-
-"No polling" also means **no periodic recomputation**. Transforms are computed only when requested:
-
-```python
-def get_transform(self, target, source):
-    # ... cache lookup ...
-    T_parent_world = self._get_world_transform(info.parent)
-    T = T_parent_world @ info.transform_parent
-    self._world_cache[name] = T.copy()
-    return T
-```
-
-If nothing asks for a transform, nothing computes.
-
-### A.7 The Test
-
-Ask of any component: *"Does it ever wake up to check if something has changed?"*
-
-- If yes → **Polling** → Forbidden.
-- If no → **Event-driven** → Allowed.
-
-### A.8 The Answer to the Skeptical Engineer
-
-> *"Every application has a main loop. Qt provides it. Hatch does not add another. All application logic is in event handlers or lazy computations. The render loop is a single centralized timer that checks dirty flags — it does not recompute anything. No thread ever spins waiting for something to happen. The CPU sleeps when the application is idle."*
-
----
-
-## Appendix B: On Formalism and Understanding — Why Hatch Rejects Accumulated Complexity
-
-### B.1 The Cycle
+### A.1 The Cycle
 
 Human knowledge follows a recurring cycle:
-
 ```
 Understanding → Formalization → Accumulation → Loss of Understanding → Rediscovery
 ```
@@ -595,7 +356,7 @@ Understanding → Formalization → Accumulation → Loss of Understanding → R
 
 We are often in the **loss phase** — surrounded by formalisms we no longer understand.
 
-### B.2 The Danger of Formalisms
+### A.2 The Danger of Formalisms
 
 Formalisms are not evil. They are tools. But tools can become **cages**.
 
@@ -608,7 +369,7 @@ Formalisms are not evil. They are tools. But tools can become **cages**.
 
 Hatch rejects accumulated complexity. Every component must be derived from first principles, not copied from convention.
 
-### B.3 Hatch's Position
+### A.3 Hatch's Position
 
 > *"No formalism shall be used without understanding. If you cannot explain what a number means to a beginner, the representation is inappropriate for that context."*
 
@@ -623,7 +384,7 @@ Hatch is not anti-formalism. It is anti- **blind formalism**.
 | Single robot per session  | Multi-robot complexity without need    |
 | URDF as single scene file | Separate world/launch/config files     |
 
-### B.4 The Purist's Question
+### A.4 The Purist's Question
 
 Before adding any formalism to Hatch, ask:
 
@@ -634,7 +395,7 @@ Before adding any formalism to Hatch, ask:
 
 If the answer to any of these is "no," the formalism does not belong in Hatch.
 
-### B.8 The Full Cycle
+### A.5 The Full Cycle
 
 > *"From understanding to formalism, then from formalism to understanding."*
 
@@ -646,11 +407,11 @@ And honesty is the foundation of good engineering.
 
 ---
 
-## Appendix C: Known Gaps and Limitations
+## Appendix B: Known Gaps and Limitations
 
 Hatch is an honest platform. These areas are not yet addressed and users should be aware of them.
 
-### C.1 Error Handling
+### B.1 Error Handling
 
 **Current state:** The platform has an `ERROR_OCCURRED` event. Components publish it when something goes wrong. `MainWindow` displays a dialog.
 
@@ -662,7 +423,7 @@ Hatch is an honest platform. These areas are not yet addressed and users should 
 
 **What this means for users:** Errors are reported but may not provide enough information for debugging. The robot does not automatically enter a safe state on all error types. Users should monitor the console output and test recovery manually.
 
-### C.2 Configuration Management
+### B.2 Configuration Management
 
 **Current state:** Configuration values (RTDE frequency, grid size, render FPS, IK solver parameters) are hardcoded as defaults in their respective classes.
 
@@ -673,7 +434,7 @@ Hatch is an honest platform. These areas are not yet addressed and users should 
 
 **What this means for users:** To change a default (e.g., RTDE frequency from 125Hz to 250Hz), you must find the hardcoded value in the source. Configuration management will be addressed when the platform stabilizes and pain points become clear during regular use.
 
-### C.3 Sensor Integration and Calibration
+### B.3 Sensor Integration and Calibration
 
 **Current state:** A `CameraManager` class exists with preliminary support for RGB-D cameras. The architecture has a designed extension point for dynamic objects. Camera events (`CAMERA_STARTED`, `CAMERA_STOPPED`) are reserved but not yet implemented in the canonical event list.
 
@@ -698,8 +459,8 @@ It does not yet handle error recovery, configuration management, or sensor calib
 
 From this foundation, everything else grows.
 
+The Stubborn Student
+
 ---
 
-*Document version 2.0*
-*Hatch (孵) Architecture Foundation*
-*Updated: Refactored to align implementation with principles. Added URDF-as-scene, dynamic object extension point, known gaps.*
+*Hatch (孵) 🐣 — built to understand, built to see.*

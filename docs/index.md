@@ -95,6 +95,7 @@ python -m ui.main_window
 | A contributor adding a new UI panel, display, or service | [developer_guide.md](developer_guide.md) (30–45 min) |
 | Looking for method signatures and API details | [api_reference.md](api_reference.md) (reference) |
 | Learning or reviewing 6‑DOF inverse kinematics | [inverse_kinematics.md](inverse_kinematics.md) (30–60 min) |
+| Looking for version history and what's new | [`CHANGELOG.md`](CHANGELOG.md) (1 min) |
 
 ---
 
@@ -108,4 +109,4 @@ python -m ui.main_window
 
 ---
 
-*Hatch (孵) 🐣 — An incubator for robotic ideas. Version 1.0.0. MIT License.*
+*Hatch (孵) 🐣 — your journey starts here.*

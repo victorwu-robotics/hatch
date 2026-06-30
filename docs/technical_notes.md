@@ -435,7 +435,54 @@ def resolve_package_path(package_name, relative_path, urdf_dir):
             return candidate
 
     raise FileNotFoundError(f"Could not resolve {package_name}/{relative_path}")
+```
 
-*This document combines the Kinematic Model vs Transform Registry guide, Fixed
-Chain Tail specification, URDF Processing note, and DAE Mesh Loading post-mortem
-into a single technical reference.*
+---
+
+## 6. DH Parameter Extraction from URDF (Advanced)
+
+> **Who should read this:** You only need this section if you are debugging IK issues, implementing a custom IK solver, or working with a robot that has been physically calibrated. If you are an end user using Hatch with standard URDFs, you can safely skip this section.
+
+Hatch extracts Denavit–Hartenberg (DH) parameters **automatically** from the URDF during loading. This section explains how the extraction works, why it matters, and the distinction between nominal and calibrated parameters.
+
+### 6.1 Why Extract DH Parameters?
+
+The analytical IK solver in Hatch does not require manual DH input — it derives the geometry directly from the URDF. However, extracting DH parameters is useful for:
+
+- **Debugging IK:** If the robot moves in unexpected ways, the DH table derived from the URDF can reveal misaligned frames or incorrect joint offsets.
+- **Comparing robots:** The DH table provides a compact, standardized description of the robot's kinematics.
+- **Custom IK solvers:** If you implement your own solver, DH parameters are the standard input format.
+
+### 6.2 How Hatch Extracts DH Parameters
+
+Hatch uses the **modified DH convention (Craig's convention)** to match the URDF's frame definitions. The extraction process is:
+
+1. **Build the kinematic chain** from the true kinematic root to the tool mount.
+2. **For each joint**, read the joint's origin (position and orientation) and axis from the URDF.
+3. **Compute the four DH parameters** from the relative transform between consecutive frames.
+
+The extraction algorithm can be summarized as:
+
+```python
+def extract_dh_parameters(joint, parent_link, child_link):
+    """
+    Extract modified DH parameters from a URDF joint.
+    Returns (a, alpha, d, theta) for the joint.
+    """
+    # Get the transform from parent to child (joint origin)
+    T = joint.origin  # 4x4 transform matrix
+    
+    # Extract parameters from T and the joint axis
+    a = T[0, 3]                 # Link length (distance along X)
+    alpha = atan2(T[2, 1], T[2, 2])  # Link twist (angle about X)
+    d = T[2, 3]                 # Link offset (distance along Z)
+    theta = 0.0                 # Joint angle (variable for revolute joints)
+    
+    # For revolute joints, theta is the joint angle variable
+    # For fixed joints, theta is a constant offset
+    
+    return a, alpha, d, theta
+```
+---
+
+*Hatch (孵) 🐣 -- Knowing the details is knowing the truth.*

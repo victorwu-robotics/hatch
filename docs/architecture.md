@@ -1,4 +1,4 @@
-# Hatch (孵) Architecture Document
+# Hatch (孵) 🐣 Architecture Document
 
 ## A Derived Architecture
 
@@ -56,20 +56,19 @@ instantiate macros. We don't need all of xacro — just enough to assemble
 a scene from modular parts.
 
 ### Component: URDFPreprocessor
-
 ```
 User provides .urdf or .xacro file
-    ↓
+↓
 URDFPreprocessor resolves <xacro:include> files
-    ↓
+↓
 Resolves package:// paths to find mesh files
-    ↓
+↓
 Substitutes ${variables}
-    ↓
+↓
 Expands <xacro:macro> calls
-    ↓
+↓
 Outputs plain URDF XML
-    ↓
+↓
 KinematicModel parses it
 ```
 
@@ -92,14 +91,13 @@ Hatch searches for `package_name` in configured directories and follows the
 relative path inside it.
 
 The user organizes their files following ROS package conventions:
-
 ```
 ~/hatch/assets/
-├── scenes/my_scene/urdf/scene.urdf    ← The file loaded in Hatch
-├── robots/ur10/urdf/ur10.urdf         ← Included by scene.urdf
-├── robots/ur10/meshes/base_link.stl   ← Referenced by ur10.urdf
-├── sensors/keyence/...                ← Included by scene.urdf
-└── ugv/bunker/...                     ← Included by scene.urdf
+├── scenes/my_scene/urdf/scene.urdf ← The file loaded in Hatch
+├── robots/ur10/urdf/ur10.urdf ← Included by scene.urdf
+├── robots/ur10/meshes/base_link.stl ← Referenced by ur10.urdf
+├── sensors/keyence/... ← Included by scene.urdf
+└── ugv/bunker/... ← Included by scene.urdf
 ```
 
 ---
@@ -115,16 +113,15 @@ to the robot base? Where is link_3 relative to link_1?
 This is the transform problem. Every robotics framework must solve it.
 
 ### Component: KinematicModel
-
 ```
 URDF file
-    ↓
+↓
 KinematicModel parses links and joints
-    ↓
+↓
 Detects the true kinematic root
-    ↓
+↓
 Computes forward kinematics on state changes
-    ↓
+↓
 Provides transforms for every link in world coordinates
 ```
 
@@ -191,18 +188,17 @@ when requested. Cache invalidation on change. Callbacks notify interested
 parties when transforms change.
 
 ### Component: TransformRegistry
-
 ```
 KinematicModel computes link transforms in world frame
-    ↓
+↓
 StateHandler converts to parent-relative transforms
-    ↓
+↓
 TransformRegistry stores them with lazy caching
-    ↓
+↓
 On query: compute world transform by walking up the tree
-    ↓
+↓
 On update: invalidate cache for the frame and all descendants
-    ↓
+↓
 Callbacks notify KinematicDisplay to re-render
 ```
 
@@ -218,16 +214,15 @@ Visualization is a service that reads, not controls. The 3D view is a
 window into the robot's internal state — not a separate simulation.
 
 ### Component: KinematicDisplay + VisualizerEngine
-
 ```
 KinematicModel provides link transforms and mesh paths
-    ↓
+↓
 MeshLoader loads mesh files into VTK PolyData
-    ↓
+↓
 KinematicDisplay creates VTK actors for each link
-    ↓
+↓
 TransformRegistry callbacks update actor positions
-    ↓
+↓
 VisualizerEngine renders at 60Hz when dirty
 ```
 
@@ -246,16 +241,15 @@ its TCP to a specific position. I need to do this whether the robot is
 real hardware or a simulation.
 
 ### Component: RobotInterface, SimulatedRobot, RealRobot
-
 ```
 CommandHandler receives a command
-    ↓
+↓
 Routes to active robot (SimulatedRobot or RealRobot)
-    ↓
+↓
 Robot executes the command:
-    SimulatedRobot: solve IK locally, update internal state
-    RealRobot: send command via RTDE to hardware
-    ↓
+SimulatedRobot: solve IK locally, update internal state
+RealRobot: send command via RTDE to hardware
+↓
 Robot publishes ROBOT_STATE with new joint positions
 ```
 
@@ -277,31 +271,27 @@ registry must update. The display must update. This must happen exactly
 once per state change, not multiple times from different paths.
 
 ### Component: StateHandler
-
 ```
 Robot publishes ROBOT_STATE
-    ↓
+↓
 StateHandler receives it (the ONLY subscriber that modifies state)
-    ↓
+↓
 Updates KinematicModel with new joint positions
-    ↓
+↓
 KinematicModel recomputes forward kinematics
-    ↓
+↓
 StateHandler updates TransformRegistry with new transforms
-    ↓
+↓
 TransformRegistry callbacks fire
-    ↓
+↓
 KinematicDisplay sets _needs_render = True
-    ↓
+↓
 VisualizerEngine renders on next timer tick
 ```
 
 ### Mode State Machine
 
 Hatch has three modes, not two. The mode dropdown in the UI shows `Simulate` and `Real`, but internally there is a third state: `SIMULATE_REAL_IK`.
-
-## Mode State Machine
-
 ```
                     ┌─────────────────┐
                     │  SIMULATE_LOCAL │
@@ -319,7 +309,7 @@ Hatch has three modes, not two. The mode dropdown in the UI shows `Simulate` and
                     │  virtual only)  │
                     └────────┬────────┘
                              │
-                    switch to REAL
+                       switch to REAL
                              │
                              ▼
                     ┌─────────────────┐
@@ -373,24 +363,23 @@ All events in one place. Publish/subscribe with history. Timestamps
 preserve sequence. Decoupled communication.
 
 ### Component: StateChannel
-
 ```
 JointControlPanel publishes JOINT_COMMAND
-    ↓
+↓
 StateChannel delivers to all subscribers
-    ↓
+↓
 CommandHandler receives, routes to robot
-    ↓
+↓
 Robot publishes ROBOT_STATE
-    ↓
+↓
 StateChannel delivers to all subscribers
-    ↓
+↓
 StateHandler updates model (one subscriber)
-    ↓
+↓
 JointControlPanel updates sliders (another subscriber)
-    ↓
+↓
 CartesianControlPanel updates display (another subscriber)
-    ↓
+↓
 KinematicDisplay updates via TransformRegistry callbacks (indirect)
 ```
 
@@ -418,21 +407,20 @@ business logic. They do not update models or registries. They are
 pure presentation.
 
 ### Component: UI Panels
-
 ```
 JointControlPanel:
-    User drags slider → publishes JOINT_COMMAND
-    Subscribes to ROBOT_STATE → updates slider positions
+User drags slider → publishes JOINT_COMMAND
+Subscribes to ROBOT_STATE → updates joint angles display
 
 CartesianControlPanel:
-    User drags slider → publishes CARTESIAN_COMMAND
-    Subscribes to ROBOT_STATE → updates current TCP display
+User drags slider → publishes CARTESIAN_COMMAND
+Subscribes to ROBOT_STATE → updates current TCP display
 
 RobotConnectionPanel:
-    User clicks Connect → calls RobotManager.connect_robot()
-    Subscribes to CONNECTION_ESTABLISHED → shows green status
-    Subscribes to CONNECTION_LOST → shows red status
-    Subscribes to MODE_SWITCHED → updates mode display
+User clicks Connect → calls RobotManager.connect_robot()
+Subscribes to CONNECTION_ESTABLISHED → shows green status
+Subscribes to CONNECTION_LOST → shows red status
+Subscribes to MODE_SWITCHED → updates mode display
 ```
 
 ### Principle #10: One Robot Per Session
@@ -447,20 +435,19 @@ and connected. One place must own this responsibility without doing
 the work itself.
 
 ### Component: MainWindow
-
 ```
-MainWindow.__init__:
-    Create TransformRegistry
-    Create StateChannel
-    Create VisualizerEngine
-    Create MeshLoader
-    Create RobotManager
-    Create SimulatedRobot, RealRobot
-    Create CommandHandler
-    Create CameraManager
-    Create UIBuilder
-    Subscribe to ROBOT_LOADED → create MotionContainer
-    Subscribe to ERROR_OCCURRED → show dialog
+MainWindow.init:
+Create TransformRegistry
+Create StateChannel
+Create VisualizerEngine
+Create MeshLoader
+Create RobotManager
+Create SimulatedRobot, RealRobot
+Create CommandHandler
+Create CameraManager
+Create UIBuilder
+Subscribe to ROBOT_LOADED → create MotionContainer
+Subscribe to ERROR_OCCURRED → show dialog
 ```
 
 `MainWindow` orchestrates. It does not update models, modify transforms,
@@ -478,16 +465,15 @@ the CPU must sleep. A render loop that runs at fixed intervals and
 recomputes everything is wasteful.
 
 ### Component: VisualizerEngine Render Timer
-
 ```
 QTimer fires at 60Hz
-    ↓
+↓
 Check _needs_render flag on each display
-    ↓
+↓
 If no display needs rendering: return immediately (CPU sleeps)
-    ↓
+↓
 If any display needs rendering: call Render()
-    ↓
+↓
 Clear all _needs_render flags
 ```
 
@@ -495,8 +481,6 @@ This is not polling. The timer checks a boolean — a single memory read
 per display. The flag is set only by TransformRegistry callbacks, which
 fire only when transforms actually change. When the robot is stationary,
 nothing happens. The CPU enters low-power states between timer ticks.
-
-*(See Appendix A for the full defense of event-driven architecture.)*
 
 ---
 
@@ -576,10 +560,147 @@ platform stabilizes.
 
 ---
 
-## Directory Structure  
+## The Core Services
 
-For a complete file‑by‑file breakdown of the Hatch codebase, see the [Developer Guide](developer_guide.md#directory-structure).
+| Service             | Principle | Responsibility                                                |
+| ------------------- | --------- | ------------------------------------------------------------- |
+| `TransformRegistry` | #5        | Store and compute relative transforms. Lazy evaluation. Callbacks for change notification. |
+| `StateChannel`      | #6        | Publish/subscribe event bus with optional history.            |
+| `MeshLoader`        | #3, #9    | Load and cache mesh files (STL, OBJ, PLY, DAE). Pure service, no actors. |
+| `RobotManager`      | #4, #10   | Load URDF, manage robot lifecycle, own robot instances. No Qt signals. |
+| `StateHandler`      | #7        | Subscribe to ROBOT_STATE. Update kinematic model and transform registry. Single owner of runtime state updates. |
+| `CommandHandler`    | #2, #7    | Route commands (joint, cartesian, mode switch) to active robot. |
+| `SimulatedRobot`    | #7        | Execute commands in simulation. Solve IK. Publish state. Pure Python. |
+| `RealRobot`         | —         | Bridge to hardware via RTDE. Qt used internally for thread-safe driver communication. |
 
+---
+
+## The UI Layer (Pure Presentation)
+
+| Component               | Responsibility                                                                                |
+| ----------------------- | --------------------------------------------------------------------------------------------- |
+| `MainWindow`            | Create services and engine. Wire components. Subscribe only to window-level events (errors).  |
+| `UIBuilder`             | Create all menus, panels, docks.                                                              |
+| `JointControlPanel`     | Display sliders for each joint. Publish `JOINT_COMMAND`. Subscribe to `ROBOT_STATE` for display. |
+| `CartesianControlPanel` | Display sliders for X,Y,Z,RX,RY,RZ. Publish `CARTESIAN_COMMAND`. Subscribe to `ROBOT_STATE` for display. |
+| `RobotConnectionPanel`  | IP input, Connect button, Mode selector. Calls `RobotManager` for commands. Subscribes to `CONNECTION_ESTABLISHED`, `CONNECTION_LOST`, `MODE_SWITCHED` for display. |
+| `MotionContainer`       | Combine connection panel + Joint/Cartesian control tabs.                                      |
+| `RobotsMenu`            | Show current robot (read-only). Subscribe to `ROBOT_LOADED`.                                  |
+| `FileMenu`              | Load URDF, Save Screenshot, Exit.                                                             |
+
+---
+
+## The Ten Principles (Summary)
+
+| # | Principle | Discovered From |
+|---|-----------|-----------------|
+| 0 | Individuals Before Groups | Need: one robot, one session |
+| 1 | Single Process, Single Memory Space | Need: no serialization overhead |
+| 2 | Event-Driven, No Polling | Need: decoupled communication |
+| 3 | Visualizer as Mind-Prying Tool | Need: see the robot's true state |
+| 4 | Everything in URDF | Need: describe the scene |
+| 5 | Space = TransformRegistry | Need: know where everything is |
+| 6 | Time = StateChannel | Need: components must communicate |
+| 7 | Movements as Models | Need: commands as data |
+| 8 | Pure Python | Need: rapid development |
+| 9 | UI Separate from Services | Need: controls without coupling |
+| 10 | One Robot Per Session | Need: clean boundaries |
+
+Each principle was not chosen. It was demanded by a need that arose
+during the derivation. This is what makes the architecture honest.
+
+---
+
+## The Full Event Flow (Concise)
+```
+User moves slider
+↓
+UI Panel publishes COMMAND event
+↓
+StateChannel distributes event
+↓
+CommandHandler receives, routes to active robot
+↓
+Robot executes command, publishes ROBOT_STATE
+↓
+StateHandler receives ROBOT_STATE (single owner)
+↓
+StateHandler updates KinematicModel → recomputes FK
+↓
+StateHandler updates TransformRegistry → new link transforms
+↓
+TransformRegistry notifies callbacks
+↓
+KinematicDisplay sets _needs_render = True
+↓
+VisualizerEngine 60Hz timer checks flag → renders if dirty
+↓
+ROBOT_STATE also received by UI panels
+↓
+UI panels update slider positions and value labels
+```
+
+**No direct calls between UI and model. No polling. Single render path.
+Single owner of state updates.**
+
+---
+
+## Data Flow Diagram
+
+![Hatch Data Flow](images/hatch_data_flow_diagram.png)
+
+---
+
+## Directory Structure
+```
+hatch/
+├── core/
+│ ├── urdf_preprocessor.py # Scene composition from .xacro files
+│ ├── mesh_loader.py # Pure mesh loading service
+│ ├── robot_manager.py # Robot lifecycle (no Qt)
+│ ├── command_handler.py # Command routing
+│ ├── state_handler.py # Single owner of model + registry updates
+│ ├── mode.py # Mode enum
+│ ├── kinematics/
+│ │ ├── kinematic_model.py # URDF parsing, FK, true root detection
+│ │ ├── ik_solver.py # IK solver wrapper with base compensation
+│ │ └── ur_ik_solver.py # Parameterized analytical IK for UR robots
+│ └── world_state/
+│ ├── transform_registry.py
+│ ├── state_channel.py
+│ └── event_types.py
+│
+├── drivers/
+│ └── robot_arm/
+│ ├── robot_interface.py # Plain ABC (no Qt)
+│ ├── base_robot_arm.py # Driver-internal ABC (no Qt)
+│ ├── simulated_robot.py # Pure Python simulation
+│ ├── real_robot.py # Hardware bridge (Qt for signal handling)
+│ └── ur_rtde_bridge.py # RTDE driver (Qt signal holder)
+│
+├── displays/
+│ └── kinematic_display.py # VTK visualization
+│
+├── viz/
+│ └── visualizer_engine.py # VTK render window, grid, camera
+│
+├── ui/
+│ ├── main_window.py # Application entry point
+│ ├── ui_builder.py # Menu and dock construction
+│ ├── menus/
+│ └── panels/
+│
+├── assets/
+│ ├── scenes/ # Scene-defining URDF files
+│ ├── robots/ # Robot URDFs and meshes
+│ ├── sensors/ # Sensor URDFs and meshes
+│ ├── ugv/ # Mobile base URDFs and meshes
+│ └── tools/ # End-effector URDFs and meshes
+│
+└── docs/
+├── architecture.md # This document
+└── user_guide.md # Getting started guide
+```
 ---
 
 ## Closing
@@ -592,9 +713,8 @@ efficient, and easy to program.**
 It was not designed. It was derived — each component demanded by a need,
 each principle discovered in the process. This document traces that chain.
 
-From this foundation, everything else grows.
-
 ---
 
-*Hatch (孵) 🐣 Architecture Foundation*
+*Hatch (孵) 🐣 From first principles, everything grows*
+
 

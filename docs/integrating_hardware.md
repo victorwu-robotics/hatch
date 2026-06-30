@@ -474,4 +474,4 @@ class ForceSensor(QObject):
 
 ---
 
-*This guide covers Hatch v1.0 hardware integration. Contributions welcome.*
+*Hatch (孵) 🐣 Hardware is the body. Hatch is the mind.*

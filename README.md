@@ -45,7 +45,7 @@ python -m ui.main_window
 **Move it:** Drag the joint sliders — the 3D view updates in real time.  
 **Connect to hardware (optional):** pip install ur-rtde, enter the robot’s IP, and switch to **Real** mode.
 
->**For a full walkthrough with screenshots,** see the Quick Start Guide.
+>**For a full walkthrough with screenshots,** see the [Quick Start Guide](quick_start.md).
 
 ## Documentation
 

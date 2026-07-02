@@ -64,7 +64,7 @@ In Hatch: **Robots → Connect →** enter the robot’s IP → switch to **Real
 |---------|-----|
 | Black screen / no 3D view | Check `vtk` and `PyQt5` versions match `requirements.txt`. On Linux: `export QT_QPA_PLATFORM=xcb.` |
 | Robot loads but no meshes | Use `package://` paths in your URDF. Place meshes in the same directory as the URDF. |
-| RTDE connection fails | Verify IP, check ports 30002 and 30004, press **Stop** on the teach pendant. |
+| Connection to real robot fails | Verify IP, check ports 30002 and 30004, press **Stop** on the teach pendant. |
 
 ---
 ## Next Steps

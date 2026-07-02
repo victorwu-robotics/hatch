@@ -1,4 +1,4 @@
-# Hatch (孵) Architecture Document
+# Hatch (孵) 🐣 Philosophy
 
 ## Origin Story
 **In the beginning**, I knew nothing about robots and robotics. My thinking was very simple.

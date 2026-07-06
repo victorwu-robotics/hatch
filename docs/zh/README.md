@@ -27,7 +27,7 @@ Hatch 是一个单进程、事件驱动的机器人臂应用开发平台。
 
 ## 它看起来像什么
 
-![主窗口，加载了 UR10](images/main_window_ur10_loaded.png)
+![主窗口，加载了 UR10](../images/main_window_ur10_loaded.png)
 
 ---
 

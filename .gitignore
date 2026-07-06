@@ -67,3 +67,6 @@ Desktop.ini
 .env.local
 .env.productionLog/*.log
 Log/OrbbecSDK.log.txt
+
+# Wheelhouse
+wheelhouse/*

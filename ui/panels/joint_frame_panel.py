@@ -4,7 +4,8 @@ Joint Frame Panel - Toggle visibility and show pose data for all frames.
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QCheckBox, 
                              QPushButton, QLabel, QScrollArea,
-                             QDoubleSpinBox, QHBoxLayout, QGroupBox)
+                             QDoubleSpinBox, QHBoxLayout, QGroupBox,
+                             QSizePolicy)
 from PyQt5.QtCore import Qt, QTimer
 
 
@@ -94,6 +95,7 @@ class JointFramePanel(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         checkbox_widget = QWidget()
         checkbox_layout = QVBoxLayout(checkbox_widget)
@@ -120,8 +122,8 @@ class JointFramePanel(QWidget):
 
         checkbox_layout.addStretch()
         scroll.setWidget(checkbox_widget)
-        layout.addWidget(scroll)
-        layout.addStretch()
+        layout.addWidget(scroll, stretch=1)
+        layout.addStretch(0)
 
     def _on_toggle(self, name, state):
         visible = state == Qt.Checked

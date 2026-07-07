@@ -70,7 +70,8 @@ class JointFrameDisplay:
             axes.SetTotalLength(self.scale, self.scale, self.scale)
             axes.SetShaftTypeToCylinder()
             axes.SetCylinderRadius(self.thickness)
-            axes.SetConeRadius(self.thickness * 3)
+            # axes.SetConeRadius(self.thickness * 3)
+            axes.SetConeRadius(0.0)
             axes.SetAxisLabels(False)
             axes.SetVisibility(False)
             

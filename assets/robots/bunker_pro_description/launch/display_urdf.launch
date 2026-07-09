@@ -1,0 +1,21 @@
+<launch>
+  <arg
+    name="model" />
+  <param
+    name="robot_description"
+    textfile="$(find bunker_pro_description)/urdf/bunker_pro_description.urdf" />
+  <!-- There is no joints to move therefore do not use gui -->
+  <node
+    name="joint_state_publisher"
+    pkg="joint_state_publisher"
+    type="joint_state_publisher" />
+  <node
+    name="robot_state_publisher"
+    pkg="robot_state_publisher"
+    type="robot_state_publisher" />
+  <node
+    name="rviz"
+    pkg="rviz"
+    type="rviz"
+    args="-d $(find bunker_pro_description)/rviz/bunker_pro.rviz" />
+</launch>

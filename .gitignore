@@ -25,9 +25,9 @@ robot_catalog.json
 robot_catalog.json.lock
 
 # User assets (keep the directory, ignore the contents)
-assets/robots/*.urdf
-assets/robots/*/
-!assets/robots/.gitkeep
+# assets/robots/*.urdf
+# assets/robots/*/
+# !assets/robots/.gitkeep
 
 # Calibration files (user-specific)
 calibrations/

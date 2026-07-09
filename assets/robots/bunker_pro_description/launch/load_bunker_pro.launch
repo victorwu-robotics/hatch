@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<launch>
+
+  <arg name="robot_model" value="chsweld"/>
+  <param name="robot_description" 
+    command="$(find xacro)/xacro '$(find bunker_pro_description)/urdf/bunker_pro.urdf.xacro'
+    robot_model:=$(arg robot_model)"/>
+
+</launch>

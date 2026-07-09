@@ -1,0 +1,13 @@
+Collecting pyorbbecsdk2
+  Using cached pyorbbecsdk2-2.1.1-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (12 kB)
+Requirement already satisfied: av==12.3.0 in /home/victor/hatch_env/lib/python3.12/site-packages (from pyorbbecsdk2) (12.3.0)
+Requirement already satisfied: numpy>=2.1.0 in /home/victor/hatch_env/lib/python3.12/site-packages (from pyorbbecsdk2) (2.2.6)
+Requirement already satisfied: opencv-python in /home/victor/hatch_env/lib/python3.12/site-packages (from pyorbbecsdk2) (5.0.0.93)
+Requirement already satisfied: pygame in /home/victor/hatch_env/lib/python3.12/site-packages (from pyorbbecsdk2) (2.6.1)
+Requirement already satisfied: pynput in /home/victor/hatch_env/lib/python3.12/site-packages (from pyorbbecsdk2) (1.8.2)
+Requirement already satisfied: six in /home/victor/hatch_env/lib/python3.12/site-packages (from pynput->pyorbbecsdk2) (1.17.0)
+Requirement already satisfied: evdev>=1.3 in /home/victor/hatch_env/lib/python3.12/site-packages (from pynput->pyorbbecsdk2) (1.9.3)
+Requirement already satisfied: python-xlib>=0.17 in /home/victor/hatch_env/lib/python3.12/site-packages (from pynput->pyorbbecsdk2) (0.33)
+Using cached pyorbbecsdk2-2.1.1-cp312-cp312-manylinux_2_27_x86_64.whl (30.4 MB)
+Installing collected packages: pyorbbecsdk2
+Successfully installed pyorbbecsdk2-2.1.1

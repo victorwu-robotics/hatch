@@ -7608,3 +7608,166 @@
 [06/22 14:16:03.209604][info][21826][ObLibuvcDevicePort.cpp:88] ~ObLibuvcDevicePort done
 [06/22 14:16:03.768099][error][22697][PointCloudProcess.cpp:222] depth frame or color frame not found in frameset! [**113 logs in 30922ms, last: 14:16:02.822117**]
 [06/22 14:16:03.769378][warning][22693][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset! [**2492 logs in 32449ms, last: 14:16:03.117283**]
+[07/09 14:48:34.001578][info][150727][LinuxUsbPal.cpp:334] Create PollingDeviceWatcher!
+[07/09 14:48:34.001614][info][150727][DeviceManager.cpp:25] Current found device(s): (1)
+[07/09 14:48:34.001619][info][150727][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/09 14:48:34.001623][info][150727][DeviceManager.cpp:405] Enable net device enumeration: true
+[07/09 14:48:35.005867][info][150727][DeviceManager.cpp:25] Current device(s) list: (1)
+[07/09 14:48:35.005893][info][150727][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/09 14:48:35.007568][info][150727][G330Device.cpp:566] UVCAutoRebootOnFault=true for device: Gemini 335
+[07/09 14:48:35.008602][info][150727][DeviceBase.cpp:665] key: AppSlot,value:2
+[07/09 14:48:35.008607][info][150727][DeviceBase.cpp:665] key: HwType,value:R1
+[07/09 14:48:35.008609][info][150727][DeviceBase.cpp:665] key: HwVer,value:V1.1
+[07/09 14:48:35.008611][info][150727][DeviceBase.cpp:665] key: IspFwVer,value:20241125
+[07/09 14:48:35.008612][info][150727][DeviceBase.cpp:665] key: IspNeedVer,value:20241125
+[07/09 14:48:35.008614][info][150727][DeviceBase.cpp:665] key: PresetVer,value:1.2.2
+[07/09 14:48:35.169272][info][150727][DeviceManager.cpp:199] Device created successfully! Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7 FW: 1.4.60
+[07/09 14:48:35.169314][info][150727][Pipeline.cpp:54] [CP0BB53000B7] Pipeline created with device: {name: Gemini 335, sn: CP0BB53000B7}, @0x3E6CA610
+[07/09 14:48:35.223496][info][150727][Pipeline.cpp:228] [CP0BB53000B7] Check and set config done!
+[07/09 14:48:35.223644][info][150727][Pipeline.cpp:266] [CP0BB53000B7] Try to start streams!
+[07/09 14:48:35.223648][info][150727][VideoSensor.cpp:58] [CP0BB53000B7] Try to start stream: {type: Depth, format: Y16, width: 640, height: 360, fps: 90}
+[07/09 14:48:35.223654][info][150727][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPED to STARTING@Depth
+[07/09 14:48:35.223655][info][150727][VideoSensor.cpp:127] [CP0BB53000B7] Start backend stream: {type: Depth, format: Z16, width: 640, height: 360, fps: 90}
+[07/09 14:48:35.224294][info][150727][VideoSensor.cpp:58] [CP0BB53000B7] Try to start stream: {type: Color, format: RGB, width: 640, height: 360, fps: 30}
+[07/09 14:48:35.224297][info][150727][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPED to STARTING@Color
+[07/09 14:48:35.224299][info][150727][VideoSensor.cpp:127] [CP0BB53000B7] Start backend stream: {type: Color, format: YUYV, width: 640, height: 360, fps: 30}
+[07/09 14:48:35.224974][info][150727][Pipeline.cpp:293] [CP0BB53000B7] Start streams done!
+[07/09 14:48:35.224975][info][150727][Pipeline.cpp:250] [CP0BB53000B7] Pipeline start done!
+[07/09 14:48:35.271347][info][151583][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STARTING to STREAMING@Depth
+[07/09 14:48:35.360406][warning][150727][Pipeline.cpp:335] [CP0BB53000B7] Wait for frame timeout, you can try to increase the wait time! current timeout=100
+[07/09 14:48:35.762598][info][151584][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STARTING to STREAMING@Color
+[07/09 14:48:35.765052][warning][150727][Align.cpp:166] No other frame or align profile or to profile found!
+[07/09 14:48:35.765071][warning][151596][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset!
+[07/09 14:48:35.766992][warning][150727][Align.cpp:166] No other frame or align profile or to profile found!
+[07/09 14:48:35.799935][warning][150727][Align.cpp:166] No other frame or align profile or to profile found!
+[07/09 14:48:35.831923][warning][150727][Align.cpp:166] No other frame or align profile or to profile found!
+[07/09 14:48:35.940692][error][150727][PointCloudProcess.cpp:222] depth frame or color frame not found in frameset!
+[07/09 14:48:38.460937][warning][151594][Pipeline.cpp:335] [CP0BB53000B7] Wait for frame timeout, you can try to increase the wait time! current timeout=100 [**3 logs in 3100ms, last: 14:48:35.664421**]
+[07/09 14:48:38.765418][warning][151597][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset! [**206 logs in 3000ms, last: 14:48:38.743746**]
+[07/09 14:48:38.942440][error][151599][PointCloudProcess.cpp:222] depth frame or color frame not found in frameset! [**28 logs in 3001ms, last: 14:48:38.905894**]
+[07/09 14:48:40.278669][info][151583][VideoSensor.cpp:153] [CP0BB53000B7] Depth backend frame callback, frameRate=89.856232fps
+[07/09 14:48:40.279269][info][151592][SensorBase.cpp:379] [CP0BB53000B7] Depth Streaming... frameRate=89.946037fps
+[07/09 14:48:40.784810][info][151584][VideoSensor.cpp:153] [CP0BB53000B7] Color backend frame callback, frameRate=31.063322fps
+[07/09 14:48:40.784980][info][151596][SensorBase.cpp:379] [CP0BB53000B7] Color Streaming... frameRate=31.075697fps
+[07/09 14:48:44.772026][warning][151596][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset! [**358 logs in 6006ms**]
+[07/09 14:48:44.970244][error][151625][PointCloudProcess.cpp:222] depth frame or color frame not found in frameset! [**55 logs in 6027ms, last: 14:48:44.889106**]
+[07/09 14:48:45.287540][info][151583][VideoSensor.cpp:153] [CP0BB53000B7] Depth backend frame callback, frameRate=89.838295fps
+[07/09 14:48:45.288207][info][151592][SensorBase.cpp:379] [CP0BB53000B7] Depth Streaming... frameRate=89.838295fps
+[07/09 14:48:45.807971][info][151584][VideoSensor.cpp:153] [CP0BB53000B7] Color backend frame callback, frameRate=30.851910fps
+[07/09 14:48:45.808308][info][151596][SensorBase.cpp:379] [CP0BB53000B7] Color Streaming... frameRate=30.858055fps
+[07/09 14:48:50.296515][info][151583][VideoSensor.cpp:153] [CP0BB53000B7] Depth backend frame callback, frameRate=89.838295fps
+[07/09 14:48:50.297149][info][151592][SensorBase.cpp:379] [CP0BB53000B7] Depth Streaming... frameRate=89.838295fps
+[07/09 14:48:50.831145][info][151584][VideoSensor.cpp:153] [CP0BB53000B7] Color backend frame callback, frameRate=30.858055fps
+[07/09 14:48:50.831463][info][151596][SensorBase.cpp:379] [CP0BB53000B7] Color Streaming... frameRate=30.858055fps
+[07/09 14:48:55.305551][info][151583][VideoSensor.cpp:153] [CP0BB53000B7] Depth backend frame callback, frameRate=89.838295fps
+[07/09 14:48:55.306189][info][151592][SensorBase.cpp:379] [CP0BB53000B7] Depth Streaming... frameRate=89.838295fps
+[07/09 14:48:55.854225][info][151584][VideoSensor.cpp:153] [CP0BB53000B7] Color backend frame callback, frameRate=30.858055fps
+[07/09 14:48:55.854479][info][151596][SensorBase.cpp:379] [CP0BB53000B7] Color Streaming... frameRate=30.858055fps
+[07/09 14:48:56.772631][warning][151674][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset! [**707 logs in 12000ms, last: 14:48:56.761887**]
+[07/09 14:48:57.200586][error][151677][PointCloudProcess.cpp:222] depth frame or color frame not found in frameset! [**97 logs in 12230ms, last: 14:48:56.969492**]
+[07/09 14:49:00.314509][info][151583][VideoSensor.cpp:153] [CP0BB53000B7] Depth backend frame callback, frameRate=89.838295fps
+[07/09 14:49:00.315222][info][151592][SensorBase.cpp:379] [CP0BB53000B7] Depth Streaming... frameRate=89.838295fps
+[07/09 14:49:00.877465][info][151584][VideoSensor.cpp:153] [CP0BB53000B7] Color backend frame callback, frameRate=30.858055fps
+[07/09 14:49:00.877756][info][151596][SensorBase.cpp:379] [CP0BB53000B7] Color Streaming... frameRate=30.858055fps
+[07/09 14:49:05.323429][info][151583][VideoSensor.cpp:153] [CP0BB53000B7] Depth backend frame callback, frameRate=89.838295fps
+[07/09 14:49:05.324105][info][151592][SensorBase.cpp:379] [CP0BB53000B7] Depth Streaming... frameRate=89.838295fps
+[07/09 14:49:05.900642][info][151584][VideoSensor.cpp:153] [CP0BB53000B7] Color backend frame callback, frameRate=30.858055fps
+[07/09 14:49:05.900941][info][151596][SensorBase.cpp:379] [CP0BB53000B7] Color Streaming... frameRate=30.851910fps
+[07/09 14:49:10.332442][info][151583][VideoSensor.cpp:153] [CP0BB53000B7] Depth backend frame callback, frameRate=89.838295fps
+[07/09 14:49:10.333027][info][151592][SensorBase.cpp:379] [CP0BB53000B7] Depth Streaming... frameRate=89.838295fps
+[07/09 14:49:10.923723][info][151584][VideoSensor.cpp:153] [CP0BB53000B7] Color backend frame callback, frameRate=30.858055fps
+[07/09 14:49:10.923980][info][151596][SensorBase.cpp:379] [CP0BB53000B7] Color Streaming... frameRate=30.858055fps
+[07/09 14:49:14.427800][info][150727][Pipeline.cpp:367] [CP0BB53000B7] Try to stop pipeline!
+[07/09 14:49:14.427815][info][150727][Pipeline.cpp:343] [CP0BB53000B7] Try to stop streams!
+[07/09 14:49:14.427824][info][150727][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STREAMING to STOPPING@Color
+[07/09 14:49:14.470981][info][150727][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPING to STOPPED@Color
+[07/09 14:49:14.471024][info][150727][Pipeline.cpp:357] [CP0BB53000B7] Sensor stream stopped, sensorType=Color
+[07/09 14:49:14.471028][info][150727][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STREAMING to STOPPING@Depth
+[07/09 14:49:14.497286][info][150727][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPING to STOPPED@Depth
+[07/09 14:49:14.497313][info][150727][Pipeline.cpp:357] [CP0BB53000B7] Sensor stream stopped, sensorType=Depth
+[07/09 14:49:14.497313][info][150727][Pipeline.cpp:363] [CP0BB53000B7] Stop streams done!
+[07/09 14:49:14.497432][info][150727][Pipeline.cpp:392] [CP0BB53000B7] Stop pipeline done!
+[07/09 14:49:14.497507][info][150727][Pipeline.cpp:65] [CP0BB53000B7] Pipeline destroyed! @0x3E6CA610
+[07/09 14:49:14.497558][info][150727][SensorBase.cpp:47] [CP0BB53000B7] SensorBase is destroyed
+[07/09 14:49:14.656342][info][150727][ObLibuvcDevicePort.cpp:87] uvc_close done.
+[07/09 14:49:14.656347][info][150727][ObLibuvcDevicePort.cpp:88] ~ObLibuvcDevicePort done
+[07/09 14:49:14.656445][info][150727][SensorBase.cpp:47] [CP0BB53000B7] SensorBase is destroyed
+[07/09 14:49:14.659631][info][150727][ObLibuvcDevicePort.cpp:87] uvc_close done.
+[07/09 14:49:14.659641][info][150727][ObLibuvcDevicePort.cpp:88] ~ObLibuvcDevicePort done
+[07/09 14:49:14.663021][error][151772][PointCloudProcess.cpp:222] depth frame or color frame not found in frameset! [**141 logs in 17462ms, last: 14:49:14.427052**]
+[07/09 14:49:14.663499][warning][151769][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset! [**1039 logs in 17890ms, last: 14:49:14.424995**]
+[07/09 14:58:34.850194][info][155246][LinuxUsbPal.cpp:334] Create PollingDeviceWatcher!
+[07/09 14:58:34.850226][info][155246][DeviceManager.cpp:25] Current found device(s): (1)
+[07/09 14:58:34.850230][info][155246][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/09 14:58:34.850233][info][155246][DeviceManager.cpp:405] Enable net device enumeration: true
+[07/09 14:58:35.854104][info][155246][DeviceManager.cpp:25] Current device(s) list: (1)
+[07/09 14:58:35.854126][info][155246][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/09 14:58:35.855439][info][155246][G330Device.cpp:566] UVCAutoRebootOnFault=true for device: Gemini 335
+[07/09 14:58:35.856396][info][155246][DeviceBase.cpp:665] key: AppSlot,value:2
+[07/09 14:58:35.856401][info][155246][DeviceBase.cpp:665] key: HwType,value:R1
+[07/09 14:58:35.856403][info][155246][DeviceBase.cpp:665] key: HwVer,value:V1.1
+[07/09 14:58:35.856405][info][155246][DeviceBase.cpp:665] key: IspFwVer,value:20241125
+[07/09 14:58:35.856406][info][155246][DeviceBase.cpp:665] key: IspNeedVer,value:20241125
+[07/09 14:58:35.856407][info][155246][DeviceBase.cpp:665] key: PresetVer,value:1.2.2
+[07/09 14:58:36.015223][info][155246][DeviceManager.cpp:199] Device created successfully! Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7 FW: 1.4.60
+[07/09 14:58:36.015266][info][155246][Pipeline.cpp:54] [CP0BB53000B7] Pipeline created with device: {name: Gemini 335, sn: CP0BB53000B7}, @0x3D4E47F0
+[07/09 14:58:36.063384][info][155246][Pipeline.cpp:228] [CP0BB53000B7] Check and set config done!
+[07/09 14:58:36.063541][info][155246][Pipeline.cpp:266] [CP0BB53000B7] Try to start streams!
+[07/09 14:58:36.063544][info][155246][VideoSensor.cpp:58] [CP0BB53000B7] Try to start stream: {type: Depth, format: Y16, width: 640, height: 360, fps: 90}
+[07/09 14:58:36.063549][info][155246][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPED to STARTING@Depth
+[07/09 14:58:36.063550][info][155246][VideoSensor.cpp:127] [CP0BB53000B7] Start backend stream: {type: Depth, format: Z16, width: 640, height: 360, fps: 90}
+[07/09 14:58:36.064249][info][155246][VideoSensor.cpp:58] [CP0BB53000B7] Try to start stream: {type: Color, format: RGB, width: 640, height: 360, fps: 30}
+[07/09 14:58:36.064253][info][155246][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPED to STARTING@Color
+[07/09 14:58:36.064255][info][155246][VideoSensor.cpp:127] [CP0BB53000B7] Start backend stream: {type: Color, format: YUYV, width: 640, height: 360, fps: 30}
+[07/09 14:58:36.078380][info][155246][Pipeline.cpp:293] [CP0BB53000B7] Start streams done!
+[07/09 14:58:36.078381][info][155246][Pipeline.cpp:250] [CP0BB53000B7] Pipeline start done!
+[07/09 14:58:36.117527][warning][156206][ObException.cpp:32] A unrecoverable_exception has occurred!
+ - where: Frame.cpp(85)
+ - msg: Update data size(620276) > data buffer size! (460800)
+ - type: MEMORY
+ - status: 104
+[07/09 14:58:36.117696][warning][156206][ObLibuvcDevicePort.cpp:469] Execute failure! A libobsensor_exception has occurred!
+ - where: ObLibuvcDevicePort.cpp(469):onFrameCallback
+ - msg: Update data size(620276) > data buffer size! (460800)
+ - type: N11libobsensor23unrecoverable_exceptionE
+ - status: 104
+[07/09 14:58:36.124220][warning][156206][VideoSensor.cpp:199] [CP0BB53000B7] This frame will be dropped because the data size does not match the expectation! size=26887, expected=460800 @Depth
+[07/09 14:58:36.129087][info][156206][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STARTING to STREAMING@Depth
+[07/09 14:58:36.210458][warning][155246][Pipeline.cpp:335] [CP0BB53000B7] Wait for frame timeout, you can try to increase the wait time! current timeout=100
+[07/09 14:58:36.592633][info][156207][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STARTING to STREAMING@Color
+[07/09 14:58:36.594782][warning][155246][Align.cpp:166] No other frame or align profile or to profile found!
+[07/09 14:58:36.594795][warning][156212][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset!
+[07/09 14:58:36.596331][warning][155246][Align.cpp:166] No other frame or align profile or to profile found!
+[07/09 14:58:36.628880][warning][155246][Align.cpp:166] No other frame or align profile or to profile found!
+[07/09 14:58:36.660115][warning][155246][Align.cpp:166] No other frame or align profile or to profile found!
+[07/09 14:58:36.692367][warning][155246][Align.cpp:166] No other frame or align profile or to profile found!
+[07/09 14:58:36.724861][warning][155246][Align.cpp:166] No other frame or align profile or to profile found!
+[07/09 14:58:37.018733][error][155246][PointCloudProcess.cpp:222] depth frame or color frame not found in frameset!
+[07/09 14:58:39.310842][warning][156210][Pipeline.cpp:335] [CP0BB53000B7] Wait for frame timeout, you can try to increase the wait time! current timeout=100 [**3 logs in 3100ms, last: 14:58:36.512939**]
+[07/09 14:58:39.595244][warning][156213][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset! [**207 logs in 3000ms, last: 14:58:39.573320**]
+[07/09 14:58:40.045326][error][155246][PointCloudProcess.cpp:222] depth frame or color frame not found in frameset! [**27 logs in 3026ms**]
+[07/09 14:58:41.125696][info][156206][VideoSensor.cpp:153] [CP0BB53000B7] Depth backend frame callback, frameRate=90.181969fps
+[07/09 14:58:41.137545][info][156208][SensorBase.cpp:379] [CP0BB53000B7] Depth Streaming... frameRate=90.127892fps
+[07/09 14:58:41.614794][info][156207][VideoSensor.cpp:153] [CP0BB53000B7] Color backend frame callback, frameRate=31.063322fps
+[07/09 14:58:41.615083][info][156212][SensorBase.cpp:379] [CP0BB53000B7] Color Streaming... frameRate=31.075697fps
+[07/09 14:58:45.601119][warning][156212][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset! [**356 logs in 6005ms**]
+[07/09 14:58:46.126242][info][155246][Pipeline.cpp:367] [CP0BB53000B7] Try to stop pipeline!
+[07/09 14:58:46.126251][info][155246][Pipeline.cpp:343] [CP0BB53000B7] Try to stop streams!
+[07/09 14:58:46.126260][info][155246][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STREAMING to STOPPING@Color
+[07/09 14:58:46.167243][info][155246][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPING to STOPPED@Color
+[07/09 14:58:46.167291][info][155246][Pipeline.cpp:357] [CP0BB53000B7] Sensor stream stopped, sensorType=Color
+[07/09 14:58:46.167295][info][155246][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STREAMING to STOPPING@Depth
+[07/09 14:58:46.167298][info][156206][VideoSensor.cpp:153] [CP0BB53000B7] Depth backend frame callback, frameRate=89.250298fps
+[07/09 14:58:46.194991][info][155246][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPING to STOPPED@Depth
+[07/09 14:58:46.195056][info][155246][Pipeline.cpp:357] [CP0BB53000B7] Sensor stream stopped, sensorType=Depth
+[07/09 14:58:46.195057][info][155246][Pipeline.cpp:363] [CP0BB53000B7] Stop streams done!
+[07/09 14:58:46.195194][info][155246][Pipeline.cpp:392] [CP0BB53000B7] Stop pipeline done!
+[07/09 14:58:46.195266][info][155246][Pipeline.cpp:65] [CP0BB53000B7] Pipeline destroyed! @0x3D4E47F0
+[07/09 14:58:46.195316][info][155246][SensorBase.cpp:47] [CP0BB53000B7] SensorBase is destroyed
+[07/09 14:58:46.307965][error][156250][PointCloudProcess.cpp:222] depth frame or color frame not found in frameset! [**49 logs in 6262ms, last: 14:58:45.869264**]
+[07/09 14:58:46.354933][info][155246][ObLibuvcDevicePort.cpp:87] uvc_close done.
+[07/09 14:58:46.354941][info][155246][ObLibuvcDevicePort.cpp:88] ~ObLibuvcDevicePort done
+[07/09 14:58:46.355052][info][155246][SensorBase.cpp:47] [CP0BB53000B7] SensorBase is destroyed
+[07/09 14:58:46.358198][info][155246][ObLibuvcDevicePort.cpp:87] uvc_close done.
+[07/09 14:58:46.358200][info][155246][ObLibuvcDevicePort.cpp:88] ~ObLibuvcDevicePort done
+[07/09 14:58:46.871388][warning][156290][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset! [**32 logs in 1270ms, last: 14:58:46.119649**]

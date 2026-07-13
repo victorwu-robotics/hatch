@@ -1,0 +1,235 @@
+[07/11 16:10:55.460499][info][9716][DeviceManager.cpp:25] Current found device(s): (0)
+[07/11 16:10:55.460522][info][9716][DeviceManager.cpp:405] Enable net device enumeration: true
+[07/11 16:10:56.487553][info][9716][DeviceManager.cpp:25] Current device(s) list: (0)
+[07/11 16:10:56.487605][warning][9716][ObException.cpp:32] A unrecoverable_exception has occurred!
+ - where: Pipeline.cpp(22)
+ - msg: No device found
+ - type: CAMERA_DISCONNECTED
+ - status: 112
+[07/11 16:14:23.987924][info][13168][DeviceManager.cpp:25] Current found device(s): (0)
+[07/11 16:14:23.987942][info][13168][DeviceManager.cpp:405] Enable net device enumeration: true
+[07/11 16:14:25.011249][info][13168][DeviceManager.cpp:25] Current device(s) list: (0)
+[07/11 16:14:25.011329][warning][13168][ObException.cpp:32] A unrecoverable_exception has occurred!
+ - where: Pipeline.cpp(22)
+ - msg: No device found
+ - type: CAMERA_DISCONNECTED
+ - status: 112
+[07/11 16:15:36.781716][info][4756][DeviceManager.cpp:25] Current found device(s): (0)
+[07/11 16:15:36.781735][info][4756][DeviceManager.cpp:405] Enable net device enumeration: true
+[07/11 16:15:37.816511][info][4756][DeviceManager.cpp:25] Current device(s) list: (0)
+[07/11 16:15:37.816589][warning][4756][ObException.cpp:32] A unrecoverable_exception has occurred!
+ - where: Pipeline.cpp(22)
+ - msg: No device found
+ - type: CAMERA_DISCONNECTED
+ - status: 112
+[07/11 16:16:08.431896][info][4920][DeviceManager.cpp:25] Current found device(s): (1)
+[07/11 16:16:08.431910][info][4920][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:16:08.431914][info][4920][DeviceManager.cpp:405] Enable net device enumeration: true
+[07/11 16:16:09.463399][info][4920][DeviceManager.cpp:25] Current device(s) list: (1)
+[07/11 16:16:09.463452][info][4920][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:16:09.477172][info][4920][G330Device.cpp:566] UVCAutoRebootOnFault=true for device: Gemini 335
+[07/11 16:16:10.177621][info][4920][DeviceBase.cpp:665] key: AppSlot,value:2
+[07/11 16:16:10.177635][info][4920][DeviceBase.cpp:665] key: HwType,value:R1
+[07/11 16:16:10.177636][info][4920][DeviceBase.cpp:665] key: HwVer,value:V1.1
+[07/11 16:16:10.177637][info][4920][DeviceBase.cpp:665] key: IspFwVer,value:20241125
+[07/11 16:16:10.177638][info][4920][DeviceBase.cpp:665] key: IspNeedVer,value:20241125
+[07/11 16:16:10.177639][info][4920][DeviceBase.cpp:665] key: PresetVer,value:1.2.2
+[07/11 16:16:10.419197][info][4920][DeviceManager.cpp:199] Device created successfully! Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7 FW: 1.4.60
+[07/11 16:16:10.419238][info][4920][Pipeline.cpp:54] [CP0BB53000B7] Pipeline created with device: {name: Gemini 335, sn: CP0BB53000B7}, @0x182524E0240
+[07/11 16:16:10.423874][info][4920][Pipeline.cpp:65] [CP0BB53000B7] Pipeline destroyed! @0x182524E0240
+[07/11 16:23:11.258778][info][9372][DeviceManager.cpp:25] Current found device(s): (1)
+[07/11 16:23:11.258793][info][9372][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:23:11.258796][info][9372][DeviceManager.cpp:405] Enable net device enumeration: true
+[07/11 16:23:12.284210][info][9372][DeviceManager.cpp:25] Current device(s) list: (1)
+[07/11 16:23:12.284258][info][9372][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:23:12.296294][info][9372][G330Device.cpp:566] UVCAutoRebootOnFault=true for device: Gemini 335
+[07/11 16:23:12.396366][info][9372][DeviceBase.cpp:665] key: AppSlot,value:2
+[07/11 16:23:12.396372][info][9372][DeviceBase.cpp:665] key: HwType,value:R1
+[07/11 16:23:12.396373][info][9372][DeviceBase.cpp:665] key: HwVer,value:V1.1
+[07/11 16:23:12.396374][info][9372][DeviceBase.cpp:665] key: IspFwVer,value:20241125
+[07/11 16:23:12.396375][info][9372][DeviceBase.cpp:665] key: IspNeedVer,value:20241125
+[07/11 16:23:12.396375][info][9372][DeviceBase.cpp:665] key: PresetVer,value:1.2.2
+[07/11 16:23:12.656607][info][9372][DeviceManager.cpp:199] Device created successfully! Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7 FW: 1.4.60
+[07/11 16:23:12.656633][info][9372][Pipeline.cpp:54] [CP0BB53000B7] Pipeline created with device: {name: Gemini 335, sn: CP0BB53000B7}, @0x290804B91C0
+[07/11 16:23:12.660770][info][9372][Pipeline.cpp:65] [CP0BB53000B7] Pipeline destroyed! @0x290804B91C0
+[07/11 16:25:41.539716][info][3220][DeviceManager.cpp:25] Current found device(s): (1)
+[07/11 16:25:41.539731][info][3220][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:25:41.539738][info][3220][DeviceManager.cpp:405] Enable net device enumeration: true
+[07/11 16:25:42.565208][info][3220][DeviceManager.cpp:25] Current device(s) list: (1)
+[07/11 16:25:42.565254][info][3220][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:26:48.666446][info][13664][DeviceManager.cpp:25] Current found device(s): (1)
+[07/11 16:26:48.666461][info][13664][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:26:48.666465][info][13664][DeviceManager.cpp:405] Enable net device enumeration: true
+[07/11 16:26:49.692175][info][13664][DeviceManager.cpp:25] Current device(s) list: (1)
+[07/11 16:26:49.692226][info][13664][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:26:49.709577][info][13664][G330Device.cpp:566] UVCAutoRebootOnFault=true for device: Gemini 335
+[07/11 16:26:49.863168][info][13664][DeviceBase.cpp:665] key: AppSlot,value:2
+[07/11 16:26:49.863176][info][13664][DeviceBase.cpp:665] key: HwType,value:R1
+[07/11 16:26:49.863178][info][13664][DeviceBase.cpp:665] key: HwVer,value:V1.1
+[07/11 16:26:49.863179][info][13664][DeviceBase.cpp:665] key: IspFwVer,value:20241125
+[07/11 16:26:49.863181][info][13664][DeviceBase.cpp:665] key: IspNeedVer,value:20241125
+[07/11 16:26:49.863182][info][13664][DeviceBase.cpp:665] key: PresetVer,value:1.2.2
+[07/11 16:26:50.106034][info][13664][DeviceManager.cpp:199] Device created successfully! Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7 FW: 1.4.60
+[07/11 16:26:50.106056][info][13664][Pipeline.cpp:54] [CP0BB53000B7] Pipeline created with device: {name: Gemini 335, sn: CP0BB53000B7}, @0x21B11747330
+[07/11 16:26:50.197460][info][13664][Pipeline.cpp:228] [CP0BB53000B7] Check and set config done!
+[07/11 16:26:50.197482][info][13664][Pipeline.cpp:266] [CP0BB53000B7] Try to start streams!
+[07/11 16:26:50.197489][info][13664][VideoSensor.cpp:58] [CP0BB53000B7] Try to start stream: {type: Color, format: MJPG, width: 1280, height: 720, fps: 30}
+[07/11 16:26:50.197503][info][13664][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPED to STARTING@Color
+[07/11 16:26:50.197505][info][13664][VideoSensor.cpp:127] [CP0BB53000B7] Start backend stream: {type: Color, format: MJPG, width: 1280, height: 720, fps: 30}
+[07/11 16:26:50.205212][info][13664][VideoSensor.cpp:58] [CP0BB53000B7] Try to start stream: {type: Depth, format: Y16, width: 848, height: 480, fps: 30}
+[07/11 16:26:50.205222][info][13664][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPED to STARTING@Depth
+[07/11 16:26:50.205225][info][13664][VideoSensor.cpp:127] [CP0BB53000B7] Start backend stream: {type: Depth, format: Z16, width: 848, height: 480, fps: 30}
+[07/11 16:26:50.207889][info][13664][Pipeline.cpp:293] [CP0BB53000B7] Start streams done!
+[07/11 16:26:50.207891][info][13664][Pipeline.cpp:250] [CP0BB53000B7] Pipeline start done!
+[07/11 16:26:50.348978][info][14260][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STARTING to STREAMING@Depth
+[07/11 16:26:50.781815][info][7172][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STARTING to STREAMING@Color
+[07/11 16:26:50.783132][warning][2224][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset!
+[07/11 16:26:50.785497][info][13664][Pipeline.cpp:367] [CP0BB53000B7] Try to stop pipeline!
+[07/11 16:26:50.785561][info][13664][Pipeline.cpp:343] [CP0BB53000B7] Try to stop streams!
+[07/11 16:26:50.785608][info][13664][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STREAMING to STOPPING@Depth
+[07/11 16:26:50.903706][info][13664][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPING to STOPPED@Depth
+[07/11 16:26:50.903810][info][13664][Pipeline.cpp:357] [CP0BB53000B7] Sensor stream stopped, sensorType=Depth
+[07/11 16:26:50.903818][info][13664][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STREAMING to STOPPING@Color
+[07/11 16:26:51.145223][info][13664][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPING to STOPPED@Color
+[07/11 16:26:51.145529][info][13664][Pipeline.cpp:357] [CP0BB53000B7] Sensor stream stopped, sensorType=Color
+[07/11 16:26:51.145557][info][13664][Pipeline.cpp:363] [CP0BB53000B7] Stop streams done!
+[07/11 16:26:51.146821][info][13664][Pipeline.cpp:392] [CP0BB53000B7] Stop pipeline done!
+[07/11 16:26:51.156401][info][13664][Pipeline.cpp:65] [CP0BB53000B7] Pipeline destroyed! @0x21B11747330
+[07/11 16:26:51.156695][info][13664][SensorBase.cpp:47] [CP0BB53000B7] SensorBase is destroyed
+[07/11 16:26:51.156892][info][13664][SensorBase.cpp:47] [CP0BB53000B7] SensorBase is destroyed
+[07/11 16:26:51.185616][warning][11288][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset! [**2 logs in 402ms, last: 16:26:50.788123**]
+[07/11 16:27:59.480729][info][9736][DeviceManager.cpp:25] Current found device(s): (1)
+[07/11 16:27:59.480747][info][9736][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:27:59.480750][info][9736][DeviceManager.cpp:405] Enable net device enumeration: true
+[07/11 16:28:00.485038][info][9736][DeviceManager.cpp:25] Current device(s) list: (1)
+[07/11 16:28:00.485165][info][9736][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:28:00.498740][info][9736][G330Device.cpp:566] UVCAutoRebootOnFault=true for device: Gemini 335
+[07/11 16:28:00.606886][info][9736][DeviceBase.cpp:665] key: AppSlot,value:2
+[07/11 16:28:00.606891][info][9736][DeviceBase.cpp:665] key: HwType,value:R1
+[07/11 16:28:00.606892][info][9736][DeviceBase.cpp:665] key: HwVer,value:V1.1
+[07/11 16:28:00.606893][info][9736][DeviceBase.cpp:665] key: IspFwVer,value:20241125
+[07/11 16:28:00.606894][info][9736][DeviceBase.cpp:665] key: IspNeedVer,value:20241125
+[07/11 16:28:00.606895][info][9736][DeviceBase.cpp:665] key: PresetVer,value:1.2.2
+[07/11 16:28:00.874925][info][9736][DeviceManager.cpp:199] Device created successfully! Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7 FW: 1.4.60
+[07/11 16:28:00.876310][info][9736][Pipeline.cpp:54] [CP0BB53000B7] Pipeline created with device: {name: Gemini 335, sn: CP0BB53000B7}, @0x1886F966160
+[07/11 16:28:00.933975][info][9736][Pipeline.cpp:65] [CP0BB53000B7] Pipeline destroyed! @0x1886F966160
+[07/11 16:28:00.934109][info][9736][SensorBase.cpp:47] [CP0BB53000B7] SensorBase is destroyed
+[07/11 16:28:54.481923][info][13780][DeviceManager.cpp:25] Current found device(s): (1)
+[07/11 16:28:54.481939][info][13780][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:28:54.481942][info][13780][DeviceManager.cpp:405] Enable net device enumeration: true
+[07/11 16:28:55.486177][info][13780][DeviceManager.cpp:25] Current device(s) list: (1)
+[07/11 16:28:55.486224][info][13780][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:28:55.498764][info][13780][G330Device.cpp:566] UVCAutoRebootOnFault=true for device: Gemini 335
+[07/11 16:28:55.608917][info][13780][DeviceBase.cpp:665] key: AppSlot,value:2
+[07/11 16:28:55.608922][info][13780][DeviceBase.cpp:665] key: HwType,value:R1
+[07/11 16:28:55.608923][info][13780][DeviceBase.cpp:665] key: HwVer,value:V1.1
+[07/11 16:28:55.608924][info][13780][DeviceBase.cpp:665] key: IspFwVer,value:20241125
+[07/11 16:28:55.608924][info][13780][DeviceBase.cpp:665] key: IspNeedVer,value:20241125
+[07/11 16:28:55.608925][info][13780][DeviceBase.cpp:665] key: PresetVer,value:1.2.2
+[07/11 16:28:55.856983][info][13780][DeviceManager.cpp:199] Device created successfully! Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7 FW: 1.4.60
+[07/11 16:28:55.857007][info][13780][Pipeline.cpp:54] [CP0BB53000B7] Pipeline created with device: {name: Gemini 335, sn: CP0BB53000B7}, @0x1E0D93A19A0
+[07/11 16:28:55.908862][info][13780][Pipeline.cpp:65] [CP0BB53000B7] Pipeline destroyed! @0x1E0D93A19A0
+[07/11 16:28:55.908961][info][13780][SensorBase.cpp:47] [CP0BB53000B7] SensorBase is destroyed
+[07/11 16:30:47.199115][info][5268][DeviceManager.cpp:25] Current found device(s): (1)
+[07/11 16:30:47.199128][info][5268][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:30:47.199131][info][5268][DeviceManager.cpp:405] Enable net device enumeration: true
+[07/11 16:30:48.225679][info][5268][DeviceManager.cpp:25] Current device(s) list: (1)
+[07/11 16:30:48.225728][info][5268][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:30:48.242711][info][5268][G330Device.cpp:566] UVCAutoRebootOnFault=true for device: Gemini 335
+[07/11 16:30:48.374211][info][5268][DeviceBase.cpp:665] key: AppSlot,value:2
+[07/11 16:30:48.374216][info][5268][DeviceBase.cpp:665] key: HwType,value:R1
+[07/11 16:30:48.374216][info][5268][DeviceBase.cpp:665] key: HwVer,value:V1.1
+[07/11 16:30:48.374217][info][5268][DeviceBase.cpp:665] key: IspFwVer,value:20241125
+[07/11 16:30:48.374217][info][5268][DeviceBase.cpp:665] key: IspNeedVer,value:20241125
+[07/11 16:30:48.374218][info][5268][DeviceBase.cpp:665] key: PresetVer,value:1.2.2
+[07/11 16:30:48.620844][info][5268][DeviceManager.cpp:199] Device created successfully! Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7 FW: 1.4.60
+[07/11 16:30:48.621665][info][5268][Pipeline.cpp:54] [CP0BB53000B7] Pipeline created with device: {name: Gemini 335, sn: CP0BB53000B7}, @0x22B8A3AE030
+[07/11 16:30:48.703113][info][5268][Pipeline.cpp:228] [CP0BB53000B7] Check and set config done!
+[07/11 16:30:48.703738][info][5268][Pipeline.cpp:266] [CP0BB53000B7] Try to start streams!
+[07/11 16:30:48.703751][info][5268][VideoSensor.cpp:58] [CP0BB53000B7] Try to start stream: {type: Color, format: MJPG, width: 1280, height: 720, fps: 30}
+[07/11 16:30:48.703762][info][5268][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPED to STARTING@Color
+[07/11 16:30:48.703765][info][5268][VideoSensor.cpp:127] [CP0BB53000B7] Start backend stream: {type: Color, format: MJPG, width: 1280, height: 720, fps: 30}
+[07/11 16:30:48.709124][info][5268][VideoSensor.cpp:58] [CP0BB53000B7] Try to start stream: {type: Depth, format: Y16, width: 848, height: 480, fps: 30}
+[07/11 16:30:48.709135][info][5268][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPED to STARTING@Depth
+[07/11 16:30:48.709140][info][5268][VideoSensor.cpp:127] [CP0BB53000B7] Start backend stream: {type: Depth, format: Z16, width: 848, height: 480, fps: 30}
+[07/11 16:30:48.711846][info][5268][Pipeline.cpp:293] [CP0BB53000B7] Start streams done!
+[07/11 16:30:48.711848][info][5268][Pipeline.cpp:250] [CP0BB53000B7] Pipeline start done!
+[07/11 16:30:48.836803][info][13392][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STARTING to STREAMING@Depth
+[07/11 16:30:49.266635][info][7412][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STARTING to STREAMING@Color
+[07/11 16:30:49.267708][warning][4088][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset!
+[07/11 16:30:49.269962][info][5268][Pipeline.cpp:367] [CP0BB53000B7] Try to stop pipeline!
+[07/11 16:30:49.269996][info][5268][Pipeline.cpp:343] [CP0BB53000B7] Try to stop streams!
+[07/11 16:30:49.270030][info][5268][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STREAMING to STOPPING@Depth
+[07/11 16:30:49.353887][warning][3624][VideoSensor.cpp:187] [CP0BB53000B7] This frame will be dropped because jpg format verification failure! @Color
+[07/11 16:30:49.394785][info][5268][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPING to STOPPED@Depth
+[07/11 16:30:49.394958][info][5268][Pipeline.cpp:357] [CP0BB53000B7] Sensor stream stopped, sensorType=Depth
+[07/11 16:30:49.394969][info][5268][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STREAMING to STOPPING@Color
+[07/11 16:30:49.597641][info][5268][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPING to STOPPED@Color
+[07/11 16:30:49.597954][info][5268][Pipeline.cpp:357] [CP0BB53000B7] Sensor stream stopped, sensorType=Color
+[07/11 16:30:49.597968][info][5268][Pipeline.cpp:363] [CP0BB53000B7] Stop streams done!
+[07/11 16:30:49.599151][info][5268][Pipeline.cpp:392] [CP0BB53000B7] Stop pipeline done!
+[07/11 16:30:49.607059][info][5268][Pipeline.cpp:65] [CP0BB53000B7] Pipeline destroyed! @0x22B8A3AE030
+[07/11 16:30:49.607258][info][5268][SensorBase.cpp:47] [CP0BB53000B7] SensorBase is destroyed
+[07/11 16:30:49.607380][info][5268][SensorBase.cpp:47] [CP0BB53000B7] SensorBase is destroyed
+[07/11 16:30:49.833613][warning][11188][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset! [**2 logs in 566ms, last: 16:30:49.278459**]
+[07/11 16:31:20.656792][info][14260][DeviceManager.cpp:25] Current found device(s): (1)
+[07/11 16:31:20.656806][info][14260][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:31:20.656838][info][14260][DeviceManager.cpp:405] Enable net device enumeration: true
+[07/11 16:31:21.685391][info][14260][DeviceManager.cpp:25] Current device(s) list: (1)
+[07/11 16:31:21.685442][info][14260][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:31:21.698058][info][14260][G330Device.cpp:566] UVCAutoRebootOnFault=true for device: Gemini 335
+[07/11 16:31:21.785720][info][14260][DeviceBase.cpp:665] key: AppSlot,value:2
+[07/11 16:31:21.785724][info][14260][DeviceBase.cpp:665] key: HwType,value:R1
+[07/11 16:31:21.785725][info][14260][DeviceBase.cpp:665] key: HwVer,value:V1.1
+[07/11 16:31:21.785725][info][14260][DeviceBase.cpp:665] key: IspFwVer,value:20241125
+[07/11 16:31:21.785726][info][14260][DeviceBase.cpp:665] key: IspNeedVer,value:20241125
+[07/11 16:31:21.785726][info][14260][DeviceBase.cpp:665] key: PresetVer,value:1.2.2
+[07/11 16:31:22.034087][info][14260][DeviceManager.cpp:199] Device created successfully! Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7 FW: 1.4.60
+[07/11 16:31:22.034118][info][14260][Pipeline.cpp:54] [CP0BB53000B7] Pipeline created with device: {name: Gemini 335, sn: CP0BB53000B7}, @0x1B5A30A3E90
+[07/11 16:31:22.064472][info][14260][Pipeline.cpp:228] [CP0BB53000B7] Check and set config done!
+[07/11 16:31:22.065140][info][14260][Pipeline.cpp:266] [CP0BB53000B7] Try to start streams!
+[07/11 16:31:22.065151][info][14260][VideoSensor.cpp:58] [CP0BB53000B7] Try to start stream: {type: Color, format: MJPG, width: 1280, height: 720, fps: 30}
+[07/11 16:31:22.065162][info][14260][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPED to STARTING@Color
+[07/11 16:31:22.065165][info][14260][VideoSensor.cpp:127] [CP0BB53000B7] Start backend stream: {type: Color, format: MJPG, width: 1280, height: 720, fps: 30}
+[07/11 16:31:22.070722][info][14260][Pipeline.cpp:293] [CP0BB53000B7] Start streams done!
+[07/11 16:31:22.070725][info][14260][Pipeline.cpp:250] [CP0BB53000B7] Pipeline start done!
+[07/11 16:31:22.177389][warning][14260][Pipeline.cpp:335] [CP0BB53000B7] Wait for frame timeout, you can try to increase the wait time! current timeout=100
+[07/11 16:31:22.650917][info][10328][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STARTING to STREAMING@Color
+[07/11 16:31:25.292205][warning][6392][Pipeline.cpp:335] [CP0BB53000B7] Wait for frame timeout, you can try to increase the wait time! current timeout=100 [**4 logs in 3114ms, last: 16:31:22.625867**]
+[07/11 16:31:27.654141][info][11136][VideoSensor.cpp:153] [CP0BB53000B7] Color backend frame callback, frameRate=30.181892fps
+[07/11 16:31:27.654493][info][1376][SensorBase.cpp:379] [CP0BB53000B7] Color Streaming... frameRate=30.187925fps
+[07/11 16:31:32.659738][info][10328][VideoSensor.cpp:153] [CP0BB53000B7] Color backend frame callback, frameRate=29.970030fps
+[07/11 16:31:32.660120][info][1376][SensorBase.cpp:379] [CP0BB53000B7] Color Streaming... frameRate=29.964043fps
+[07/11 16:31:33.461867][warning][1376][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset!
+[07/11 16:31:36.464012][warning][1376][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset! [**90 logs in 3002ms**]
+[07/11 16:31:37.665047][info][10328][VideoSensor.cpp:153] [CP0BB53000B7] Color backend frame callback, frameRate=29.964043fps
+[07/11 16:31:37.665328][info][1376][SensorBase.cpp:379] [CP0BB53000B7] Color Streaming... frameRate=29.970030fps
+[07/11 16:31:42.510059][warning][5760][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset! [**11 logs in 6046ms, last: 16:31:36.831193**]
+[07/11 16:31:42.671038][info][12196][VideoSensor.cpp:153] [CP0BB53000B7] Color backend frame callback, frameRate=29.964043fps
+[07/11 16:31:42.671363][info][1376][SensorBase.cpp:379] [CP0BB53000B7] Color Streaming... frameRate=29.964043fps
+[07/11 16:31:45.710006][info][14260][Pipeline.cpp:367] [CP0BB53000B7] Try to stop pipeline!
+[07/11 16:31:45.710053][info][14260][Pipeline.cpp:343] [CP0BB53000B7] Try to stop streams!
+[07/11 16:31:45.710089][info][14260][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STREAMING to STOPPING@Color
+[07/11 16:31:45.898177][info][14260][SensorBase.cpp:210] [CP0BB53000B7] Stream state changed from STOPPING to STOPPED@Color
+[07/11 16:31:45.898414][info][14260][Pipeline.cpp:357] [CP0BB53000B7] Sensor stream stopped, sensorType=Color
+[07/11 16:31:45.898418][info][14260][Pipeline.cpp:363] [CP0BB53000B7] Stop streams done!
+[07/11 16:31:45.899529][info][14260][Pipeline.cpp:392] [CP0BB53000B7] Stop pipeline done!
+[07/11 16:31:45.915756][info][14260][Pipeline.cpp:65] [CP0BB53000B7] Pipeline destroyed! @0x1B5A30A3E90
+[07/11 16:31:45.915852][info][14260][SensorBase.cpp:47] [CP0BB53000B7] SensorBase is destroyed
+[07/11 16:31:46.921473][warning][12636][Pipeline.cpp:324] [CP0BB53000B7] Output frameset queue is full, drop oldest frameset! [**25 logs in 4411ms, last: 16:31:45.040062**]
+[07/11 16:34:17.996067][info][6428][DeviceManager.cpp:25] Current found device(s): (1)
+[07/11 16:34:17.996086][info][6428][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:34:17.996091][info][6428][DeviceManager.cpp:405] Enable net device enumeration: true
+[07/11 16:34:19.021619][info][6428][DeviceManager.cpp:25] Current device(s) list: (1)
+[07/11 16:34:19.021665][info][6428][DeviceManager.cpp:34] 	- Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7, Connection: USB3.2
+[07/11 16:34:19.032492][info][6428][G330Device.cpp:566] UVCAutoRebootOnFault=true for device: Gemini 335
+[07/11 16:34:19.168362][info][6428][DeviceBase.cpp:665] key: AppSlot,value:2
+[07/11 16:34:19.168367][info][6428][DeviceBase.cpp:665] key: HwType,value:R1
+[07/11 16:34:19.168368][info][6428][DeviceBase.cpp:665] key: HwVer,value:V1.1
+[07/11 16:34:19.168369][info][6428][DeviceBase.cpp:665] key: IspFwVer,value:20241125
+[07/11 16:34:19.168369][info][6428][DeviceBase.cpp:665] key: IspNeedVer,value:20241125
+[07/11 16:34:19.168369][info][6428][DeviceBase.cpp:665] key: PresetVer,value:1.2.2
+[07/11 16:34:19.450202][info][6428][DeviceManager.cpp:199] Device created successfully! Name: Gemini 335, PID: 0x0800, SN/ID: CP0BB53000B7 FW: 1.4.60
+[07/11 16:34:19.450226][info][6428][Pipeline.cpp:54] [CP0BB53000B7] Pipeline created with device: {name: Gemini 335, sn: CP0BB53000B7}, @0x20E69FF0590
+[07/11 16:34:19.490464][info][6428][Pipeline.cpp:65] [CP0BB53000B7] Pipeline destroyed! @0x20E69FF0590
+[07/11 16:34:19.490555][info][6428][SensorBase.cpp:47] [CP0BB53000B7] SensorBase is destroyed

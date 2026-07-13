@@ -90,6 +90,7 @@ class KinematicDisplay:
         logger.info(f"Attaching to VTK renderer...")
 
         # Load all visual geometries
+        # logger.info(f"Loading Visual Geometries: {self.visual_geometries.items()}")
         for link_name, geometries in self.visual_geometries.items():
             if not geometries:
                 # Virtual link — no visual representation

@@ -11,6 +11,7 @@ Principle: Movements as Models.
 
 import numpy as np
 import xml.etree.ElementTree as ET
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -21,6 +22,9 @@ logger = logging.getLogger(__name__)
 class KinematicModel:
     """
     A pure data module for URDF model loading and state management.
+
+    Complete URDF handler.
+    Owns ALL path resolution, mesh loading, and kinematics.
 
     Handles URDF parsing, mesh path resolution, and forward kinematics.
     No external robotics library required — pure Python with NumPy.
@@ -172,7 +176,9 @@ class KinematicModel:
             scale = mesh.get('scale', '1 1 1')
             scale_vals = [float(s) for s in scale.split()]
 
+            print(f"DEBUG MESH: link={link_name}, filename={filename}")
             mesh_path = self._resolve_mesh_path(filename)
+            print(f"DEBUG MESH: resolved={mesh_path}")
 
             origin = visual_elem.find('origin')
             if origin is not None:
@@ -207,40 +213,119 @@ class KinematicModel:
         return None
 
     def _resolve_mesh_path(self, filename: str) -> Optional[Path]:
-        """Resolve mesh filename to absolute path using package directories."""
-        if filename.startswith('file://'):
-            file_path = filename[7:]
-            path = Path(file_path)
-            if path.exists():
-                return path
-            path = self.urdf_path.parent / file_path
-            return path if path.exists() else None
+        """
+        THE ONE AND ONLY path resolution method.
+        Handles ALL formats: package://, $(find ...), file://, relative, absolute.
+        """
+        print(f"DEBUG RESOLVE: input={filename}")
+        print(f"DEBUG RESOLVE: urdf_path.parent={self.urdf_path.parent}")
+        print(f"DEBUG RESOLVE: package_dirs={self.package_dirs}")
 
+        
+        logger.debug(f"Resolving mesh path: {filename}")
+        # First, resolve any $(find package) in the filename
+        filename = self._resolve_find_in_path(filename)
+        logger.debug(f"  After find resolution: {filename}")
+        
+        # Handle package:// URIs
         if filename.startswith('package://'):
-            package_path = filename[10:]  # e.g., "ur10/meshes/base_link.stl"
-            parts = package_path.split('/', 1)  # ["ur10", "meshes/base_link.stl"]
-
-            if len(parts) == 2:
-                package_name, relative_path = parts
-
-                for pkg_dir in self.package_dirs:
-                    # Look for pkg_dir/package_name/relative_path
-                    candidate = Path(pkg_dir) / package_name / relative_path
-                    if candidate.exists():
-                        return candidate
-
-            return None
-
-        # Relative path
-        mesh_path = self.urdf_path.parent / filename
-        if mesh_path.exists():
-            return mesh_path
-
+            result = self._resolve_package_uri(filename)
+            logger.debug(f"  Package URI result: {result}")
+            return result
+        
+        # Handle file:// URIs
+        if filename.startswith('file://'):
+            result = self._find_existing(Path(filename[7:]))
+            logger.debug(f"  File URI result: {result}")
+            return result
+        
+        # Handle absolute paths
+        path = Path(filename)
+        if path.is_absolute():
+            result = self._find_existing(path)
+            logger.debug(f"  Absolute path result: {result}")
+            return result
+        
+        # Handle relative paths (relative to URDF file location)
+        resolved = self.urdf_path.parent / filename
+        logger.debug(f"  Trying relative to URDF: {resolved}")
+        result = self._find_existing(resolved)
+        if result:
+            return result
+        
+        # Try relative to package directories
         for pkg_dir in self.package_dirs:
-            candidate = pkg_dir / filename
-            if candidate.exists():
-                return candidate
-
+            candidate = Path(pkg_dir) / filename
+            logger.debug(f"  Trying package dir: {candidate}")
+            result = self._find_existing(candidate)
+            if result:
+                return result
+        
+        logger.warning(f"Could not resolve mesh path: {filename}")
+        return None
+    
+    def _resolve_find_in_path(self, text: str) -> str:
+        """Resolve $(find package_name) to absolute package path."""
+        pattern = re.compile(r'\$\(find\s+([^)]+)\)')
+        
+        def replace_find(match):
+            package_name = match.group(1).strip()
+            for pkg_dir in self.package_dirs:
+                candidate = Path(pkg_dir) / package_name
+                if candidate.is_dir():
+                    return str(candidate)
+            logger.warning(f"Could not resolve $(find {package_name})")
+            return match.group(0)
+        
+        return pattern.sub(replace_find, text)
+    
+    def _resolve_package_uri(self, uri: str) -> Optional[Path]:
+        """Resolve package://package_name/relative/path"""
+        package_path = uri[10:]  # Remove 'package://'
+        parts = package_path.split('/', 1)
+        if len(parts) != 2:
+            return None
+        
+        package_name, relative_path = parts
+        print(f"DEBUG: package_name={package_name}, relative_path={relative_path}")
+        for pkg_dir in self.package_dirs:
+            pkg_dir = Path(pkg_dir)
+            print(f"DEBUG: checking pkg_dir={pkg_dir}")
+            # Check if pkg_dir itself is the package
+            if pkg_dir.name == package_name:
+                candidate = pkg_dir / relative_path
+                print(f"DEBUG:   name match, candidate={candidate}, exists={candidate.exists()}")
+                if result:
+                    return result
+            
+            # Check if pkg_dir contains the package
+            candidate = pkg_dir / package_name / relative_path
+            print(f"DEBUG:   subdir candidate={candidate}, exists={candidate.exists()}")
+            result = self._find_existing(candidate)
+            if result:
+                return result
+        
+        return None
+    
+    @staticmethod
+    def _find_existing(path: Path) -> Optional[Path]:
+        """Check if path exists, with case-insensitive fallback for Windows."""
+        if path.exists():
+            return path
+        
+        # Case-insensitive search (crucial for cross-platform)
+        if not path.parent.exists():
+            return None
+        
+        target_lower = path.name.lower()
+        try:
+            for item in path.parent.iterdir():
+                if item.name.lower() == target_lower:
+                    logger.debug(f"Case-insensitive match: {path} -> {item}")
+                    return item
+        except PermissionError:
+            pass
+        
         return None
 
     # =================================================================

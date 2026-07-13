@@ -30,19 +30,23 @@ class URDFPreprocessor:
         Conditional blocks (<xacro:if>, <xacro:unless>)
         ROS-specific features beyond $(find)
         Nested macro calls beyond one level
+
+        Pure text/xml transformer.
+        Converts xacro syntax to plain URDF.
+        Does NOT touch file paths at all - leaves them as-is in the URDF.
     """
 
     XACRO_NS = "xacro"
 
-    def __init__(self, package_dirs: List[str]):
+    def __init__(self, package_dirs: List[str]): # removed: 
         """
         Initialize the preprocessor.
 
         Args:
-            package_dirs: List of directories to search for $(find ...) packages
-                         and package:// URIs.
+            package_dirs: Directories for resolving $(find ...) in xacro includes.
+                         NOT used for mesh paths - those are KinematicModel's job.
         """
-        self.package_dirs = [Path(d).expanduser().resolve() for d in package_dirs]
+        self.package_dirs = [Path(d).expanduser().resolve() for d in (package_dirs or [])]
         self._properties: Dict[str, str] = {}
         self._macros: Dict[str, ET.Element] = {}
 
@@ -62,6 +66,8 @@ class URDFPreprocessor:
     def process(self, filepath: str) -> str:
         """
         Process a URDF or xacro file and return plain URDF XML string.
+        All path references (package://, $(find ...), relative paths) 
+        are preserved as-is for KinematicModel to resolve later.
 
         Args:
             filepath: Path to the .urdf or .xacro file.
@@ -127,7 +133,9 @@ class URDFPreprocessor:
             return
 
         filename = self._substitute_string(filename)
-        resolved = self._resolve_path(filename, current_dir)
+        # Resolve $(find ...) ONLY for includes
+        filename = self._resolve_find_for_include(filename)
+        resolved = self._resolve_include_path(filename, current_dir)
         
         if resolved is None:
             logger.warning(f"Could not resolve include: {filename}")
@@ -163,6 +171,47 @@ class URDFPreprocessor:
             parent.remove(element)
         else:
             logger.error(f"No parent found for include: {filename}")
+
+    def _resolve_find_for_include(self, text: str) -> str:
+        """
+        Resolve $(find package_name) ONLY for xacro includes.
+        This is separate from mesh path resolution.
+        """
+        pattern = re.compile(r'\$\(find\s+([^)]+)\)')
+        
+        def replace_find(match):
+            package_name = match.group(1).strip()
+            for pkg_dir in self.package_dirs:
+                candidate = pkg_dir / package_name
+                if candidate.is_dir():
+                    return str(candidate)
+            logger.warning(f"Could not resolve $(find {package_name})")
+            return match.group(0)
+        
+        return pattern.sub(replace_find, text)
+
+    def _resolve_include_path(self, filename: str, current_dir: Path) -> Optional[Path]:
+        """
+        Simple path resolution for xacro includes ONLY.
+        Does NOT handle package:// or $(find ...) - those are for KinematicModel.
+        """
+        # Handle file:// URIs (for includes)
+        if filename.startswith('file://'):
+            file_path = filename[7:]
+            path = Path(file_path)
+            if path.is_absolute():
+                return path if path.exists() else None
+            resolved = (current_dir / file_path).resolve()
+            return resolved if resolved.exists() else None
+        
+        # Handle absolute paths
+        path = Path(filename)
+        if path.is_absolute():
+            return path if path.exists() else None
+        
+        # Handle relative paths (relative to current xacro file)
+        resolved = (current_dir / filename).resolve()
+        return resolved if resolved.exists() else None
 
     def _handle_property(self, element: ET.Element):
         """Handle <xacro:property name="x" value="y"/>"""
@@ -280,18 +329,16 @@ class URDFPreprocessor:
         for child in element:
             self._substitute_macro_params(child, param_values)
 
+    # _substitute_string should NOT resolve $(find ...) anymore
     def _substitute_string(self, text: str) -> str:
         """
-        Substitute ${property_name}, $(find package_name), and simple math
-        expressions like ${pi/2}, ${-pi/2}, ${pi/180.0}.
+        Substitute ${property_name} and simple math expressions.
+        Leaves $(find ...) untouched - KinematicModel will resolve those.
         """
-        if '$' not in text and '(' not in text:
+        if '$' not in text:
             return text
 
-        # Handle $(find package_name)
-        text = self._resolve_find_in_text(text)
-
-        # Handle ${...} patterns
+        # Only handle ${...} patterns
         pattern = re.compile(r'\$\{([^}]+)\}')
 
         def replace_match(match):
@@ -299,16 +346,13 @@ class URDFPreprocessor:
 
             # Try to evaluate as a math expression with known properties
             try:
-                # Build a namespace with known properties
                 namespace = {}
                 namespace.update(self._properties)
-                # Add common math functions
                 namespace.update({
                     'abs': abs, 'min': min, 'max': max,
                     'round': round, 'int': int, 'float': float,
                 })
                 result = eval(expr, {"__builtins__": {}}, namespace)
-                # Format result nicely
                 if isinstance(result, float):
                     return str(result)
                 return str(result)
@@ -317,90 +361,11 @@ class URDFPreprocessor:
 
             # Fallback: treat as a simple property name
             if expr in self._properties:
-                return self._properties[expr]
+                return str(self._properties[expr])
 
             return match.group(0)
 
         return pattern.sub(replace_match, text)
-
-    def _resolve_find_in_text(self, text: str) -> str:
-        """
-        Replace $(find package_name) with the package's path.
-
-        Searches package_dirs for a directory named package_name.
-        If found, replaces with the absolute path.
-        """
-        pattern = re.compile(r'\$\(find\s+([^)]+)\)')
-
-        def replace_find(match):
-            package_name = match.group(1).strip()
-            resolved = self._resolve_package_dir(package_name)
-            if resolved:
-                return str(resolved)
-            logger.warning(f"Could not resolve $(find {package_name})")
-            return match.group(0)
-
-        return pattern.sub(replace_find, text)
-
-    def _resolve_package_dir(self, package_name: str) -> Optional[Path]:
-        """Find a package directory by name in package_dirs."""
-        for pkg_dir in self.package_dirs:
-            candidate = pkg_dir / package_name
-            if candidate.is_dir():
-                return candidate
-        return None
-
-    # =================================================================
-    # Path Resolution
-    # =================================================================
-
-    def _resolve_path(self, filename: str, current_dir: Path) -> Optional[Path]:
-        """Resolve a filename to an absolute path."""
-        # Substitute any properties or $(find) in the filename first
-        filename = self._substitute_string(filename)
-
-        # Handle package:// URIs
-        if filename.startswith('package://'):
-            return self._resolve_package_uri(filename)
-
-        # Handle file:// URIs
-        if filename.startswith('file://'):
-            file_path = filename[7:]
-            return Path(file_path).expanduser().resolve()
-
-        # Handle absolute paths
-        path = Path(filename)
-        if path.is_absolute():
-            return path if path.exists() else None
-
-        # Handle relative paths
-        resolved = (current_dir / filename).resolve()
-        return resolved if resolved.exists() else None
-
-    def _resolve_package_uri(self, filename: str) -> Optional[Path]:
-        """Resolve package://package_name/relative/path"""
-        package_path = filename[10:]
-        parts = package_path.split('/', 1)
-
-        if len(parts) != 2:
-            return None
-
-        package_name, relative_path = parts
-
-        # First try to find the package directory
-        package_dir = self._resolve_package_dir(package_name)
-        if package_dir:
-            candidate = package_dir / relative_path
-            if candidate.exists():
-                return candidate
-
-        # Fallback: search package_dirs directly
-        for pkg_dir in self.package_dirs:
-            candidate = pkg_dir / package_name / relative_path
-            if candidate.exists():
-                return candidate
-
-        return None
 
     # =================================================================
     # XML Helpers

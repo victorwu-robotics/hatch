@@ -16,6 +16,8 @@ from typing import Optional, List, Dict, Any
 from pathlib import Path
 import numpy as np
 import logging
+import tempfile
+import os
 
 from core.world_state.state_channel import StateChannel
 from core.world_state.transform_registry import TransformRegistry
@@ -175,30 +177,28 @@ class RobotManager:
             # Preprocess xacro files, or load URDF directly
             if urdf_path.suffix == '.xacro':
                 from core.urdf_preprocessor import URDFPreprocessor
+                # URDFPreprocessor no longer needs package_dirs!
                 preprocessor = URDFPreprocessor(package_dirs)
                 urdf_xml = preprocessor.process(str(urdf_path))
 
-                # Save preprocessed output for comparison
-                with open('/tmp/hatch_preprocessed.urdf', 'w') as f:
-                    f.write(urdf_xml)
+                # Get the system's actual temp directory
+                temp_dir = tempfile.gettempdir()
+                temp_path = os.path.join(temp_dir, 'hatch_preprocessed.urdf')
 
                 # Write preprocessed URDF to temp file for KinematicModel
-                with tempfile.NamedTemporaryFile(
-                    mode='w', suffix='.urdf', delete=False
-                ) as f:
+                with open(temp_path, 'w') as f:
                     f.write(urdf_xml)
-                    temp_path = f.name
 
                 model = KinematicModel(
                     urdf_path=temp_path,
-                    package_dirs=package_dirs,
+                    package_dirs=package_dirs,  # KinematicModel handles ALL path resolution
                     transform_registry=self.transform_registry,
                     asset_id=asset_id
                 )
             else:
                 model = KinematicModel(
                     urdf_path=str(urdf_path),
-                    package_dirs=package_dirs,
+                    package_dirs=package_dirs,  # KinematicModel handles ALL path resolution
                     transform_registry=self.transform_registry,
                     asset_id=asset_id
                 )

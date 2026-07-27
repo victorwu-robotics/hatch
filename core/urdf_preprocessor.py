@@ -13,16 +13,7 @@ class URDFPreprocessor:
     Minimal URDF preprocessor with xacro-compatible syntax.
     
     Supports the features that real-world URDF packages from
-    ROS-Industrial and manufacturers actually use:
-    
-        $(find package_name)                       — Package path resolution
-        package://package_name/relative/path       — Standard mesh URI scheme
-        <xacro:include filename="..."/>            — Include another file
-        <xacro:property name="x" value="y"/>       — Define a variable
-        ${property_name}                           — Variable substitution
-        ${pi}, ${deg2rad}, ${rad2deg}              — Built-in math constants
-        <xacro:macro name="m" params="a b">        — Define a reusable block
-        <xacro:m param="value"/>                   — Instantiate a macro
+    ROS-Industrial and manufacturers actually use.
     
     Does NOT support:
         Python expressions in ${}
@@ -30,15 +21,11 @@ class URDFPreprocessor:
         Conditional blocks (<xacro:if>, <xacro:unless>)
         ROS-specific features beyond $(find)
         Nested macro calls beyond one level
-
-        Pure text/xml transformer.
-        Converts xacro syntax to plain URDF.
-        Does NOT touch file paths at all - leaves them as-is in the URDF.
     """
 
     XACRO_NS = "xacro"
 
-    def __init__(self, package_dirs: List[str]): # removed: 
+    def __init__(self, package_dirs: List[str]):
         """
         Initialize the preprocessor.
 
@@ -52,11 +39,11 @@ class URDFPreprocessor:
 
         # Built-in math constants (standard xacro provides these)
         self._properties.update({
-            'pi': math.pi,        # float, not string
-            'PI': math.pi,
-            'deg2rad': math.pi / 180.0,
-            'rad2deg': 180.0 / math.pi,
-            'M_PI': math.pi,
+            'pi': str(math.pi),
+            'PI': str(math.pi),
+            'deg2rad': str(math.pi / 180.0),
+            'rad2deg': str(180.0 / math.pi),
+            'M_PI': str(math.pi),
         })
 
     # =================================================================
@@ -86,15 +73,57 @@ class URDFPreprocessor:
         root = tree.getroot()
 
         self._macros.clear()
+        self._properties.clear()
+        # Reset built-in properties
+        self._properties.update({
+            'pi': str(math.pi),
+            'PI': str(math.pi),
+            'deg2rad': str(math.pi / 180.0),
+            'rad2deg': str(180.0 / math.pi),
+            'M_PI': str(math.pi),
+        })
+
+        # FIRST PASS: Collect all properties first
+        self._collect_all_properties(root, filepath.parent)
+
+        # SECOND PASS: Process elements with properties available
         self._process_element(root, filepath.parent)
 
         self._strip_xacro_namespace(root)
-
         return self._element_to_string(root)
 
     # =================================================================
     # Element Processing
     # =================================================================
+
+    def _collect_all_properties(self, element: ET.Element, current_dir: Path):
+        """First pass: collect all xacro:property definitions."""
+        tag = self._tag_name(element)
+
+        if tag == f"{self.XACRO_NS}:property":
+            name = element.get('name')
+            value = element.get('value', '')
+            if name:
+                # Store as string - conversion happens during eval
+                self._properties[name] = value
+                logger.debug(f"Property collected: {name} = {value}")
+
+        # Handle includes recursively
+        if tag == f"{self.XACRO_NS}:include":
+            filename = element.get('filename', '')
+            if filename:
+                filename = self._substitute_string(filename)
+                filename = self._resolve_find_for_include(filename)
+                resolved = self._resolve_include_path(filename, current_dir)
+                if resolved and resolved.exists():
+                    # Load and collect properties from included file
+                    included_tree = ET.parse(str(resolved))
+                    included_root = included_tree.getroot()
+                    self._collect_all_properties(included_root, resolved.parent)
+
+        # Recurse through children
+        for child in element:
+            self._collect_all_properties(child, current_dir)
 
     def _process_element(self, element: ET.Element, current_dir: Path):
         """Process an XML element and its children."""
@@ -136,7 +165,7 @@ class URDFPreprocessor:
         # Resolve $(find ...) ONLY for includes
         filename = self._resolve_find_for_include(filename)
         resolved = self._resolve_include_path(filename, current_dir)
-        
+
         if resolved is None:
             logger.warning(f"Could not resolve include: {filename}")
             return
@@ -159,7 +188,7 @@ class URDFPreprocessor:
                 idx = children.index(element)
             except ValueError:
                 idx = len(children)
-            
+
             if included_root.tag == 'robot':
                 # Insert all children of the included robot
                 included_children = list(included_root)
@@ -167,7 +196,7 @@ class URDFPreprocessor:
                     parent.insert(idx + i, child)
             else:
                 parent.insert(idx, included_root)
-            
+
             parent.remove(element)
         else:
             logger.error(f"No parent found for include: {filename}")
@@ -178,7 +207,7 @@ class URDFPreprocessor:
         This is separate from mesh path resolution.
         """
         pattern = re.compile(r'\$\(find\s+([^)]+)\)')
-        
+
         def replace_find(match):
             package_name = match.group(1).strip()
             for pkg_dir in self.package_dirs:
@@ -187,7 +216,7 @@ class URDFPreprocessor:
                     return str(candidate)
             logger.warning(f"Could not resolve $(find {package_name})")
             return match.group(0)
-        
+
         return pattern.sub(replace_find, text)
 
     def _resolve_include_path(self, filename: str, current_dir: Path) -> Optional[Path]:
@@ -203,12 +232,12 @@ class URDFPreprocessor:
                 return path if path.exists() else None
             resolved = (current_dir / file_path).resolve()
             return resolved if resolved.exists() else None
-        
+
         # Handle absolute paths
         path = Path(filename)
         if path.is_absolute():
             return path if path.exists() else None
-        
+
         # Handle relative paths (relative to current xacro file)
         resolved = (current_dir / filename).resolve()
         return resolved if resolved.exists() else None
@@ -256,7 +285,7 @@ class URDFPreprocessor:
 
         macro_children = list(macro_def)
         new_children = []
-        
+
         # First pass: collect property definitions
         temp_properties = {}
         for child in macro_children:
@@ -270,13 +299,13 @@ class URDFPreprocessor:
                     for pname, pvalue in param_values.items():
                         value = value.replace(f"${{{pname}}}", pvalue or '')
                     temp_properties[name] = value
-        
+
         # Temporarily add these properties
         old_properties = {}
         for name, value in temp_properties.items():
             old_properties[name] = self._properties.get(name)
             self._properties[name] = value
-        
+
         # Second pass: copy and substitute non-property children
         for child in macro_children:
             tag = self._tag_name(child)
@@ -285,7 +314,7 @@ class URDFPreprocessor:
             new_child = self._deep_copy_element(child)
             self._substitute_macro_params(new_child, param_values)
             new_children.append(new_child)
-        
+
         # Restore old property values (or remove if they didn't exist)
         for name, old_value in old_properties.items():
             if old_value is None:
@@ -329,16 +358,12 @@ class URDFPreprocessor:
         for child in element:
             self._substitute_macro_params(child, param_values)
 
-    # _substitute_string should NOT resolve $(find ...) anymore
     def _substitute_string(self, text: str) -> str:
-        """
-        Substitute ${property_name} and simple math expressions.
-        Leaves $(find ...) untouched - KinematicModel will resolve those.
-        """
+        """Substitute ${property_name} and simple math expressions."""
         if '$' not in text:
             return text
 
-        # Only handle ${...} patterns
+        # Handle ${...} patterns
         pattern = re.compile(r'\$\{([^}]+)\}')
 
         def replace_match(match):
@@ -346,18 +371,38 @@ class URDFPreprocessor:
 
             # Try to evaluate as a math expression with known properties
             try:
+                # Create a namespace with all properties converted to floats where possible
                 namespace = {}
-                namespace.update(self._properties)
+                for k, v in self._properties.items():
+                    try:
+                        # Try to convert to float
+                        namespace[k] = float(v)
+                    except (ValueError, TypeError):
+                        # Keep as string if not convertible
+                        namespace[k] = v
+
+                # Add built-in math functions and constants
                 namespace.update({
-                    'abs': abs, 'min': min, 'max': max,
-                    'round': round, 'int': int, 'float': float,
+                    'pi': math.pi,
+                    'PI': math.pi,
+                    'M_PI': math.pi,
+                    'deg2rad': math.pi / 180.0,
+                    'rad2deg': 180.0 / math.pi,
+                    'abs': abs,
+                    'min': min,
+                    'max': max,
+                    'round': round,
+                    'int': int,
+                    'float': float,
                 })
+
+                # Evaluate the expression
                 result = eval(expr, {"__builtins__": {}}, namespace)
                 if isinstance(result, float):
                     return str(result)
                 return str(result)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Could not evaluate: {expr} - {e}")
 
             # Fallback: treat as a simple property name
             if expr in self._properties:
@@ -405,12 +450,12 @@ class URDFPreprocessor:
     def _element_to_string(element: ET.Element) -> str:
         """Convert an XML element to a pretty-printed string."""
         import xml.dom.minidom as minidom
-        
+
         # Remove internal _parent attributes from all elements
         for el in element.iter():
             if '_parent' in el.attrib:
                 del el.attrib['_parent']
-        
+
         rough_string = ET.tostring(element, encoding='unicode')
         reparsed = minidom.parseString(rough_string)
         return reparsed.toprettyxml(indent="  ")

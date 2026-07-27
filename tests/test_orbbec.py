@@ -1,112 +1,61 @@
-from pyorbbecsdk import *
 import cv2
 import numpy as np
-import time
+import pyorbbecsdk
+from pyorbbecsdk import Pipeline, FrameSet, OBSensorType, OBFormat
 
-print("Creating pipeline...")
-pipeline = Pipeline()
-device = pipeline.get_device()
+def main():
+    # Initialize the camera pipeline
+    pipeline = Pipeline()
+    try:
+        pipeline.start(None)
+        print("Camera stream started successfully! Press 'q' to exit.")
+    except pyorbbecsdk.OBError as e:
+        print(f"Failed to start pipeline: {e}")
+        print("Please check your USB 3.0 connection and camera drivers.")
+        return
 
-if not device:
-    print("No device!")
-    exit()
-
-print(f"Device: {device.get_device_info().get_name()}")
-
-# Configure streams
-config = Config()
-
-# Get color sensor and its profiles
-color_sensor = device.get_sensor(OBSensorType.COLOR_SENSOR)
-if color_sensor:
-    profile_list = color_sensor.get_stream_profile_list()
-    print(f"Color profiles available: {len(profile_list)}")
-    
-    # List all profiles for debugging
-    for i in range(len(profile_list)):
-        p = profile_list.get_profile(i)
-        print(f"  {i}: {p.get_width()}x{p.get_height()} @ {p.get_fps()}fps (format: {p.get_format()})")
-    
-    # Try each profile until one works
-    color_enabled = False
-    for i in range(len(profile_list)):
+    while True:
         try:
-            profile = profile_list.get_profile(i)
-            config.enable_stream(profile)
-            print(f"Enabled color: {profile.get_width()}x{profile.get_height()} @ {profile.get_fps()}fps (format: {profile.get_format()})")
-            color_enabled = True
-            break
-        except Exception as e:
-            print(f"Failed to enable profile {i}: {e}")
-    
-    if not color_enabled:
-        print("❌ Could not enable any color profile")
-else:
-    print("❌ No color sensor found!")
+            # Wait for a synchronized frame set (timeout 100ms)
+            frames: FrameSet = pipeline.wait_for_frames(100)
+            if frames is None:
+                continue
 
-# Get depth sensor and its profiles
-depth_sensor = device.get_sensor(OBSensorType.DEPTH_SENSOR)
-if depth_sensor:
-    profile_list = depth_sensor.get_stream_profile_list()
-    print(f"Depth profiles available: {len(profile_list)}")
-    
-    for i in range(len(profile_list)):
-        p = profile_list.get_profile(i)
-        print(f"  {i}: {p.get_width()}x{p.get_height()} @ {p.get_fps()}fps")
-    
-    # Try each profile
-    depth_enabled = False
-    for i in range(len(profile_list)):
-        try:
-            profile = profile_list.get_profile(i)
-            config.enable_stream(profile)
-            print(f"Enabled depth: {profile.get_width()}x{profile.get_height()} @ {profile.get_fps()}fps")
-            depth_enabled = True
-            break
-        except Exception as e:
-            print(f"Failed to enable depth profile {i}: {e}")
-    
-    if not depth_enabled:
-        print("❌ Could not enable any depth profile")
-else:
-    print("❌ No depth sensor found!")
+            # 1. Process Color Frame
+            color_frame = frames.get_color_frame()
+            if color_frame is not None:
+                color_data = color_frame.get_data()
+                # Orbbec SDK generally outputs RGB or BGR arrays
+                color_image = np.frombuffer(color_data, dtype=np.uint8)
+                color_image = color_image.reshape((color_frame.get_height(), color_frame.get_width(), 3))
+                # Convert RGB to OpenCV default BGR if colors look swapped
+                color_image = cv2.cvtColor(color_image, cv2.COLOR_RGB2BGR)
+                cv2.imshow("Orbbec - Color Stream", color_image)
 
-print("Starting pipeline...")
-pipeline.start(config)
-time.sleep(1)  # Give camera time to warm up
-
-print("\nStreaming... Press 'q' or ESC to exit")
-print("Trying to get frames...")
-
-frame_count = 0
-while frame_count < 30:  # Try for 30 frames
-    frames = pipeline.wait_for_frames(200)
-    if frames:
-        color_frame = frames.get_color_frame()
-        if color_frame:
-            frame_count += 1
-            print(f"✅ Got color frame! (frame {frame_count})")
-            
-            # Get data and display
-            data = color_frame.get_data()
-            if data is not None:
-                img = np.asarray(data)
-                if len(img.shape) == 3:
-                    # If it's RGB, convert to BGR for OpenCV
-                    if img.shape[2] == 3:
-                        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-                    elif img.shape[2] == 4:
-                        img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
+            # 2. Process Depth Frame
+            depth_frame = frames.get_depth_frame()
+            if depth_frame is not None:
+                depth_data = depth_frame.get_data()
+                depth_image = np.frombuffer(depth_data, dtype=np.uint16)
+                depth_image = depth_image.reshape((depth_frame.get_height(), depth_frame.get_width()))
                 
-                cv2.imshow("Orbbec Camera - Color", img)
-                key = cv2.waitKey(1)
-                if key == ord('q') or key == 27:
-                    break
-        else:
-            print("No color frame in this set")
-    else:
-        print("No frames received")
+                # Normalize 16-bit depth values to 8-bit for visibility
+                depth_normalized = cv2.normalize(depth_image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+                depth_colored = cv2.applyColorMap(depth_normalized, cv2.COLORMAP_JET)
+                cv2.imshow("Orbbec - Depth Stream", depth_colored)
 
-pipeline.stop()
-cv2.destroyAllWindows()
-print("Done!")
+        except Exception as e:
+            print(f"Error reading frames: {e}")
+            break
+
+        # Break the loop when user presses 'q'
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    # Clean up and release system memory
+    pipeline.stop()
+    cv2.destroyAllWindows()
+    print("Streams closed safely.")
+
+if __name__ == "__main__":
+    main()

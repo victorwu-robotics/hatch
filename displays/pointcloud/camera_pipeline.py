@@ -108,6 +108,7 @@ class CameraPipeline:
             return False
 
         # Start the driver
+        logger.info(f"[DIAG] Going to start streaming")
         self.camera.start_streaming()
 
         # Auto-detect optical frame

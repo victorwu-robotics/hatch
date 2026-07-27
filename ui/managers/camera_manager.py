@@ -236,13 +236,15 @@ class CameraManager:
 
         Camera type is inferred from the frame naming convention.
         """
-        logger.debug(f"----- Discovering Cameras from URDF")
+        logger.info(f"----- Discovering Cameras from URDF")
         if not self.robot_manager or not self.robot_manager.current_kinematic_model:
             logger.info("No robot loaded — skipping camera discovery")
             return
 
         model = self.robot_manager.current_kinematic_model
         asset_id = self.robot_manager.current_asset_id
+
+        logger.info(f"Available link names: {list(model.link_transforms.keys())}")
 
         for link_name in model.link_transforms.keys():
             frame_name = f"{asset_id}_{link_name}"

@@ -48,7 +48,7 @@
   <xacro:include filename="$(find keyence_experimental)/urdf/lj_v7200_macro.xacro"/>
   <xacro:lj_v7200 prefix=""/>
 
-  <!-- ===== ORBBEC RGB-D CAMERA ===== -->
+  <!-- ===== ORBBEC RGB-D CAMERA ===== 
   <xacro:include filename="$(find orbbec_camera)/urdf/gemini_335_336.urdf.xacro"/>
 
   <joint name="wrist_3_link_orbbec_camera_joint" type="fixed">
@@ -56,5 +56,12 @@
     <parent link="wrist_3_link"/>
     <child link="camera_link"/>
   </joint>
+  -->
+
+  <!-- ===== RealSense D435 RGB-D CAMERA ===== -->
+  <xacro:include filename="$(find realsense2_description)/urdf/_d435.urdf.xacro"/>
+  <xacro:sensor_d435 parent="wrist_3_link" use_nominal_extrinsics="true" name="d435">
+    <origin xyz="-0.0225 -0.035 0.20685" rpy="0.0 ${-pi/2.0} ${pi/2.0}"/>
+  </xacro:sensor_d435>
 
 </robot>

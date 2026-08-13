@@ -177,8 +177,13 @@ class RobotManager:
             # Preprocess xacro files, or load URDF directly
             if urdf_path.suffix == '.xacro':
                 from core.urdf_preprocessor import URDFPreprocessor
-                # URDFPreprocessor no longer needs package_dirs!
-                preprocessor = URDFPreprocessor(package_dirs)
+                from utils.package_resolver import PackageResolver
+                
+                # Create PackageResolver (searches ~/hatch/assets by default)
+                self.package_resolver = PackageResolver()
+                
+                # Create preprocessor with resolver
+                preprocessor = URDFPreprocessor(self.package_resolver)
                 urdf_xml = preprocessor.process(str(urdf_path))
 
                 # Get the system's actual temp directory
@@ -191,14 +196,14 @@ class RobotManager:
 
                 model = KinematicModel(
                     urdf_path=temp_path,
-                    package_dirs=package_dirs,  # KinematicModel handles ALL path resolution
+                    package_dirs=package_dirs,  # KinematicModel still uses package_dirs
                     transform_registry=self.transform_registry,
                     asset_id=asset_id
                 )
             else:
                 model = KinematicModel(
                     urdf_path=str(urdf_path),
-                    package_dirs=package_dirs,  # KinematicModel handles ALL path resolution
+                    package_dirs=package_dirs,
                     transform_registry=self.transform_registry,
                     asset_id=asset_id
                 )

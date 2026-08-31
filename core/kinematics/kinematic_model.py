@@ -410,6 +410,29 @@ class KinematicModel:
         """Get the true kinematic root of the robot."""
         return self.true_root
 
+    def get_true_base(self) -> str:
+        """
+        Get the robot's mounting base link.
+        
+        This is the intuitive reference frame for Cartesian control,
+        matching what a UR teach pendant reports. It's typically the
+        URDF's root link (e.g., 'base_link'), NOT the parent of the
+        first moving joint (which may be a virtual fixed joint like
+        'base_link_inertia').
+        
+        Returns:
+            Name of the mounting base link
+        """
+        if hasattr(self, 'root_links') and self.root_links:
+            return self.root_links[0]
+        
+        # Fallback: find the link that has no parent
+        for link_name in self.links:
+            if link_name not in self.link_parents:
+                return link_name
+        
+        return "base_link"
+
     def get_first_moving_joint(self) -> Optional[str]:
         """Get the first moving joint of the robot."""
         return self.first_moving_joint

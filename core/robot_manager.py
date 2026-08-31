@@ -217,10 +217,11 @@ class RobotManager:
             # Register initial transforms
             self._register_initial_transforms(asset_id, model)
 
-            # Store asset base frame (true kinematic root for Cartesian control)
-            true_root = model.get_true_root()
-            self._asset_bases[asset_id] = f"{asset_id}_{true_root}"
-            logger.info(f"Asset base frame: {self._asset_bases[asset_id]}")
+            # NEW: Use true base for Cartesian control reference
+            true_base = model.get_true_base()
+            self._asset_bases[asset_id] = f"{asset_id}_{true_base}"
+            logger.info(f"Asset base frame (Cartesian reference): {self._asset_bases[asset_id]}")
+            logger.info(f"True root (IK reference): {asset_id}_{model.get_true_root()}")
 
             # Create visual display
             display = KinematicDisplay(

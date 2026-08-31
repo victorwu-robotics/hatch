@@ -52,64 +52,54 @@ class OffsetWristIKSolver:
     
     def _setup_base_compensation(self):
         """
-        Dynamically determine base frame compensation.
+        Determine base frame compensation between true_base and true_root.
         
-        Strategy:
-        1. Find the first moving joint's parent (true kinematic base)
-        2. Find the frame that the DH parameters expect (first link in arm chain)
-        3. Compute compensation between them
+        The IK solver works in the true_root frame (parent of first moving joint).
+        The Cartesian control panel works in the true_base frame (mounting base).
+        
+        For UR robots: true_base = 'base_link', true_root = 'base_link_inertia'
+                    (compensation is the fixed joint transform between them)
+        For Farino:    true_base = 'base_link', true_root = 'base_link'
+                    (compensation is identity)
+        
+        The compensation transforms poses from true_base to true_root for IK,
+        and from true_root back to true_base for FK.
         """
         if not self.model:
             return
         
-        # Step 1: Find true kinematic base (parent of first moving joint)
-        true_base = None
-        for joint_name, joint in self.model.joints.items():
-            if joint['type'] in ['revolute', 'continuous', 'prismatic']:
-                true_base = joint['parent']
-                break
+        # Get true base (mounting reference for Cartesian control)
+        self._true_base_frame = self.model.get_true_base()
+        logger.debug(f"True base (Cartesian reference): {self._true_base_frame}")
         
-        if true_base is None:
-            logger.debug("  No moving joints found - robot may be static")
-            return
+        # Get true root (IK reference, parent of first moving joint)
+        self._true_root_frame = self.model.get_true_root()
+        logger.debug(f"True root (IK reference): {self._true_root_frame}")
         
-        self._true_base_frame = true_base
-        logger.debug(f"\n  True kinematic base: {true_base}")
+        # The IK base is the same as true root
+        self._ik_base_frame = self._true_root_frame
         
-        # Step 2: Find the frame that DH parameters expect
-        # This is typically the first link in the arm chain
-        try:
-            arm_chain = self.model.get_arm_chain(true_base)
-            if arm_chain:
-                # The parent of the first joint in the chain is the IK base
-                first_joint = arm_chain[0]
-                ik_base = self.model.joints[first_joint]['parent']
-                self._ik_base_frame = ik_base
-                logger.debug(f"  IK expects base: {ik_base}")
-        except Exception as e:
-            logger.debug(f"  Could not determine IK base: {e}")
-            return
-        
-        # Step 3: If true base and IK base are different, compute compensation
-        if true_base != self._ik_base_frame:
-            # Get transforms in world coordinates at zero position
-            if true_base in self.model.link_transforms and self._ik_base_frame in self.model.link_transforms:
-                T_true_world = self.model.link_transforms[true_base]
-                T_ik_world = self.model.link_transforms[self._ik_base_frame]
+        # Compute compensation: transform from true_base to true_root
+        if self._true_base_frame != self._true_root_frame:
+            if (self._true_base_frame in self.model.link_transforms and 
+                self._true_root_frame in self.model.link_transforms):
                 
-                # Compute transform from true base to IK base
-                self._base_compensation = np.linalg.inv(T_true_world) @ T_ik_world
+                T_base_world = self.model.link_transforms[self._true_base_frame]
+                T_root_world = self.model.link_transforms[self._true_root_frame]
                 
-                logger.debug(f"  ✅ Base compensation enabled: {true_base} → {self._ik_base_frame}")
+                # Transform from true_base to true_root:
+                # T_root_base = inv(T_root_world) @ T_base_world
+                self._T_base_to_root = np.linalg.inv(T_root_world) @ T_base_world
+
+                # Transform from true_root to true_base:
+                self._T_root_to_base = np.linalg.inv(self._T_base_to_root)
+
+                logger.debug(f"Base compensation computed:")
+                logger.debug(f"  T_base_to_root:\n{self._T_base_to_root}")
                 
-                # Check if it's a 180° rotation (for debugging)
-                R = self._base_compensation[:3, :3]
-                if np.allclose(R, np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]]), atol=1e-6):
-                    logger.debug(f"      (This is a 180° rotation around Z)")
-            else:
-                logger.debug(f"  ⚠️  Could not compute compensation - missing transforms")
         else:
-            logger.debug(f"  ✅ No compensation needed - true base matches IK base")
+            self._T_base_to_root = np.eye(4)
+            self._T_root_to_base = np.eye(4)
     
     def _extract_from_model(self):
         """Extract DH parameters from the arm chain transforms."""
@@ -226,37 +216,20 @@ class OffsetWristIKSolver:
         }
     
     def solve_ik_for_tcp(self, target_pose: np.ndarray, q_guess: np.ndarray = None) -> Optional[np.ndarray]:
-        """
-        Solve IK for target TCP pose.
-        
-        Args:
-            target_pose: Target pose in TRUE robot base coordinates
-            q_guess: Initial joint guess
-        
-        Returns:
-            Joint angles in robot's joint space
-        """
-        # Apply base compensation if needed
-        if self._base_compensation is not None:
-            # Transform target from true base to IK base coordinates
-            target_pose_compensated = self._base_compensation @ target_pose
+        """Solve IK for target TCP pose in true_base frame."""
+        # Transform from true_base to true_root
+        if hasattr(self, '_T_base_to_root'):
+            target_pose_ik = self._T_base_to_root @ target_pose
         else:
-            target_pose_compensated = target_pose
+            target_pose_ik = target_pose
         
-        # Call the underlying IK solver
-        return self.ik.inverse(target_pose_compensated, q_guess)
+        return self.ik.inverse(target_pose_ik, q_guess)
     
     def forward_kinematics(self, q: np.ndarray) -> np.ndarray:
-        """Forward kinematics returning TCP in TRUE base coordinates."""
-        # Get TCP in IK base coordinates
+        """FK returning TCP pose in true_base frame."""
         tcp_ik = self.ik.forward(q)
         
-        # Transform to true base coordinates if needed
-        if self._base_compensation is not None:
-            # T_true_to_ik = self._base_compensation
-            # So T_ik_to_true = inv(T_true_to_ik)
-            T_ik_to_true = np.linalg.inv(self._base_compensation)
-            tcp_true = T_ik_to_true @ tcp_ik
-            return tcp_true
+        if hasattr(self, '_T_root_to_base'):
+            return self._T_root_to_base @ tcp_ik
         
         return tcp_ik

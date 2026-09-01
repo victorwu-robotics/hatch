@@ -68,6 +68,22 @@ class JointControlPanel(QWidget):
         self._debounce_timer.timeout.connect(self._publish_debounced_command)
         self._pending_command = None
 
+        # NEW: Sync sliders to the actual robot state at load.
+        # Without this, sliders sit at their middle (500), which
+        # does not equal neutral for joints with asymmetric limits.
+        self._sync_to_model()
+
+    def _sync_to_model(self):
+        """Set all sliders and labels to the kinematic model's current state."""
+        if self.kinematic_model is None:
+            return
+        try:
+            positions = self.kinematic_model.get_current_joint_positions()
+            if positions is not None and len(positions) > 0:
+                self._update_ui_from_positions(positions.tolist())
+        except Exception as e:
+            logger.warning(f"[JointControl] initial sync failed: {e}")
+
     # =================================================================
     # UI Setup
     # =================================================================

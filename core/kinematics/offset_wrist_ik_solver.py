@@ -57,15 +57,10 @@ class OffsetWristIKSolver:
     
     def _extract_from_model(self):
         """
-        Extract DH parameters from URDF joint origins.
+        Extract DH parameters from URDF joint origins directly.
         
         Works for both UR-style (with Y wrist offsets) and FR-style
         (with Z wrist offsets) robots.
-        
-        Strategy:
-        1. Get the arm chain (list of joint names in order)
-        2. Extract joint origins directly from URDF definitions
-        3. Determine the correct DH parameters based on geometry
         """
         if not self.model:
             return
@@ -107,35 +102,37 @@ class OffsetWristIKSolver:
             logger.debug(f"  {joint_name}: xyz={xyz}, rpy={rpy}")
         
         # ===== Extract DH parameters =====
-        # The key insight: UR IK solver expects specific conventions
-        
         # d1: Vertical offset from base to first joint axis
         # For UR: j1 has xyz[2]=0.1273
         # For FR: j1 has xyz[2]=0.0, but j2 has xyz[2]=0.18
-        # The d1 parameter represents the height from base to shoulder
         if abs(origins[0]['xyz'][2]) > 0.001:
             d1 = abs(origins[0]['xyz'][2])
+            logger.debug(f"  d1 from j1 Z offset: {d1}")
         else:
-            # j1 has no Z offset — look at j2's origin
             d1 = abs(origins[1]['xyz'][2])
-            logger.debug(f"  d1 from j2 origin: {d1}")
+            logger.debug(f"  d1 from j2 Z offset: {d1}")
         
         # a2: Upper arm length (distance from shoulder to elbow)
         # This is the X component of joint 3's origin (elbow)
         a2 = abs(origins[2]['xyz'][0])
-        logger.debug(f"  a2 from j3 origin: {a2}")
+        logger.debug(f"  a2 from j3 X offset: {a2}")
         
         # a3: Forearm length (distance from elbow to wrist)
         # This is the X component of joint 4's origin
         a3 = abs(origins[3]['xyz'][0])
-        logger.debug(f"  a3 from j4 origin: {a3}")
+        logger.debug(f"  a3 from j4 X offset: {a3}")
         
         # d4: Wrist 1 offset
-        # For UR: Y offset of j4 (0.163941)
-        # For FR: 0.0 (no Y offset)
-        d4 = abs(origins[3]['xyz'][1])
-        logger.debug(f"  d4 from j4 Y offset: {d4}")
-        
+        # For UR: the Y offset in the URDF is actually in Z component
+        # UR10: xyz="-0.5723 0 0.163941" → d4 = 0.163941 (Z component)
+        # FR10: xyz="-0.586 0 0" → d4 = 0.0
+        if abs(origins[3]['xyz'][1]) > 0.001:
+            d4 = abs(origins[3]['xyz'][1])  # Y offset (if present)
+        elif abs(origins[3]['xyz'][2]) > 0.001:
+            d4 = abs(origins[3]['xyz'][2])  # Z offset (UR-style)
+        else:
+            d4 = 0.0
+
         # d5: Wrist 2 offset
         # For UR: Y offset of j5 (0.1157)
         # For FR: Z offset of j5 (0.159)
@@ -228,7 +225,9 @@ class OffsetWristIKSolver:
         """
         # Transform from true_base to true_root for IK
         if self._base_compensation is not None:
-            target_pose_ik = np.linalg.inv(self._base_compensation) @ target_pose
+            # WRONG: target_pose_ik = np.linalg.inv(self._base_compensation) @ target_pose
+            # CORRECT: Apply compensation from true_base to true_root
+            target_pose_ik = self._base_compensation @ target_pose
         else:
             target_pose_ik = target_pose
         
@@ -239,6 +238,7 @@ class OffsetWristIKSolver:
         tcp_ik = self.ik.forward(q)
         
         if self._base_compensation is not None:
-            return self._base_compensation @ tcp_ik
+            # Transform from true_root back to true_base
+            return np.linalg.inv(self._base_compensation) @ tcp_ik
         
         return tcp_ik

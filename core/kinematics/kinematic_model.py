@@ -414,24 +414,25 @@ class KinematicModel:
         """
         Get the robot's mounting base link.
         
-        This is the intuitive reference frame for Cartesian control,
-        matching what a UR teach pendant reports. It's typically the
-        URDF's root link (e.g., 'base_link'), NOT the parent of the
-        first moving joint (which may be a virtual fixed joint like
-        'base_link_inertia').
+        For UR-style robots with a fixed joint between base and first moving joint:
+        - true_root = base_link_inertia (parent of first moving joint)
+        - true_base = base_link (parent of true_root)
         
-        Returns:
-            Name of the mounting base link
+        For robots without the fixed joint:
+        - true_root = base_link (parent of first moving joint)
+        - true_base = base_link (same as true_root)
+        
+        Excludes 'world' — returns the first actual robot link instead.
         """
-        if hasattr(self, 'root_links') and self.root_links:
-            return self.root_links[0]
+        true_root = self.get_true_root()
         
-        # Fallback: find the link that has no parent
-        for link_name in self.links:
-            if link_name not in self.link_parents:
-                return link_name
+        if true_root and true_root in self.link_parents:
+            parent = self.link_parents[true_root]
+            if parent != 'world':
+                return parent
         
-        return "base_link"
+        # If true_root's parent is 'world' or true_root is already base_link
+        return true_root if true_root != 'world' else "base_link"
 
     def get_first_moving_joint(self) -> Optional[str]:
         """Get the first moving joint of the robot."""
@@ -440,6 +441,62 @@ class KinematicModel:
     # =================================================================
     # Forward Kinematics
     # =================================================================
+
+    def compute_fk(self, q) -> Dict[str, np.ndarray]:
+        """
+        Compute link transforms for given q WITHOUT mutating state.
+        
+        Args:
+            q: Joint positions array or dict
+        
+        Returns:
+            Dictionary of link name → 4x4 transform (world frame)
+        """
+        # Build joint value dict
+        q_dict = {}
+        joint_names = [name for name, j in self.joints.items() 
+                    if j['type'] != 'fixed']
+        
+        if isinstance(q, dict):
+            q_dict = q
+        elif isinstance(q, (list, np.ndarray)):
+            for i, name in enumerate(joint_names):
+                if i < len(q):
+                    q_dict[name] = q[i]
+        
+        # Compute transforms locally without mutating self
+        transforms = {}
+        for root_link in self.root_links:
+            transforms[root_link] = np.eye(4)
+            self._compute_children_transforms(root_link, q_dict, transforms)
+        
+        return transforms
+
+    def _compute_children_transforms(self, parent_link, q_dict, transforms):
+        """Recursively compute child transforms without mutating state."""
+        if parent_link not in self.link_children:
+            return
+        
+        for child_link in self.link_children[parent_link]:
+            joint = None
+            for j in self.joints.values():
+                if j['parent'] == parent_link and j['child'] == child_link:
+                    joint = j
+                    break
+            
+            if joint is None:
+                continue
+            
+            # Use q_dict value if available, otherwise 0
+            value = q_dict.get(joint['name'], 0.0)
+            
+            # Create a copy of the joint with the new value
+            joint_copy = joint.copy()
+            joint_copy['value'] = value
+            joint_transform = self._compute_joint_transform(joint_copy)
+            
+            transforms[child_link] = transforms[parent_link] @ joint_transform
+            self._compute_children_transforms(child_link, q_dict, transforms)
 
     def _neutral_state(self):
         """Initialize all transforms and joint positions to zero."""
@@ -642,26 +699,10 @@ class KinematicModel:
         return self._ik_solver.solve_ik_for_tcp(target_pose, q_guess)
 
     def forward_kinematics(self, q: np.ndarray) -> np.ndarray:
-        """Compute forward kinematics for given joint positions.
-
-        Does NOT mutate the model's current state. Computes FK for the
-        given q and returns the resulting TCP pose, leaving the model
-        in its original state.
-        """
-        if self._ik_solver is not None:
-            return self._ik_solver.forward_kinematics(q)
-
-        # Save current state
-        saved_q = self.get_current_joint_positions()
-
-        # Compute FK without registry updates
-        self.update_state(q)
-        tcp_pose = self.get_tcp_pose().copy()
-
-        # Restore original state
-        self.update_state(saved_q)
-
-        return tcp_pose
+        """Compute TCP pose for given q without mutating state."""
+        transforms = self.compute_fk(q)
+        mount_pose = transforms.get(self.tool_mount_link, np.eye(4))
+        return mount_pose @ self._tool_transform
 
     def get_arm_chain(self, base_link_name: str = "base_link") -> List[str]:
         """

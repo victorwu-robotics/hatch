@@ -55,6 +55,8 @@ class CartesianControlPanel(QWidget):
         self.target_pose = None
         self._initialized = False
 
+        self._sliders_moved = False
+
         # Slider value tracking for Tool-frame delta calculations
         self._last_orient_slider_values = [500, 500, 500]
 
@@ -402,6 +404,7 @@ class CartesianControlPanel(QWidget):
         if self.target_pose is None:
             return
 
+        self._sliders_moved = True
         value = self._position_slider_to_value(slider_value)
         self.target_pose[axis_idx, 3] = value
         self.position_labels[axis_idx].setText(f"{value:.3f} m")
@@ -479,6 +482,8 @@ class CartesianControlPanel(QWidget):
         """Handle orientation slider movement."""
         if self.target_pose is None:
             return
+
+        self._sliders_moved = True
 
         frame = self._get_selected_frame()
 
@@ -722,11 +727,10 @@ class CartesianControlPanel(QWidget):
         else:
             self._show_no_ik_message()
 
-        tcp_pose = self._get_tcp_pose_in_base()
-        if tcp_pose is not None:
-            self.target_pose = tcp_pose.copy()
-            self._update_all_sliders_from_target()
-            self._initialized = True
+        # Reset slider tracking
+        self._sliders_moved = False
+        self.target_pose = None  # Force re-initialization from current state
+        self._initialized = False
 
     def _enable_controls(self):
         """Re-enable controls."""
@@ -750,19 +754,20 @@ class CartesianControlPanel(QWidget):
             if tcp_pose is None:
                 return
 
-            if self.target_pose is None:
+            # If target_pose is None OR user hasn't moved sliders,
+            # update target to match current TCP
+            if self.target_pose is None or not self._sliders_moved:
                 self.target_pose = tcp_pose.copy()
                 self._update_all_sliders_from_target()
                 self._initialized = True
 
+            # Update current values display
             self.current_values[0].setText(f"{tcp_pose[0, 3]:.3f}")
             self.current_values[1].setText(f"{tcp_pose[1, 3]:.3f}")
             self.current_values[2].setText(f"{tcp_pose[2, 3]:.3f}")
 
-            # Always show true current Euler angles regardless of control frame
             R_matrix = tcp_pose[:3, :3]
             euler = R.from_matrix(R_matrix).as_euler('xyz')
-
             for i in range(3):
                 self.current_values[3 + i].setText(self._display_angle(euler[i]))
 

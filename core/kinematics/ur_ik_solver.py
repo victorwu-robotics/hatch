@@ -1,279 +1,335 @@
-# ur_ik_solver.py - Clean version matching your original working code
+"""
+Offset Wrist IK Solver - Unified analytical IK for UR-style and FR-style robots.
+"""
 
 import numpy as np
-from numpy import linalg
-from math import cos, sin, atan2, acos, asin, sqrt, pi
 from typing import Optional, List
+from math import pi
+
+from core.kinematics.ur_ik_solver import URIKSolver
+
+import logging
+logger = logging.getLogger(__name__)
 
 
-class URIKSolver:
-    """UR-style IK solver with parameterized DH parameters."""
+class OffsetWristIKSolver:
+    """
+    Unified analytical IK solver for 6-DOF offset-wrist robots.
+    """
     
-    def __init__(self, 
-                 d1: float = 0.1273,
-                 a2: float = -0.612,
-                 a3: float = -0.5723,
-                 d4: float = 0.163941,
-                 d5: float = 0.1157,
-                 d6: float = 0.0922):
+    def __init__(self, kinematic_model=None):
+        self.model = kinematic_model
+        
+        # DH parameters (extracted from URDF)
+        self.d1 = 0.0
+        self.a2 = 0.0
+        self.a3 = 0.0
+        self.d4 = 0.0
+        self.d5 = 0.0
+        self.d6 = 0.0
+        
+        # Non-standard offsets
+        self.base_offset = 0.0
+        self.tool_offset = 0.0
+        
+        # Base frame compensation
+        self._base_compensation = None
+        self._true_base_frame = None
+        self._ik_base_frame = None
+        
+        # Try to extract from model if provided
+        if kinematic_model:
+            self._extract_from_model()
+            self._setup_frame_transforms()
+        
+        # Create the parameterized IK solver
+        self.ik = URIKSolver(
+            d1=self.d1,
+            a2=self.a2,
+            a3=self.a3,
+            d4=self.d4,
+            d5=self.d5,
+            d6=self.d6 + self.tool_offset,
+            base_offset=self.base_offset
+        )
+        
+        logger.info(f"OffsetWristIKSolver created with DH parameters:")
+        logger.info(f"  d1={self.d1:.6f}, a2={self.a2:.6f}, a3={self.a3:.6f}")
+        logger.info(f"  d4={self.d4:.6f}, d5={self.d5:.6f}, d6={self.d6:.6f}")
+        if self.base_offset > 1e-6:
+            logger.info(f"  base_offset={self.base_offset:.6f} (non-standard)")
+        if self.tool_offset > 1e-6:
+            logger.info(f"  tool_offset={self.tool_offset:.6f}")
+    
+    def _extract_from_model(self):
         """
-        Initialize IK solver with DH parameters.
+        Extract DH parameters from the URDF joint origins.
         """
-        # Store parameters (matching original indexing)
-        self.d1 = d1
-        self.a2 = a2
-        self.a3 = a3
-        self.d4 = d4
-        self.d5 = d5
-        self.d6 = d6
+        if not self.model:
+            return
         
-        # Create arrays matching original indexing (index 0 is dummy)
-        self.d = np.array([0, d1, 0, 0, d4, d5, d6])
-        self.a = np.array([0, 0, a2, a3, 0, 0, 0])
-        self.alpha = np.array([0, pi/2, 0, 0, pi/2, -pi/2, 0])
+        # Reset all joints to zero for consistent FK
+        for joint_name, joint in self.model.joints.items():
+            if joint['type'] in ['revolute', 'continuous', 'prismatic']:
+                joint['value'] = 0.0
+        
+        # Update transforms
+        self.model._forward_kinematics()
+        
+        # Get the true root (parent of first moving joint)
+        true_root = self.model.get_true_root()
+        
+        # Get the arm chain
+        try:
+            chain = self.model.get_arm_chain(true_root)
+            logger.debug(f"Arm chain: {chain}")
+        except ValueError as e:
+            logger.error(f"Cannot get arm chain: {e}")
+            return
+        
+        if len(chain) < 6:
+            logger.warning(f"Expected 6 joints, found {len(chain)}")
+            return
+        
+        # Extract joint origins from URDF
+        origins = []
+        for joint_name in chain:
+            joint = self.model.joints[joint_name]
+            origins.append({
+                'name': joint_name,
+                'xyz': np.array(joint['origin_xyz']),
+                'rpy': np.array(joint['origin_rpy']),
+            })
+            logger.debug(f"  {joint_name}: xyz={joint['origin_xyz']}, rpy={joint['origin_rpy']}")
+        
+        # ===== Determine wrist offset convention =====
+        has_y_offset = False
+        has_z_offset = False
+        
+        for i in range(3, 6):
+            xyz = origins[i]['xyz']
+            if abs(xyz[1]) > 1e-6:
+                has_y_offset = True
+            if abs(xyz[2]) > 1e-6:
+                has_z_offset = True
+        
+        if has_y_offset:
+            logger.debug("  Detected UR-style wrist (Y-offsets)")
+        elif has_z_offset:
+            logger.debug("  Detected FR-style wrist (Z-offsets)")
+        else:
+            logger.debug("  Detected spherical wrist (no offsets)")
+        
+        # ===== Extract d1 (base to shoulder) =====
+        if abs(origins[0]['xyz'][2]) > 1e-6:
+            self.d1 = abs(origins[0]['xyz'][2])
+            logger.debug(f"  d1 from j1 Z offset: {self.d1}")
+        elif abs(origins[1]['xyz'][2]) > 1e-6:
+            self.d1 = 0.0
+            self.base_offset = origins[1]['xyz'][2]
+            logger.debug(f"  base_offset from j2 Z offset: {self.base_offset}")
+        else:
+            self.d1 = 0.0
+            logger.debug(f"  d1 = 0 (no base offset)")
+        
+        # ===== Extract a2 (shoulder to elbow) =====
+        self.a2 = -abs(origins[2]['xyz'][0])
+        logger.debug(f"  a2 from j3 X offset: {self.a2}")
+        
+        # ===== Extract a3 (elbow to wrist_1) =====
+        self.a3 = -abs(origins[3]['xyz'][0])
+        logger.debug(f"  a3 from j4 X offset: {self.a3}")
+        
+        # ===== Extract d4 (wrist_1 offset) =====
+        j4_xyz = origins[3]['xyz']
+        self.d4 = max(abs(j4_xyz[1]), abs(j4_xyz[2]))
+        logger.debug(f"  d4 from j4 (max of Y,Z): {self.d4}")
+        
+        # ===== Extract d5 (wrist_2 offset) =====
+        j5_xyz = origins[4]['xyz']
+        self.d5 = max(abs(j5_xyz[1]), abs(j5_xyz[2]))
+        logger.debug(f"  d5 from j5 (max of Y,Z): {self.d5}")
+        
+        # ===== Extract d6 (wrist_3 offset) =====
+        j6_xyz = origins[5]['xyz']
+        self.d6 = max(abs(j6_xyz[1]), abs(j6_xyz[2]))
+        logger.debug(f"  d6 from j6 (max of Y,Z): {self.d6}")
+        
+        # ===== Extract tool offset =====
+        self.tool_offset = self._extract_tool_offset(chain[-1])
+        if self.tool_offset > 1e-6:
+            logger.debug(f"  tool_offset: {self.tool_offset}")
+        
+        logger.info(f"Extracted DH parameters:")
+        logger.info(f"  d1={self.d1:.6f}, a2={self.a2:.6f}, a3={self.a3:.6f}")
+        logger.info(f"  d4={self.d4:.6f}, d5={self.d5:.6f}, d6={self.d6:.6f}")
     
-    def _T(self, n: int, th: np.ndarray) -> np.ndarray:
+    def _extract_tool_offset(self, last_joint_name):
         """
-        Modified DH transformation matrix from frame n-1 to n.
-        
-        Args:
-            n: joint index (1-6)
-            th: joint angles array (6,) - uses th[n-1]
-        
-        Returns:
-            4x4 transformation matrix
+        Extract tool offset from fixed joints after the last revolute joint.
         """
-        return np.array([
-            [cos(th[n-1]), -sin(th[n-1]), 0, self.a[n-1]],
-            [sin(th[n-1]) * cos(self.alpha[n-1]), 
-             cos(th[n-1]) * cos(self.alpha[n-1]), 
-             -sin(self.alpha[n-1]), 
-             -sin(self.alpha[n-1]) * self.d[n]],
-            [sin(th[n-1]) * sin(self.alpha[n-1]), 
-             cos(th[n-1]) * sin(self.alpha[n-1]), 
-             cos(self.alpha[n-1]), 
-             cos(self.alpha[n-1]) * self.d[n]],
-            [0, 0, 0, 1]
-        ])
+        if not self.model:
+            return 0.0
+        
+        last_joint = self.model.joints.get(last_joint_name)
+        if not last_joint:
+            return 0.0
+        
+        current_link = last_joint['child']
+        total_offset = 0.0
+        
+        # Walk through fixed joints
+        while current_link in self.model.link_children:
+            children = self.model.link_children[current_link]
+            if len(children) != 1:
+                break
+            
+            child = children[0]
+            
+            # Check if connected by a fixed joint
+            is_fixed = False
+            for j in self.model.joints.values():
+                if (j['parent'] == current_link and
+                    j['child'] == child and
+                    j['type'] == 'fixed'):
+                    total_offset += abs(j['origin_xyz'][2])
+                    is_fixed = True
+                    break
+            
+            if is_fixed:
+                current_link = child
+            else:
+                break
+        
+        return total_offset
     
-    def forward(self, q: np.ndarray) -> np.ndarray:
-        """Forward kinematics."""
-        T_01 = self._T(1, q)
-        T_12 = self._T(2, q)
-        T_23 = self._T(3, q)
-        T_34 = self._T(4, q)
-        T_45 = self._T(5, q)
-        T_56 = self._T(6, q)
+    def _setup_frame_transforms(self):
+        """
+        Setup transforms between true_base and true_root frames.
+        """
+        if not self.model:
+            return
         
-        return T_01 @ T_12 @ T_23 @ T_34 @ T_45 @ T_56
+        true_base = self.model.get_true_base()
+        true_root = self.model.get_true_root()
+        
+        logger.debug(f"True base: {true_base}")
+        logger.debug(f"True root: {true_root}")
+        
+        if true_base != true_root:
+            if (true_base in self.model.link_transforms and 
+                true_root in self.model.link_transforms):
+                
+                T_base_world = self.model.link_transforms[true_base]
+                T_root_world = self.model.link_transforms[true_root]
+                
+                self._true_base_to_true_root = np.linalg.inv(T_root_world) @ T_base_world
+                
+                logger.debug(f"Transform true_base → true_root:")
+                logger.debug(f"  {self._true_base_to_true_root}")
+            else:
+                logger.warning(f"Cannot compute transform: missing link transforms")
+                self._true_base_to_true_root = None
+        else:
+            self._true_base_to_true_root = np.eye(4)
+            logger.debug(f"No transform needed (true_base == true_root)")
     
-    def inverse(self, T_target, q_guess=None):
-        """Inverse kinematics with debug logging."""
-        import logging
-        logger = logging.getLogger(__name__)
+    def solve_ik_for_tcp(self, target_pose, q_guess=None):
+        """
+        Solve IK for target TCP pose.
+        """
+        # Transform target from true_base to true_root frame
+        if hasattr(self, '_true_base_to_true_root') and self._true_base_to_true_root is not None:
+            target_in_true_root = self._true_base_to_true_root @ target_pose
+        else:
+            target_in_true_root = target_pose
         
-        logger.debug(f"\n{'='*60}")
-        logger.debug(f"IK INVERSE CALLED")
-        logger.debug(f"{'='*60}")
-        logger.debug(f"Target pose:\n{T_target}")
-        logger.debug(f"q_guess: {q_guess}")
+        # Solve IK in true_root frame
+        solutions = self.ik.inverse_all(target_in_true_root)
         
-        solutions = self._all_solutions(T_target)
+        if solutions is not None and len(solutions) > 0:
+            # Convert list to array for _select_best_solution
+            solutions_array = np.array(solutions).T  # 6xN
         
-        if not solutions:
-            logger.debug(f"NO SOLUTIONS FOUND!")
-            return None
-        
-        logger.debug(f"Found {len(solutions)} solutions:")
-        for i, q in enumerate(solutions):
-            # Verify each solution
-            T_verify = self.forward(q)
-            pos_error = np.linalg.norm(T_verify[:3, 3] - T_target[:3, 3])
-            logger.debug(f"  Solution {i}: {q}")
-            logger.debug(f"    Pos error: {pos_error:.6f}")
-        
-        if q_guess is not None:
-            if not hasattr(self, '_joint_weights'):
-                self._joint_weights = np.array([100.0, 50.0, 30.0, 10.0, 3.0, 1.0])
+            if q_guess is not None:
+                best_q = self._select_best_solution(solutions_array, q_guess)
+            else:
+                best_q = solutions_array[:, 0]
             
-            weights = self._joint_weights
-            
-            best = None
-            best_score = float('inf')
-            
-            for i, q in enumerate(solutions):
-                diff = q - q_guess
-                diff = (diff + pi) % (2*pi) - pi
-                
-                weighted_diff = diff * weights
-                score = np.sum(weighted_diff ** 2)
-                
-                logger.debug(f"  Solution {i}:")
-                logger.debug(f"    q:        {q}")
-                logger.debug(f"    diff:     {diff}")
-                logger.debug(f"    score:    {score:.2f}")
-                
-                # Check if this matches current configuration
-                q1_same = abs(diff[0]) < 0.5  # Shoulder within 30°
-                q3_same = abs(diff[2]) < 0.5  # Elbow within 30°
-                logger.debug(f"    q1_same:  {q1_same}")
-                logger.debug(f"    q3_same:  {q3_same}")
-                
-                if score < best_score:
-                    best_score = score
-                    best = q
-                    logger.debug(f"    → NEW BEST")
-            
-            logger.debug(f"\nSELECTED: {best}")
-            logger.debug(f"Score: {best_score}")
-            logger.debug(f"{'='*60}\n")
-            
-            return best
+            return best_q
         
-        logger.debug(f"\nNo q_guess — returning first solution: {solutions[0]}")
-        logger.debug(f"{'='*60}\n")
-        return solutions[0]
+        return None
     
-    def _all_solutions(self, T_06):
-        """Compute all 8 IK solutions with debug logging."""
-        import logging
-        logger = logging.getLogger(__name__)
-        
-        solutions = []
-        
-        # P_05 is the Origin of the 5th frame
-        P_05 = T_06 @ np.array([0, 0, -self.d6, 1])
-        
-        # ===== Theta 1 =====
-        P_05y = P_05[1]
-        P_05x = P_05[0]
-        
-        r = linalg.norm(P_05[0:2])
-        if r < 1e-6:
-            logger.debug(f"No solutions: r={r}")
-            return solutions
-        
-        if r < self.d4 - 1e-6:
-            logger.debug(f"No solutions: r={r} < d4={self.d4}")
-            return solutions
-        
-        phi_1 = atan2(P_05y, P_05x)
-        
-        if r < self.d4:
-            logger.debug(f"No solutions: r={r} < d4={self.d4}")
-            return solutions
-        
-        phi_2 = acos(self.d4 / r)
-        
-        q1_left = phi_1 + phi_2 + pi/2
-        q1_right = phi_1 - phi_2 + pi/2
-        
-        logger.debug(f"q1 candidates: left={q1_left}, right={q1_right}")
-        
-        # ===== For each q1 candidate =====
-        for q1_idx, q1 in enumerate([q1_left, q1_right]):
-            # ===== Theta 5 =====
-            P_06x = T_06[0, 3]
-            P_06y = T_06[1, 3]
-            P_16y = P_06x * sin(q1) - P_06y * cos(q1)
-            
-            # Check reachability for theta 5
-            numerator = P_16y - self.d4
-            denominator = self.d6
-            
-            if abs(numerator) > abs(denominator) + 1e-6:
-                continue  # Not reachable with this q1
-            
-            # Clamp to valid range to avoid math domain error
-            cos_q5 = numerator / denominator
-            cos_q5 = np.clip(cos_q5, -1.0, 1.0)
-            
-            # q5 candidates (wrist up/down)
-            q5_1 = acos(cos_q5)
-            q5_2 = -q5_1
-            
-            for q5 in [q5_1, q5_2]:
-                # ===== Theta 6 =====
-                T_60 = linalg.inv(T_06)
-                X_60x = T_60[0, 0]
-                X_60y = T_60[1, 0]
-                Y_60x = T_60[0, 1]
-                Y_60y = T_60[1, 1]
-                
-                sin_q5 = sin(q5)
-                if abs(sin_q5) < 1e-6:
-                    continue  # Singularity, skip this branch
-                
-                term_1 = (Y_60y * cos(q1) - X_60y * sin(q1)) / sin_q5
-                term_2 = (X_60x * sin(q1) - Y_60x * cos(q1)) / sin_q5
-                q6 = atan2(term_1, term_2)
-                
-                # ===== Theta 3 (elbow up/down) =====
-                # Build current joint vector for this branch
-                q_vec = np.zeros(6)
-                q_vec[0] = q1
-                q_vec[4] = q5
-                q_vec[5] = q6
-                
-                T_10 = linalg.inv(self._T(1, q_vec))
-                T_65 = linalg.inv(self._T(6, q_vec))
-                T_54 = linalg.inv(self._T(5, q_vec))
-                T_14 = T_10 @ T_06 @ T_65 @ T_54
-                
-                P_14xz_sq = T_14[0, 3]**2 + T_14[2, 3]**2
-                numerator = P_14xz_sq - self.a[2]**2 - self.a[3]**2
-                denominator = 2 * self.a[2] * self.a[3]
-                
-                if abs(denominator) < 1e-6:
-                    continue
-                
-                cos_q3 = numerator / denominator
-                cos_q3 = np.clip(cos_q3, -1.0, 1.0)
-                
-                q3_1 = acos(cos_q3)
-                q3_2 = -q3_1
-                
-                for q3 in [q3_1, q3_2]:
-                    # ===== Theta 2 =====
-                    alpha_arm = atan2(T_14[2, 3], T_14[0, 3])
-                    P_14xz = sqrt(T_14[0, 3]**2 + T_14[2, 3]**2)
-                    
-                    if P_14xz < 1e-6:
-                        continue
-                    
-                    operand = (-self.a[3] * sin(q3)) / P_14xz
-                    operand = np.clip(operand, -1.0, 1.0)
-                    q2 = atan2(-T_14[2, 3], -T_14[0, 3]) - asin(operand)
-                    
-                    # ===== Theta 4 =====
-                    q_vec[1] = q2
-                    q_vec[2] = q3
-                    
-                    T_32 = linalg.inv(self._T(3, q_vec))
-                    T_21 = linalg.inv(self._T(2, q_vec))
-                    T_34 = T_32 @ T_21 @ T_14
-                    q4 = atan2(T_34[1, 0], T_34[0, 0])
-                    
-                    # Build full solution
-                    q = np.array([q1, q2, q3, q4, q5, q6])
-                    q = self._wrap_angles(q)
-                    
-                    # Verify
-                    T_verify = self.forward(q)
-                    pos_error = np.linalg.norm(T_verify[:3, 3] - T_06[:3, 3])
-                    
-                    if pos_error < 0.001:  # 1mm tolerance
-                        # Check if already in solutions
-                        is_new = True
-                        for existing in solutions:
-                            if np.all(np.abs(q - existing) < 0.01):
-                                is_new = False
-                                break
-                        if is_new:
-                            solutions.append(q)
-        
-        return solutions
+    def solve_ik(self, target_pose, q_guess=None):
+        """Alias for solve_ik_for_tcp."""
+        return self.solve_ik_for_tcp(target_pose, q_guess)
     
-    def _wrap_angles(self, q: np.ndarray) -> np.ndarray:
-        """Wrap angles to [-π, π]."""
-        return (q + pi) % (2*pi) - pi
+    def _select_best_solution(self, solutions, q_current):
+        """
+        Select best solution based on:
+        1. Proximity to current joint state
+        2. Configuration branch continuity
+        """
+        if q_current is None:
+            q_current = np.zeros(6)
+        
+        q_current = np.array(q_current)
+        
+        best_q = None
+        best_score = float('inf')
+        
+        for i in range(solutions.shape[1]):
+            q_sol = solutions[:, i]
+            
+            # Compute normalized diff
+            diff = q_sol - q_current
+            diff = (diff + pi) % (2 * pi) - pi
+            
+            # Base score: weighted squared differences
+            weights = np.array([2.0, 3.0, 3.0, 2.0, 1.0, 1.0])
+            score = np.sum(weights * diff**2)
+            
+            # Configuration continuity check
+            sol_config = self._get_configuration(q_sol)
+            current_config = self._get_configuration(q_current)
+            if sol_config != current_config:
+                score += 10000
+            
+            if score < best_score:
+                best_score = score
+                best_q = q_sol
+        
+        return best_q
+    
+    def _get_configuration(self, q):
+        """Determine the configuration branch."""
+        if q[0] > -pi/2 and q[0] < pi/2:
+            shoulder = 'left'
+        else:
+            shoulder = 'right'
+        
+        if q[2] > 0:
+            elbow = 'up'
+        else:
+            elbow = 'down'
+        
+        if q[4] > 0:
+            wrist = 'flip'
+        else:
+            wrist = 'no_flip'
+        
+        return (shoulder, elbow, wrist)
+    
+    def forward_kinematics(self, q):
+        """Forward kinematics returning TCP in true_base coordinates."""
+        tcp_ik = self.ik.forward(q)
+        
+        # Transform from true_root to true_base
+        if hasattr(self, '_true_base_to_true_root') and self._true_base_to_true_root is not None:
+            return np.linalg.inv(self._true_base_to_true_root) @ tcp_ik
+        
+        return tcp_ik
+    
+    def forward(self, q):
+        """Alias for forward_kinematics."""
+        return self.forward_kinematics(q)

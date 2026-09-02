@@ -176,9 +176,9 @@ class KinematicModel:
             scale = mesh.get('scale', '1 1 1')
             scale_vals = [float(s) for s in scale.split()]
 
-            print(f"DEBUG MESH: link={link_name}, filename={filename}")
+            # print(f"DEBUG MESH: link={link_name}, filename={filename}")
             mesh_path = self._resolve_mesh_path(filename)
-            print(f"DEBUG MESH: resolved={mesh_path}")
+            # print(f"DEBUG MESH: resolved={mesh_path}")
 
             origin = visual_elem.find('origin')
             if origin is not None:
@@ -217,9 +217,9 @@ class KinematicModel:
         THE ONE AND ONLY path resolution method.
         Handles ALL formats: package://, $(find ...), file://, relative, absolute.
         """
-        print(f"DEBUG RESOLVE: input={filename}")
-        print(f"DEBUG RESOLVE: urdf_path.parent={self.urdf_path.parent}")
-        print(f"DEBUG RESOLVE: package_dirs={self.package_dirs}")
+        # print(f"DEBUG RESOLVE: input={filename}")
+        # print(f"DEBUG RESOLVE: urdf_path.parent={self.urdf_path.parent}")
+        # print(f"DEBUG RESOLVE: package_dirs={self.package_dirs}")
 
         
         logger.debug(f"Resolving mesh path: {filename}")
@@ -287,20 +287,20 @@ class KinematicModel:
             return None
         
         package_name, relative_path = parts
-        print(f"DEBUG: package_name={package_name}, relative_path={relative_path}")
+        # print(f"DEBUG: package_name={package_name}, relative_path={relative_path}")
         for pkg_dir in self.package_dirs:
             pkg_dir = Path(pkg_dir)
-            print(f"DEBUG: checking pkg_dir={pkg_dir}")
+            # print(f"DEBUG: checking pkg_dir={pkg_dir}")
             # Check if pkg_dir itself is the package
             if pkg_dir.name == package_name:
                 candidate = pkg_dir / relative_path
-                print(f"DEBUG:   name match, candidate={candidate}, exists={candidate.exists()}")
+                # print(f"DEBUG:   name match, candidate={candidate}, exists={candidate.exists()}")
                 if result:
                     return result
             
             # Check if pkg_dir contains the package
             candidate = pkg_dir / package_name / relative_path
-            print(f"DEBUG:   subdir candidate={candidate}, exists={candidate.exists()}")
+            #   print(f"DEBUG:   subdir candidate={candidate}, exists={candidate.exists()}")
             result = self._find_existing(candidate)
             if result:
                 return result

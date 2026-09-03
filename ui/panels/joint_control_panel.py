@@ -57,6 +57,8 @@ class JointControlPanel(QWidget):
         # Subscribe to events
         self.state_channel.subscribe(EventType.MODE_SWITCHED, self._on_mode_switched)
         self.state_channel.subscribe(EventType.CONNECTION_ESTABLISHED, self._on_connection_established)
+        # NEW: Subscribe to ROBOT_STATE to sync sliders when arm moves
+        self.state_channel.subscribe(EventType.ROBOT_STATE, self._on_robot_state)
 
         # Install wheel event filters
         for slider in self.sliders.values():
@@ -68,9 +70,7 @@ class JointControlPanel(QWidget):
         self._debounce_timer.timeout.connect(self._publish_debounced_command)
         self._pending_command = None
 
-        # NEW: Sync sliders to the actual robot state at load.
-        # Without this, sliders sit at their middle (500), which
-        # does not equal neutral for joints with asymmetric limits.
+        # Sync sliders to the actual robot state at load.
         self._sync_to_model()
 
     def _sync_to_model(self):
@@ -85,7 +85,7 @@ class JointControlPanel(QWidget):
             logger.warning(f"[JointControl] initial sync failed: {e}")
 
     # =================================================================
-    # UI Setup
+    # UI Setup (unchanged)
     # =================================================================
 
     def _setup_ui(self):
@@ -173,15 +173,10 @@ class JointControlPanel(QWidget):
         return (-2 * np.pi, 2 * np.pi)
 
     # =================================================================
-    # Slider Handling
+    # Slider Handling (unchanged)
     # =================================================================
     def _on_slider_changed(self, joint_name, slider_value):
-        """
-        Handle slider value change.
-
-        Publishes JOINT_COMMAND with ALL current slider positions.
-        Does NOT update the kinematic model directly.
-        """
+        """Handle slider value change."""
         slider = self.sliders[joint_name]
         lower, upper = slider.limits
 
@@ -199,7 +194,7 @@ class JointControlPanel(QWidget):
             positions.append(low + frac * (high - low))
 
         self._pending_command = (positions, joint_name, joint_value)
-        self._debounce_timer.start(100)  # Wait 100ms after last change
+        self._debounce_timer.start(100)
 
     def _publish_debounced_command(self):
         """Publish the command after the slider has settled."""
@@ -208,7 +203,6 @@ class JointControlPanel(QWidget):
         positions, joint_name, joint_value = self._pending_command
         self._pending_command = None
 
-        # Publish JOINT_COMMAND
         logger.debug(f"[JOINT_COMMAND] {time.time():.3f} | {joint_name} | {[f'{p:.4f}' for p in positions]}")
         self.state_channel.publish(
             EventType.JOINT_COMMAND,
@@ -221,7 +215,7 @@ class JointControlPanel(QWidget):
         )
 
     # =================================================================
-    # Button Handlers
+    # Button Handlers (unchanged)
     # =================================================================
 
     def _on_home_clicked(self):
@@ -290,8 +284,31 @@ class JointControlPanel(QWidget):
             self.labels[name].setText(f"{pos:.3f} rad")
 
     # =================================================================
-    # Event Handlers (display only — no model mutation)
+    # Event Handlers
     # =================================================================
+
+    # NEW: Handle ROBOT_STATE to sync sliders when arm moves
+    def _on_robot_state(self, event):
+        """Handle ROBOT_STATE — update sliders to match actual robot position."""
+        try:
+            positions = event.data.get('joint_positions')
+            if positions is not None and len(positions) > 0:
+                # Only update if the user is NOT currently dragging a slider
+                if not self._is_user_interacting():
+                    self._update_ui_from_positions(positions)
+        except Exception as e:
+            logger.debug(f"[JointControl] _on_robot_state exception: {e}")
+
+    def _is_user_interacting(self):
+        """Check if the user is currently dragging a slider."""
+        # If any slider has focus, or if the debounce timer is pending,
+        # the user is likely interacting with the UI
+        if self._debounce_timer.isActive():
+            return True
+        for slider in self.sliders.values():
+            if slider.hasFocus():
+                return True
+        return False
 
     def _sync_sliders_to_real_robot(self):
         """Sync sliders to actual robot position — called once on connection or mode switch."""
@@ -313,6 +330,9 @@ class JointControlPanel(QWidget):
         
         self._set_mode_indicators(is_real)
         
+        # NEW: Always sync sliders when mode changes
+        self._sync_to_model()
+        
         if is_real:
             self._sync_sliders_to_real_robot()
 
@@ -331,7 +351,7 @@ class JointControlPanel(QWidget):
                     self.name_labels[joint_name].setStyleSheet("")
 
     # =================================================================
-    # Wheel Event Handling
+    # Wheel Event Handling (unchanged)
     # =================================================================
 
     def eventFilter(self, obj, event):
@@ -372,3 +392,5 @@ class JointControlPanel(QWidget):
         """Unsubscribe from events before destruction."""
         self.state_channel.unsubscribe(EventType.CONNECTION_ESTABLISHED, self._on_connection_established)
         self.state_channel.unsubscribe(EventType.MODE_SWITCHED, self._on_mode_switched)
+        # NEW: Unsubscribe from ROBOT_STATE
+        self.state_channel.unsubscribe(EventType.ROBOT_STATE, self._on_robot_state)

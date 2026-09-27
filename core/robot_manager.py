@@ -211,6 +211,29 @@ class RobotManager:
             model.load()
             logger.info(f"Kinematic model loaded: {asset_id}")
 
+            '''
+            # TEMPORARY DIAGNOSTIC — validate geometric_extraction on real URDFs.
+            # Remove once the unified solver is in place.
+            try:
+                from core.kinematics.geometric_extraction import extract_arm_geometry
+                geom = extract_arm_geometry(model)
+                logger.info(f"Arm geometry for {asset_id}:\n{geom.describe()}")
+            except ValueError as e:
+                logger.debug(f"No arm geometry for {asset_id}: {e}")
+            except Exception as e:
+                logger.warning(f"Geometry extraction failed for {asset_id}: {e}",
+                            exc_info=True)
+
+            # TEMPORARY DIAGNOSTIC — validate model FK against published DH.
+            # Remove once the FK path is trusted.
+            try:
+                from core.kinematics.fk_test import run_fk_test
+                run_fk_test(model, asset_id)
+            except Exception as e:
+                logger.warning(f"FK test failed to run for {asset_id}: {e}",
+                            exc_info=True)
+            '''
+
             # Attach IK solver
             self._attach_ik_solver(model)
 

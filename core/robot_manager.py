@@ -133,8 +133,8 @@ class RobotManager:
         import tempfile
         from core.kinematics.kinematic_model import KinematicModel
         from displays.kinematic_display import KinematicDisplay
-        from utils.xacro_expander import XacroExpander
         from utils.package_resolver import PackageResolver
+        from utils.xacro_expander import XacroExpander
 
         urdf_path = Path(urdf_path).expanduser().resolve()
 
@@ -142,59 +142,41 @@ class RobotManager:
             if asset_id is None:
                 asset_id = urdf_path.stem
 
-            # Handle duplicate IDs
             if asset_id in self._loaded_robots:
                 original = asset_id
                 asset_id = f"{asset_id}_{len(self._loaded_robots)}"
                 logger.info(f"Asset ID '{original}' exists, using '{asset_id}'")
 
-            # Step 1: Initialize PackageResolver (NO hardcoded paths)
-            self.package_resolver = PackageResolver()  # Reads HATCH_PACKAGE_PATH or falls back to CWD
-            
-            # Step 2: Expand XACRO to plain URDF if necessary
+            # ONE PackageResolver, shared by xacro expansion and mesh loading.
+            # This is the single source of truth for where packages live.
+            self.package_resolver = PackageResolver()
+
+            logger.info(f"Loading: {urdf_path}")
+
+            # Expand xacro to plain URDF if needed
             if urdf_path.suffix == '.xacro':
-                from core.urdf_preprocessor import URDFPreprocessor
-                from utils.package_resolver import PackageResolver
-                
-                # Create PackageResolver (searches ~/hatch/assets by default)
-                self.package_resolver = PackageResolver()
-                
-                # Create preprocessor with resolver
-                preprocessor = URDFPreprocessor(self.package_resolver)
-                urdf_xml = preprocessor.process(str(urdf_path))
+                expander = XacroExpander(self.package_resolver)
+                urdf_xml = expander.expand(str(urdf_path))
 
-                # Get the system's actual temp directory
-                temp_dir = tempfile.gettempdir()
-                temp_path = os.path.join(temp_dir, 'hatch_preprocessed.urdf')
-
-                # Write preprocessed URDF to temp file for KinematicModel
+                temp_path = os.path.join(tempfile.gettempdir(), 'hatch_preprocessed.urdf')
                 with open(temp_path, 'w') as f:
                     f.write(urdf_xml)
 
-                model = KinematicModel(
-                    urdf_path=temp_path,
-                    package_dirs=package_dirs,  # KinematicModel still uses package_dirs
-                    transform_registry=self.transform_registry,
-                    asset_id=asset_id
-                )
+                model_urdf = temp_path
             else:
-                model = KinematicModel(
-                    urdf_path=str(urdf_path),
-                    package_dirs=package_dirs,
-                    transform_registry=self.transform_registry,
-                    asset_id=asset_id
-                )
+                model_urdf = str(urdf_path)
 
-            # Step 3: Parse URDF with KinematicModel
-            # Note: package_dirs is NO LONGER passed to KinematicModel
+            # Parse with KinematicModel, passing the SAME resolver for package://
             model = KinematicModel(
-                urdf_path=temp_urdf_path,
-                package_dirs=[],  # Empty list - mesh resolution handled by PackageResolver internally
+                urdf_path=model_urdf,
+                package_resolver=self.package_resolver,
                 transform_registry=self.transform_registry,
-                asset_id=asset_id
+                asset_id=asset_id,
             )
+
             model.load()
             logger.info(f"Kinematic model loaded: {asset_id}")
+            # ... existing code continues from here unchanged
 
             '''
             # TEMPORARY DIAGNOSTIC — validate geometric_extraction on real URDFs.
@@ -285,18 +267,28 @@ class RobotManager:
             self.current_kinematic_model = model
             self.current_asset_id = asset_id
             self.current_urdf_path = urdf_path
-            self._loaded_robots[asset_id] = model
 
-            # Step 5: Register transforms (your existing method)
-            self._register_initial_transforms(model)
+            # self._loaded_robots[asset_id] = model
+
+            # Step 5: Register transforms
+            self._register_initial_transforms(asset_id, model)
 
             # Step 6: Create and attach visual display
             display = KinematicDisplay(model, self.transform_registry)
             display.attach(self.engine.get_renderer())
             self.engine.register_display(display)
-            self._displays[asset_id] = display
 
-            # Step 7: Publish event
+            # Step 7: Record in the loaded-robots registry
+            self._loaded_robots[asset_id] = {
+                'model': model,
+                'display': display,
+                'urdf_path': str(urdf_path),
+            }
+            self.current_asset_id = asset_id
+            self.current_kinematic_model = model
+            self.current_urdf_path = urdf_path
+
+            # Step 8: Publish event
             self.state_channel.publish(
                 EventType.ROBOT_LOADED,
                 {

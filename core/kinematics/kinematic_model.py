@@ -36,23 +36,30 @@ class KinematicModel:
 
     def __init__(self,
                  urdf_path: str,
-                 package_dirs=None,
+                 package_resolver=None,
                  transform_registry=None,
                  asset_id=None):
         """
         Initialize the kinematic model.
 
         Args:
-            urdf_path: Path to URDF file.
-            package_dirs: Directories for resolving package:// mesh paths.
+            urdf_path: Path to URDF file (plain XML, already preprocessed).
+            package_resolver: PackageResolver instance for package:// resolution.
+                             If None, a default one is created.
             transform_registry: Optional TransformRegistry for frame registration.
             asset_id: Unique asset identifier for frame namespacing.
         """
+        from utils.package_resolver import PackageResolver
+
         self.transform_registry = transform_registry
         self.asset_id = asset_id
 
         self.urdf_path = Path(urdf_path).absolute()
-        self.package_dirs = [Path(d).absolute() for d in (package_dirs or [])]
+
+        if package_resolver is not None:
+            self.package_resolver = package_resolver
+        else:
+            self.package_resolver = PackageResolver()
 
         # Parse URDF XML
         self.urdf_tree = ET.parse(str(self.urdf_path))
@@ -229,7 +236,7 @@ class KinematicModel:
         
         # Handle package:// URIs
         if filename.startswith('package://'):
-            result = self._resolve_package_uri(filename)
+            result = self.package_resolver.resolve_package_uri(filename)
             logger.debug(f"  Package URI result: {result}")
             return result
         
@@ -254,7 +261,7 @@ class KinematicModel:
             return result
         
         # Try relative to package directories
-        for pkg_dir in self.package_dirs:
+        for pkg_dir in self.package_resolver.get_all_package_dirs():
             candidate = Path(pkg_dir) / filename
             logger.debug(f"  Trying package dir: {candidate}")
             result = self._find_existing(candidate)
@@ -267,45 +274,16 @@ class KinematicModel:
     def _resolve_find_in_path(self, text: str) -> str:
         """Resolve $(find package_name) to absolute package path."""
         pattern = re.compile(r'\$\(find\s+([^)]+)\)')
-        
+
         def replace_find(match):
             package_name = match.group(1).strip()
-            for pkg_dir in self.package_dirs:
-                candidate = Path(pkg_dir) / package_name
-                if candidate.is_dir():
-                    return str(candidate)
+            pkg_path = self.package_resolver.find_package(package_name)
+            if pkg_path is not None:
+                return str(pkg_path)
             logger.warning(f"Could not resolve $(find {package_name})")
             return match.group(0)
-        
+
         return pattern.sub(replace_find, text)
-    
-    def _resolve_package_uri(self, uri: str) -> Optional[Path]:
-        """Resolve package://package_name/relative/path"""
-        package_path = uri[10:]  # Remove 'package://'
-        parts = package_path.split('/', 1)
-        if len(parts) != 2:
-            return None
-        
-        package_name, relative_path = parts
-        # print(f"DEBUG: package_name={package_name}, relative_path={relative_path}")
-        for pkg_dir in self.package_dirs:
-            pkg_dir = Path(pkg_dir)
-            # print(f"DEBUG: checking pkg_dir={pkg_dir}")
-            # Check if pkg_dir itself is the package
-            if pkg_dir.name == package_name:
-                candidate = pkg_dir / relative_path
-                # print(f"DEBUG:   name match, candidate={candidate}, exists={candidate.exists()}")
-                if result:
-                    return result
-            
-            # Check if pkg_dir contains the package
-            candidate = pkg_dir / package_name / relative_path
-            #   print(f"DEBUG:   subdir candidate={candidate}, exists={candidate.exists()}")
-            result = self._find_existing(candidate)
-            if result:
-                return result
-        
-        return None
     
     @staticmethod
     def _find_existing(path: Path) -> Optional[Path]:

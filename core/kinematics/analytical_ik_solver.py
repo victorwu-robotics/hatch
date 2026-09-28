@@ -22,7 +22,7 @@ class AnalyticalIKSolver:
     Provides all 8 solutions in closed form.
     """
     
-    def __init__(self, kinematic_mdel, d1: float, a2: float, a3: float, d6: float):
+    def __init__(self, kinematic_model, d1: float, a2: float, a3: float, d6: float):
         """
         Args:
             d1: Shoulder height offset (base to J2 along Z, at zero)
@@ -30,7 +30,7 @@ class AnalyticalIKSolver:
             a3: Forearm length (J3 to wrist center = J5/J6 origin)
             d6: Tool offset from wrist center to TCP (along tool Z-axis)
         """
-        self.model = kinematic_mdel
+        self.model = kinematic_model
         self.d1 = d1
         self.a2 = a2
         self.a3 = a3

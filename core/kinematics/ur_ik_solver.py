@@ -67,30 +67,78 @@ class URIKSolver:
         
         return T_01 @ T_12 @ T_23 @ T_34 @ T_45 @ T_56
     
-    def inverse(self, T_target: np.ndarray, q_guess: Optional[np.ndarray] = None) -> Optional[np.ndarray]:
-        """Inverse kinematics."""
+    def inverse(self, T_target, q_guess=None):
+        """Inverse kinematics with debug logging."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.debug(f"\n{'='*60}")
+        logger.debug(f"IK INVERSE CALLED")
+        logger.debug(f"{'='*60}")
+        logger.debug(f"Target pose:\n{T_target}")
+        logger.debug(f"q_guess: {q_guess}")
+        
         solutions = self._all_solutions(T_target)
         
         if not solutions:
+            logger.debug(f"NO SOLUTIONS FOUND!")
             return None
         
+        logger.debug(f"Found {len(solutions)} solutions:")
+        for i, q in enumerate(solutions):
+            # Verify each solution
+            T_verify = self.forward(q)
+            pos_error = np.linalg.norm(T_verify[:3, 3] - T_target[:3, 3])
+            logger.debug(f"  Solution {i}: {q}")
+            logger.debug(f"    Pos error: {pos_error:.6f}")
+        
         if q_guess is not None:
-            # Find solution closest to q_guess
+            if not hasattr(self, '_joint_weights'):
+                self._joint_weights = np.array([100.0, 50.0, 30.0, 10.0, 3.0, 1.0])
+            
+            weights = self._joint_weights
+            
             best = None
-            best_dist = float('inf')
-            for q in solutions:
+            best_score = float('inf')
+            
+            for i, q in enumerate(solutions):
                 diff = q - q_guess
                 diff = (diff + pi) % (2*pi) - pi
-                dist = np.sum(np.abs(diff))
-                if dist < best_dist:
-                    best_dist = dist
+                
+                weighted_diff = diff * weights
+                score = np.sum(weighted_diff ** 2)
+                
+                logger.debug(f"  Solution {i}:")
+                logger.debug(f"    q:        {q}")
+                logger.debug(f"    diff:     {diff}")
+                logger.debug(f"    score:    {score:.2f}")
+                
+                # Check if this matches current configuration
+                q1_same = abs(diff[0]) < 0.5  # Shoulder within 30°
+                q3_same = abs(diff[2]) < 0.5  # Elbow within 30°
+                logger.debug(f"    q1_same:  {q1_same}")
+                logger.debug(f"    q3_same:  {q3_same}")
+                
+                if score < best_score:
+                    best_score = score
                     best = q
+                    logger.debug(f"    → NEW BEST")
+            
+            logger.debug(f"\nSELECTED: {best}")
+            logger.debug(f"Score: {best_score}")
+            logger.debug(f"{'='*60}\n")
+            
             return best
-        else:
-            return solutions[0]
+        
+        logger.debug(f"\nNo q_guess — returning first solution: {solutions[0]}")
+        logger.debug(f"{'='*60}\n")
+        return solutions[0]
     
-    def _all_solutions(self, T_06: np.ndarray) -> List[np.ndarray]:
-        """Compute all 8 IK solutions."""
+    def _all_solutions(self, T_06):
+        """Compute all 8 IK solutions with debug logging."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         solutions = []
         
         # P_05 is the Origin of the 5th frame
@@ -102,23 +150,25 @@ class URIKSolver:
         
         r = linalg.norm(P_05[0:2])
         if r < 1e-6:
+            logger.debug(f"No solutions: r={r}")
             return solutions
         
-        # Check if wrist center is reachable
         if r < self.d4 - 1e-6:
-            # Wrist center too close to base axis
+            logger.debug(f"No solutions: r={r} < d4={self.d4}")
             return solutions
         
         phi_1 = atan2(P_05y, P_05x)
         
-        # Check if the point is reachable for phi_2 calculation
         if r < self.d4:
+            logger.debug(f"No solutions: r={r} < d4={self.d4}")
             return solutions
         
         phi_2 = acos(self.d4 / r)
         
         q1_left = phi_1 + phi_2 + pi/2
         q1_right = phi_1 - phi_2 + pi/2
+        
+        logger.debug(f"q1 candidates: left={q1_left}, right={q1_right}")
         
         # ===== For each q1 candidate =====
         for q1_idx, q1 in enumerate([q1_left, q1_right]):

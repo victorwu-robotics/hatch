@@ -153,30 +153,37 @@ class RobotManager:
             
             # Step 2: Expand XACRO to plain URDF if necessary
             if urdf_path.suffix == '.xacro':
-                logger.info(f"Loading XACRO: {urdf_path}")
-                expander = XacroExpander(self.package_resolver)
-                urdf_xml = expander.expand(str(urdf_path))
+                from core.urdf_preprocessor import URDFPreprocessor
+                from utils.package_resolver import PackageResolver
                 
-                # Write expanded URDF to temp file
-                with tempfile.NamedTemporaryFile(
-                    mode='w',
-                    suffix='.urdf',
-                    encoding='utf-8',
-                    delete=False
-                ) as tmp_file:
-                    tmp_file.write(urdf_xml)
-                    temp_urdf_path = tmp_file.name
+                # Create PackageResolver (searches ~/hatch/assets by default)
+                self.package_resolver = PackageResolver()
+                
+                # Create preprocessor with resolver
+                preprocessor = URDFPreprocessor(self.package_resolver)
+                urdf_xml = preprocessor.process(str(urdf_path))
+
+                # Get the system's actual temp directory
+                temp_dir = tempfile.gettempdir()
+                temp_path = os.path.join(temp_dir, 'hatch_preprocessed.urdf')
+
+                # Write preprocessed URDF to temp file for KinematicModel
+                with open(temp_path, 'w') as f:
+                    f.write(urdf_xml)
+
+                model = KinematicModel(
+                    urdf_path=temp_path,
+                    package_dirs=package_dirs,  # KinematicModel still uses package_dirs
+                    transform_registry=self.transform_registry,
+                    asset_id=asset_id
+                )
             else:
-                logger.info(f"Loading URDF: {urdf_path}")
-                # For plain URDF, copy to temp file for consistency
-                import shutil
-                with tempfile.NamedTemporaryFile(
-                    mode='wb',
-                    suffix='.urdf',
-                    delete=False
-                ) as tmp_file:
-                    shutil.copy2(str(urdf_path), tmp_file.name)
-                    temp_urdf_path = tmp_file.name
+                model = KinematicModel(
+                    urdf_path=str(urdf_path),
+                    package_dirs=package_dirs,
+                    transform_registry=self.transform_registry,
+                    asset_id=asset_id
+                )
 
             # Step 3: Parse URDF with KinematicModel
             # Note: package_dirs is NO LONGER passed to KinematicModel
@@ -189,10 +196,92 @@ class RobotManager:
             model.load()
             logger.info(f"Kinematic model loaded: {asset_id}")
 
-            # Clean up temp file after loading
-            Path(temp_urdf_path).unlink()
+            '''
+            # TEMPORARY DIAGNOSTIC — validate geometric_extraction on real URDFs.
+            # Remove once the unified solver is in place.
+            try:
+                from core.kinematics.geometric_extraction import extract_arm_geometry
+                geom = extract_arm_geometry(model)
+                logger.info(f"Arm geometry for {asset_id}:\n{geom.describe()}")
+            except ValueError as e:
+                logger.debug(f"No arm geometry for {asset_id}: {e}")
+            except Exception as e:
+                logger.warning(f"Geometry extraction failed for {asset_id}: {e}",
+                            exc_info=True)
 
-            # Step 4: Store the model
+            # TEMPORARY DIAGNOSTIC — validate model FK against published DH.
+            # Remove once the FK path is trusted.
+            try:
+                from core.kinematics.fk_test import run_fk_test
+                run_fk_test(model, asset_id)
+            except Exception as e:
+                logger.warning(f"FK test failed to run for {asset_id}: {e}",
+                            exc_info=True)
+            '''
+
+            # Attach IK solver
+            self._attach_ik_solver(model)
+
+            # Register initial transforms
+            self._register_initial_transforms(asset_id, model)
+
+            # NEW: Use true base for Cartesian control reference
+            true_base = model.get_true_base()
+            self._asset_bases[asset_id] = f"{asset_id}_{true_base}"
+            logger.info(f"Asset base frame (Cartesian reference): {self._asset_bases[asset_id]}")
+            logger.info(f"True root (IK reference): {asset_id}_{model.get_true_root()}")
+
+            # Create visual display
+            display = KinematicDisplay(
+                model,
+                self.transform_registry,
+                mesh_loader=self.mesh_loader,  # Pass mesh_loader if available
+                asset_id=asset_id
+            )
+            display.attach(self.engine.get_renderer())
+
+            # Force initial position update for all registered frames
+            # This ensures fixed children (sensors, tools) appear at their
+            # correct positions before any joint movement.
+            if hasattr(model, 'link_transforms'):
+                for link_name in model.link_transforms:
+                    frame_name = f"{asset_id}_{link_name}"
+                    if frame_name in self.transform_registry.list_frames():
+                        T_world = model.link_transforms[link_name]
+                        # Compute parent-relative transform
+                        if link_name in model.root_links:
+                            T_rel = T_world
+                        else:
+                            parent_link = model.link_parents.get(link_name)
+                            if parent_link and parent_link in model.link_transforms:
+                                T_parent = model.link_transforms[parent_link]
+                                T_rel = np.linalg.inv(T_parent) @ T_world
+                            else:
+                                T_rel = T_world
+                        try:
+                            self.transform_registry.update_frame(frame_name, T_rel)
+                        except ValueError:
+                            pass
+
+            self.engine.register_display(display)
+
+            # Add joint frame display
+            joint_display = JointFrameDisplay(model, self.transform_registry, 
+                                            asset_id=asset_id, scale=0.3)
+            joint_display.attach(self.engine.get_renderer())
+
+            # Store reference for cleanup
+            self._joint_display = joint_display
+
+            # Store in registry
+            self._loaded_robots[asset_id] = {
+                'model': model,
+                'display': display,
+                'urdf_path': str(urdf_path)
+            }
+
+            # Set as current
+            self.current_asset_id = asset_id
             self.current_kinematic_model = model
             self.current_asset_id = asset_id
             self.current_urdf_path = urdf_path

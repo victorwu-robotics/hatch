@@ -261,12 +261,18 @@ def main():
     """Main entry point for Hatch."""
     logging.basicConfig(
         level=logging.INFO,
+        # level=logging.DEBUG,
         format='%(name)s: %(message)s'
     )
 
-    print(f"Logging level: {logging.getLogger().getEffectiveLevel()}")
-    print(f"Geometric solver logger level: {logging.getLogger('core.kinematics.geom_sph_ik_solver').getEffectiveLevel()}")
-
+    # Set DEBUG for IK solver modules
+    logging.getLogger('core.kinematics.ur_ik_solver').setLevel(logging.DEBUG)
+    logging.getLogger('core.kinematics.offset_wrist_ik_solver').setLevel(logging.DEBUG)
+    logging.getLogger('core.kinematics.ik_solver').setLevel(logging.DEBUG)
+    
+    # Silence noisy loggers
+    logging.getLogger('viz.visualizer_engine').setLevel(logging.WARNING)
+    
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
 

@@ -260,8 +260,8 @@ class MainWindow(QMainWindow):
 def main():
     """Main entry point for Hatch."""
     logging.basicConfig(
-        level=logging.INFO,
-        # level=logging.DEBUG,
+        # level=logging.INFO,
+        level=logging.DEBUG,
         format='%(name)s: %(message)s'
     )
 

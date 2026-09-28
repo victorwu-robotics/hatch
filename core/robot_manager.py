@@ -274,7 +274,6 @@ class RobotManager:
             self._register_initial_transforms(asset_id, model)
 
             # Step 6: Create and attach visual display
-            display = KinematicDisplay(model, self.transform_registry)
             display.attach(self.engine.get_renderer())
             self.engine.register_display(display)
 

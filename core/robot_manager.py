@@ -18,6 +18,7 @@ import numpy as np
 import logging
 import tempfile
 import os
+import shutil
 
 from core.world_state.state_channel import StateChannel
 from core.world_state.transform_registry import TransformRegistry
@@ -70,7 +71,11 @@ class RobotManager:
         self._simulated_robot = None
         self._real_robot = None
 
-        self.mesh_loader = None # Set by MainWindow if available
+        self.mesh_loader = None  # Set by MainWindow if available
+
+        # Package resolver (created fresh, reads HATCH_PACKAGE_PATH env var)
+        from utils.package_resolver import PackageResolver
+        self.package_resolver = PackageResolver()
 
         # Current robot state
         self.current_asset_id: Optional[str] = None
@@ -78,13 +83,14 @@ class RobotManager:
         self.current_mode = Mode.SIMULATE_LOCAL
         self.is_connected = False
         self.robot_ip: Optional[str] = None
+        self.current_urdf_path: Optional[Path] = None
 
         # Asset base frame mapping: asset_id -> base_frame_name
-        # The base frame is the true kinematic root for Cartesian control.
         self._asset_bases: Dict[str, str] = {}
 
         # Registry of loaded robots (one at a time per Principle #10)
-        self._loaded_robots: Dict[str, Dict[str, Any]] = {}
+        self._loaded_robots: Dict[str, Any] = {}
+        self._displays: Dict[str, Any] = {}
 
         # Subscribe to events that RobotManager handles
         self._setup_subscriptions()
@@ -129,12 +135,9 @@ class RobotManager:
 
     def load_robot(self, urdf_path: str, asset_id: str = None) -> Optional[str]:
         """Load a robot from URDF or xacro file."""
-        from pathlib import Path
-        import tempfile
         from core.kinematics.kinematic_model import KinematicModel
         from displays.kinematic_display import KinematicDisplay
-        from utils.xacro_expander import XacroExpander
-        from utils.package_resolver import PackageResolver
+        from core.urdf_preprocessor import URDFPreprocessor
 
         urdf_path = Path(urdf_path).expanduser().resolve()
 
@@ -148,66 +151,60 @@ class RobotManager:
                 asset_id = f"{asset_id}_{len(self._loaded_robots)}"
                 logger.info(f"Asset ID '{original}' exists, using '{asset_id}'")
 
-            # Step 1: Initialize PackageResolver (NO hardcoded paths)
-            self.package_resolver = PackageResolver()  # Reads HATCH_PACKAGE_PATH or falls back to CWD
-            
-            # Step 2: Expand XACRO to plain URDF if necessary
-            if urdf_path.suffix == '.xacro':
-                logger.info(f"Loading XACRO: {urdf_path}")
-                expander = XacroExpander(self.package_resolver)
-                urdf_xml = expander.expand(str(urdf_path))
-                
-                # Write expanded URDF to temp file
-                with tempfile.NamedTemporaryFile(
-                    mode='w',
-                    suffix='.urdf',
-                    encoding='utf-8',
-                    delete=False
-                ) as tmp_file:
-                    tmp_file.write(urdf_xml)
-                    temp_urdf_path = tmp_file.name
-            else:
-                logger.info(f"Loading URDF: {urdf_path}")
-                # For plain URDF, copy to temp file for consistency
-                import shutil
-                with tempfile.NamedTemporaryFile(
-                    mode='wb',
-                    suffix='.urdf',
-                    delete=False
-                ) as tmp_file:
-                    shutil.copy2(str(urdf_path), tmp_file.name)
-                    temp_urdf_path = tmp_file.name
+            # Step 1: Preprocess URDF/xacro to plain URDF XML
+            logger.info(f"Loading: {urdf_path}")
+            preprocessor = URDFPreprocessor(self.package_resolver)
+            urdf_xml = preprocessor.process(str(urdf_path))
+
+            # Step 2: Write preprocessed URDF to temp file
+            with tempfile.NamedTemporaryFile(
+                mode='w',
+                suffix='.urdf',
+                encoding='utf-8',
+                delete=False
+            ) as tmp_file:
+                tmp_file.write(urdf_xml)
+                temp_urdf_path = tmp_file.name
 
             # Step 3: Parse URDF with KinematicModel
-            # Note: package_dirs is NO LONGER passed to KinematicModel
             model = KinematicModel(
                 urdf_path=temp_urdf_path,
-                package_dirs=[],  # Empty list - mesh resolution handled by PackageResolver internally
+                package_resolver=self.package_resolver,
                 transform_registry=self.transform_registry,
                 asset_id=asset_id
             )
             model.load()
             logger.info(f"Kinematic model loaded: {asset_id}")
 
-            # Clean up temp file after loading
+            # Clean up temp file
             Path(temp_urdf_path).unlink()
 
-            # Step 4: Store the model
+            # Step 4: Attach IK solver
+            self._attach_ik_solver(model)
+
+            # Step 5: Inject model into simulated robot
+            if self._simulated_robot is not None:
+                self._simulated_robot.set_kinematic_model(model)
+
+            # Step 6: Store the model
             self.current_kinematic_model = model
             self.current_asset_id = asset_id
             self.current_urdf_path = urdf_path
             self._loaded_robots[asset_id] = model
 
-            # Step 5: Register transforms (your existing method)
-            self._register_initial_transforms(model)
+            # Step 7: Register transforms
+            self._register_initial_transforms(asset_id, model)
 
-            # Step 6: Create and attach visual display
-            display = KinematicDisplay(model, self.transform_registry)
+            # Step 8: Create and attach visual display
+            display = KinematicDisplay(model, 
+                                       self.transform_registry,
+                                       mesh_loader=self.mesh_loader,
+                                       asset_id=asset_id)
             display.attach(self.engine.get_renderer())
             self.engine.register_display(display)
             self._displays[asset_id] = display
 
-            # Step 7: Publish event
+            # Step 9: Publish event
             self.state_channel.publish(
                 EventType.ROBOT_LOADED,
                 {
@@ -231,10 +228,10 @@ class RobotManager:
             ik_solver = IKSolver(model)
             model.set_ik_solver(ik_solver)
             if ik_solver is not None:
-                logger.debug("[ROB MANAGER]ik_solver is not None.")
+                logger.debug("[ROB MANAGER] ik_solver is not None.")
                 logger.info("IK solver attached")
             else:
-                logger.debug("[ROB MANAGER]ik_solver is None.")
+                logger.debug("[ROB MANAGER] ik_solver is None.")
         except ImportError:
             logger.info("IK solver not available (missing dependencies)")
         except Exception as e:
@@ -245,7 +242,6 @@ class RobotManager:
         Register all robot frames in TransformRegistry on initial load.
         Uses multi-pass registration to handle arbitrary parent-child ordering.
         """
-        import numpy as np  # Add this line temporarily if needed
         from core.world_state.transform_registry import FrameStatus
 
         if not hasattr(model, 'link_transforms'):
@@ -253,14 +249,14 @@ class RobotManager:
 
         true_root = model.get_true_root()
         logger.info(f"Registering transforms for {asset_id} "
-                f"(true root: {true_root})")
+                    f"(true root: {true_root})")
 
         # Collect all frames that need to be registered
         frames_to_register = {}
-        
+
         for link_name in model.link_transforms.keys():
             frame_name = f"{asset_id}_{link_name}"
-            
+
             if link_name == true_root:
                 parent_frame = "world"
             elif link_name in model.link_parents:
@@ -268,34 +264,32 @@ class RobotManager:
                 parent_frame = f"{asset_id}_{parent_link}" if parent_link else "world"
             else:
                 parent_frame = "world"
-            
+
             frames_to_register[frame_name] = {
                 'link_name': link_name,
                 'parent_frame': parent_frame,
                 'is_root': (link_name == true_root)
             }
-        
-        # Multi-pass registration: keep trying until all frames are registered
+
+        # Multi-pass registration
         registered_frames = set()
         remaining_frames = set(frames_to_register.keys())
         max_passes = len(remaining_frames) + 1
-        
+
         for pass_num in range(max_passes):
             if not remaining_frames:
                 break
-                
+
             frames_registered_this_pass = []
-            
+
             for frame_name in list(remaining_frames):
                 info = frames_to_register[frame_name]
                 parent_frame = info['parent_frame']
-                
-                # Can register if parent is world or already registered
+
                 if parent_frame == "world" or parent_frame in registered_frames:
                     link_name = info['link_name']
                     T_world = model.link_transforms[link_name]
-                    
-                    # Compute relative transform
+
                     if parent_frame == "world":
                         T_rel = T_world
                     else:
@@ -306,7 +300,7 @@ class RobotManager:
                         else:
                             logger.warning(f"Parent transform not found for {parent_link}")
                             T_rel = T_world
-                    
+
                     try:
                         self.transform_registry.register_frame(
                             frame_name,
@@ -319,21 +313,19 @@ class RobotManager:
                         frames_registered_this_pass.append(frame_name)
                     except ValueError as e:
                         logger.error(f"Failed to register {frame_name}: {e}")
-            
-            # Remove registered frames from remaining
+
             for frame_name in frames_registered_this_pass:
                 remaining_frames.discard(frame_name)
-            
+
             if not frames_registered_this_pass and remaining_frames:
-                # No progress - handle remaining frames by attaching to world
                 logger.warning(f"Pass {pass_num}: Cannot register {len(remaining_frames)} frames. "
-                            f"Attaching remaining to world: {remaining_frames}")
-                
+                             f"Attaching remaining to world: {remaining_frames}")
+
                 for frame_name in remaining_frames:
                     info = frames_to_register[frame_name]
                     link_name = info['link_name']
                     T_world = model.link_transforms.get(link_name, np.eye(4))
-                    
+
                     try:
                         self.transform_registry.register_frame(
                             frame_name,
@@ -345,15 +337,15 @@ class RobotManager:
                         registered_frames.add(frame_name)
                     except ValueError as e:
                         logger.error(f"Failed fallback registration for {frame_name}: {e}")
-                
+
                 remaining_frames.clear()
                 break
-        
+
         # Register TCP frame
         tcp_frame = f"{asset_id}_tcp"
         mount_link = model.tool_mount_link or "wrist_3_link"
         parent_frame = f"{asset_id}_{mount_link}"
-        
+
         try:
             self.transform_registry.register_frame(
                 tcp_frame,
@@ -364,25 +356,8 @@ class RobotManager:
             )
         except ValueError as e:
             logger.warning(f"Could not register TCP frame: {e}")
-        
-        logger.info(f"Registered {len(registered_frames)} frames for {asset_id}")
 
-    def _frame_depth(self, frame, frames_info):
-        """Calculate depth of a frame in the tree (world = depth 0)."""
-        depth = 0
-        current = frame
-        visited = set()
-        while current['parent'] != 'world' and depth < 100:
-            if current['name'] in visited:
-                break
-            visited.add(current['name'])
-            parent_name = current['parent']
-            parent = next((f for f in frames_info if f['name'] == parent_name), None)
-            if parent is None:
-                break
-            current = parent
-            depth += 1
-        return depth
+        logger.info(f"Registered {len(registered_frames)} frames for {asset_id}")
 
     # =================================================================
     # Connection Management
@@ -414,15 +389,16 @@ class RobotManager:
     # =================================================================
 
     def set_mode(self, mode: str):
+        """Set operating mode."""
         valid_modes = ["simulate", "real"]
         if mode not in valid_modes:
             logger.warning(f"Invalid mode: {mode}")
             return
-        
+
         if mode == "real" and not self.is_connected:
-            self.error_occurred.emit("Cannot switch to real mode: Not connected")
+            logger.warning("Cannot switch to real mode: Not connected")
             return
-        
+
         self.state_channel.publish(
             EventType.MODE_SWITCH_REQUEST,
             data={'mode': mode},
@@ -430,34 +406,15 @@ class RobotManager:
         )
 
     # =================================================================
-    # Asset Base Frame Queries (for Cartesian control)
+    # Asset Base Frame Queries
     # =================================================================
 
     def get_asset_base_frame(self, asset_id: str) -> str:
-        """
-        Get the base frame for Cartesian control.
-
-        Returns the true kinematic root frame name for the asset.
-        Defaults to "world" if asset not found.
-
-        Args:
-            asset_id: Unique asset identifier
-
-        Returns:
-            Frame name for Cartesian base
-        """
+        """Get the base frame for Cartesian control."""
         return self._asset_bases.get(asset_id, "world")
 
     def get_asset_base_transform(self, asset_id: str) -> np.ndarray:
-        """
-        Get the transform from world to the asset's Cartesian base.
-
-        Args:
-            asset_id: Unique asset identifier
-
-        Returns:
-            4x4 homogeneous transform matrix
-        """
+        """Get the transform from world to the asset's Cartesian base."""
         base_frame = self.get_asset_base_frame(asset_id)
         return self.transform_registry.get_transform(base_frame, "world")
 
@@ -467,12 +424,21 @@ class RobotManager:
 
     def get_current_joint_positions(self) -> Optional[List[float]]:
         """Get current joint positions from the active robot."""
-        if self._current_mode == Mode.REAL and self._real_robot.is_connected():
+        if self.current_mode == Mode.REAL and self._real_robot and self._real_robot.is_connected():
             state = self._real_robot.get_state()
             return state.get('joint_positions')
         elif self.current_kinematic_model:
             return self.current_kinematic_model.get_current_joint_positions()
         return None
+
+    def get_model(self):
+        """Get the current kinematic model."""
+        return self.current_kinematic_model
+
+    @property
+    def model(self):
+        """Property accessor for kinematic model."""
+        return self.current_kinematic_model
 
     def stop_robot(self):
         """Emergency stop."""

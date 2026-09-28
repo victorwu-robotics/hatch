@@ -172,6 +172,9 @@ class KinematicDisplay:
         """
         mesh_path = geom.get('mesh_path')
 
+        logger.info(f"[DEBUG] mesh_path: {mesh_path}")
+        logger.info(f"[DEBUG] mesh_loader: {self.mesh_loader}")
+
         if mesh_path is None or not mesh_path.exists():
             logger.warning(f"Mesh not found for {link_name}: {mesh_path}")
             self._create_placeholder(link_name, geom, index,
@@ -185,6 +188,11 @@ class KinematicDisplay:
             try:
                 handle = self.mesh_loader.load_mesh(mesh_path)
                 polydata = self.mesh_loader.get_mesh_data(handle)
+
+                logger.info(f"[DEBUG] polydata: {polydata}")
+                if polydata:
+                    logger.info(f"[DEBUG] points: {polydata.GetNumberOfPoints()}")
+
             except Exception as e:
                 logger.error(f"Failed to load mesh {mesh_path}: {e}")
                 self._create_placeholder(link_name, geom, index, "error")

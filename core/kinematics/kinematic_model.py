@@ -1,7 +1,7 @@
 """
 Kinematic Model - Pure data source for URDF kinematics.
 
-Loads URDF, parses joint/links, computes forward kinematics.
+Loads URDF, parses joints/links, computes forward kinematics.
 No visualization code. No Pinocchio dependency.
 Pure Python with NumPy for transformations.
 
@@ -36,6 +36,7 @@ class KinematicModel:
 
     def __init__(self,
                  urdf_path: str,
+                 package_resolver=None,
                  package_dirs=None,
                  transform_registry=None,
                  asset_id=None):
@@ -43,16 +44,27 @@ class KinematicModel:
         Initialize the kinematic model.
 
         Args:
-            urdf_path: Path to URDF file.
-            package_dirs: Directories for resolving package:// mesh paths.
+            urdf_path: Path to URDF file (plain XML, already preprocessed).
+            package_resolver: PackageResolver instance for package:// resolution.
+            package_dirs: DEPRECATED - use package_resolver instead.
             transform_registry: Optional TransformRegistry for frame registration.
             asset_id: Unique asset identifier for frame namespacing.
         """
+        from utils.package_resolver import PackageResolver
+
         self.transform_registry = transform_registry
         self.asset_id = asset_id
 
         self.urdf_path = Path(urdf_path).absolute()
-        self.package_dirs = [Path(d).absolute() for d in (package_dirs or [])]
+
+        # Use PackageResolver if provided, otherwise create one
+        if package_resolver is not None:
+            self.package_resolver = package_resolver
+        elif package_dirs:
+            package_path = ':'.join(str(Path(d).absolute()) for d in package_dirs)
+            self.package_resolver = PackageResolver(package_path)
+        else:
+            self.package_resolver = PackageResolver()
 
         # Parse URDF XML
         self.urdf_tree = ET.parse(str(self.urdf_path))
@@ -80,8 +92,8 @@ class KinematicModel:
 
         # Tool configuration
         self._tool_transform = np.eye(4)
-        self.tool_mount_link = None     # will be set in _find_true_root()
-        self._ik_solver = None          # set via set_ik_solver()
+        self.tool_mount_link = None
+        self._ik_solver = None
 
         # Parse and build
         self._parse_urdf()
@@ -210,102 +222,121 @@ class KinematicModel:
 
         return None
 
+    # =================================================================
+    # Mesh Path Resolution
+    # =================================================================
+
     def _resolve_mesh_path(self, filename: str) -> Optional[Path]:
         """
         THE ONE AND ONLY path resolution method.
         Handles ALL formats: package://, $(find ...), file://, relative, absolute.
         """
-        logger.debug(f"Resolving mesh path: {filename}")
+        if not filename:
+            return None
+
+        logger.info(f"Resolving mesh path: {filename}")
+
         # First, resolve any $(find package) in the filename
         filename = self._resolve_find_in_path(filename)
-        logger.debug(f"  After find resolution: {filename}")
-        
+        logger.info(f"  After find resolution: {filename}")
+
         # Handle package:// URIs
         if filename.startswith('package://'):
-            result = self._resolve_package_uri(filename)
-            logger.debug(f"  Package URI result: {result}")
+            result = self.package_resolver.resolve_package_uri(filename)
+            logger.info(f"  Package URI result: {result}")
+            if result:
+                return result
+            # Fallback: try legacy method
+            result = self._resolve_package_uri_legacy(filename)
+            logger.info(f"  Package URI legacy result: {result}")
             return result
-        
+
         # Handle file:// URIs
         if filename.startswith('file://'):
             result = self._find_existing(Path(filename[7:]))
             logger.debug(f"  File URI result: {result}")
             return result
-        
+
         # Handle absolute paths
         path = Path(filename)
         if path.is_absolute():
             result = self._find_existing(path)
             logger.debug(f"  Absolute path result: {result}")
             return result
-        
+
         # Handle relative paths (relative to URDF file location)
         resolved = self.urdf_path.parent / filename
         logger.debug(f"  Trying relative to URDF: {resolved}")
         result = self._find_existing(resolved)
         if result:
             return result
-        
+
         # Try relative to package directories
-        for pkg_dir in self.package_dirs:
+        for pkg_dir in self.package_resolver.get_all_package_dirs():
             candidate = Path(pkg_dir) / filename
             logger.debug(f"  Trying package dir: {candidate}")
             result = self._find_existing(candidate)
             if result:
                 return result
-        
+
         logger.warning(f"Could not resolve mesh path: {filename}")
         return None
-    
+
     def _resolve_find_in_path(self, text: str) -> str:
         """Resolve $(find package_name) to absolute package path."""
         pattern = re.compile(r'\$\(find\s+([^)]+)\)')
-        
+
         def replace_find(match):
             package_name = match.group(1).strip()
-            for pkg_dir in self.package_dirs:
-                candidate = Path(pkg_dir) / package_name
-                if candidate.is_dir():
-                    return str(candidate)
+            package_dir = self.package_resolver.find_package(package_name)
+            if package_dir is not None:
+                logger.debug(f"Resolved $(find {package_name}) -> {package_dir}")
+                return str(package_dir)
             logger.warning(f"Could not resolve $(find {package_name})")
             return match.group(0)
-        
+
         return pattern.sub(replace_find, text)
-    
-    def _resolve_package_uri(self, uri: str) -> Optional[Path]:
-        """Resolve package://package_name/relative/path"""
+
+    def _resolve_package_uri_legacy(self, uri: str) -> Optional[Path]:
+        """
+        Legacy package:// resolver with bug fix.
+        FIXED: Previously referenced undefined 'result' variable.
+        """
         package_path = uri[10:]  # Remove 'package://'
         parts = package_path.split('/', 1)
         if len(parts) != 2:
             return None
-        
+
         package_name, relative_path = parts
-        for pkg_dir in self.package_dirs:
+
+        for pkg_dir in self.package_resolver.get_all_package_dirs():
             pkg_dir = Path(pkg_dir)
+
             # Check if pkg_dir itself is the package
             if pkg_dir.name == package_name:
                 candidate = pkg_dir / relative_path
+                result = self._find_existing(candidate)  # FIXED: was 'if result:'
                 if result:
                     return result
-            
+
             # Check if pkg_dir contains the package
             candidate = pkg_dir / package_name / relative_path
             result = self._find_existing(candidate)
             if result:
                 return result
-        
+
         return None
-    
+
     @staticmethod
     def _find_existing(path: Path) -> Optional[Path]:
         """Check if path exists, with case-insensitive fallback for Windows."""
         if path.exists():
             return path
-        
+
         # Case-insensitive search (crucial for cross-platform)
         if not path.parent.exists():
             return None
-        
+
         target_lower = path.name.lower()
         try:
             for item in path.parent.iterdir():
@@ -314,7 +345,7 @@ class KinematicModel:
                     return item
         except PermissionError:
             pass
-        
+
         return None
 
     # =================================================================
@@ -346,7 +377,6 @@ class KinematicModel:
             logger.info(f"True root: {self.true_root} "
                        f"(first moving joint: {self.first_moving_joint})")
 
-            # Detect tool mount link (last link in the kinematic chain)
             try:
                 arm_chain = self.get_arm_chain(base_link_name=self.true_root)
                 if arm_chain:
@@ -355,14 +385,12 @@ class KinematicModel:
                     if last_joint:
                         self.tool_mount_link = last_joint['child']
 
-                        # Follow any fixed joints to reach the actual tool mounting point
                         current_link = self.tool_mount_link
                         while current_link in self.link_children:
                             children = self.link_children[current_link]
                             if len(children) != 1:
                                 break
                             child = children[0]
-                            # Check that the child is connected by a fixed joint
                             is_fixed = False
                             for j in self.joints.values():
                                 if (j['parent'] == current_link and
@@ -378,9 +406,8 @@ class KinematicModel:
 
                         logger.info(f"Tool mount link: {self.tool_mount_link}")
             except Exception as e:
-                self.tool_mount_link = "wrist_3_link"  # fallback
+                self.tool_mount_link = "wrist_3_link"
                 logger.info(f"Tool mount link (fallback): {self.tool_mount_link} ({e})")
-
         else:
             if self.root_links:
                 self.true_root = self.root_links[0]
@@ -610,23 +637,15 @@ class KinematicModel:
     def forward_kinematics(self, q: np.ndarray) -> np.ndarray:
         """Compute forward kinematics for given joint positions.
 
-        Does NOT mutate the model's current state. Computes FK for the
-        given q and returns the resulting TCP pose, leaving the model
-        in its original state.
+        Does NOT mutate the model's current state.
         """
         if self._ik_solver is not None:
             return self._ik_solver.forward_kinematics(q)
 
-        # Save current state
         saved_q = self.get_current_joint_positions()
-
-        # Compute FK without registry updates
         self.update_state(q)
         tcp_pose = self.get_tcp_pose().copy()
-
-        # Restore original state
         self.update_state(saved_q)
-
         return tcp_pose
 
     def get_arm_chain(self, base_link_name: str = "base_link") -> List[str]:
@@ -647,7 +666,6 @@ class KinematicModel:
         visited = set()
         first_revolute_found = False
 
-        # Traverse through fixed joints to first revolute
         while current_link in self.link_children and current_link not in visited:
             visited.add(current_link)
             next_revolute = None
@@ -679,7 +697,6 @@ class KinematicModel:
         if not first_revolute_found:
             raise ValueError(f"No revolute joints found from '{base_link_name}'")
 
-        # Collect remaining revolute joints
         while current_link in self.link_children and current_link not in visited:
             visited.add(current_link)
             next_joint = None
@@ -728,4 +745,3 @@ class KinematicModel:
     def get_visual_geometries(self) -> Dict[str, List[Dict]]:
         """Get all visual geometries."""
         return self.visual_geometries
-

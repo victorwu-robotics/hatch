@@ -56,44 +56,91 @@ These are settled. Do not re-litigate without a reason.
 
 The old solvers (`URIKSolver`, `OffsetWristIKSolver`) are being
 replaced by a single `UnifiedIKSolver`, derived from first principles
-in `docs/inverse_kinematics.md`.
+in `docs/unified_IK.md`.
 
-**The derivation** (Parts I–VI plus Part VII and two appendices) is
-written and has been corrected four times:
-1. Spherical θ₁ case is φ and φ + π (singular limit of offset case)
-2. Forearm length is J3-to-P5, not axis_gap(2)
-3. Selection is by continuity of branch, not proximity
-4. Terminology: "wrist offset" = J4 offset, not J5 offset
+**Two documents exist, and they are different:**
+
+- `docs/inverse_kinematics.md` — the **old** spherical-wrist IK
+  derivation for the Elfin arm. It stays on disk as a reference
+  during development. It will be deleted when the unified solver
+  is implemented and tested.
+
+- `docs/unified_IK.md` — the **new** unified derivation. It is
+  the target specification for `UnifiedIKSolver`.
+
+**State of `docs/unified_IK.md`:**
+
+Parts I–VI are the **pre-correction** derivation. Part VII and the
+two appendices are the **corrected** version. The four corrections
+have NOT yet been integrated into Parts I–VI. A status note at the
+top of the file says so. The file is internally inconsistent until
+integration is done.
+
+**The four corrections that need to be integrated:**
+
+1. **Spherical θ₁ (Part IV §8).** The two shoulder solutions for
+   a spherical wrist are `φ` and `φ + π` by construction. This is
+   a *singular limit* of the offset case as `d₄ → 0`, not a
+   special case bolted onto the offset formula. Revise §8 so it
+   presents the two-case construction directly.
+
+2. **Forearm length (Part VI §3).** The forearm length `a₃` is
+   the distance from J3's axis to P5. It is **not** `axis_gap(2)`.
+   For a spherical wrist they coincide; for an offset wrist they
+   differ. Revise §3.
+
+3. **Selection (Part VI §11).** Selection is by **continuity of
+   branch** (shoulder/elbow/wrist tags matching the current pose),
+   not by proximity. Proximity is a fallback. Revise §11.
+
+4. **Terminology (Part V §2).** The quantity that varies between
+   robots is the **J4 wrist offset** — the perpendicular distance
+   from J4's axis to P5. The J5 offset is zero by construction.
+   Use "J4 wrist offset" or "wrist_offset" consistently.
+
+Also delete the stray `# Confirmed — Writing Now` fragment if it
+still exists between Part VI and Part VII. (It may already have
+been removed.)
 
 **The plan, in order:**
-- Step A: inspect `geometric_extraction.py` and `sph_theta_1_test.py`
-  to see what already exists and what needs to change.
-- Step B: integrate the four corrections into
-  `docs/inverse_kinematics.md` as a single coherent document.
+
+- Step A: inspect `core/kinematics/geometric_extraction.py` and
+  `core/kinematics/sph_theta_1_test.py`. Confirm whether they
+  already use the corrected quantities, or whether they need
+  alignment with the corrections.
+- Step B: integrate the four corrections into `docs/unified_IK.md`,
+  producing one coherent document.
 - Step C: align `geometric_extraction.py` if it has any of the
-  earlier errors (forearm length, tool_offset to flange not TCP,
-  J5 offset heuristic).
+  earlier errors (forearm length, `tool_offset` measured to TCP
+  instead of flange, J5 offset heuristic).
 - Step D: write `core/kinematics/unified_ik_solver.py` matching
   Part VII step by step.
 - Step E: write `tests/test_unified_ik.py` reproducing the worked
   Elfin example and validating on UR10, FR5, Elfin.
-- Step F: delete `URIKSolver` and `OffsetWristIKSolver`.
+- Step F: delete `URIKSolver` and `OffsetWristIKSolver`. Delete
+  `docs/inverse_kinematics.md` and rename `docs/unified_IK.md` to
+  `docs/inverse_kinematics.md`.
 
-**Currently stuck at:** Step A. Need to see
-`geometric_extraction.py` and `sph_theta_1_test.py` to know
-what is already correct and what needs changing.
+**Currently stuck at:** Step A. Need to see the two files to know
+what already exists and what needs changing.
 
 ---
 
 ## 4. Open questions
 
-- Is `tool_mount_link` in `KinematicModel` exactly the flange,
-  or something else? Determines how extraction computes `d₆`.
+- Is `tool_mount_link` in `KinematicModel` exactly the flange, or
+  something else? Determines how extraction computes the flange
+  offset `d₆`.
 - Does `sph_theta_1_test.py` test the corrected spherical formula
   (φ and φ + π) or the old one (φ only)?
 - Which three arms are the "tested and working" defaults?
-  (UR10, one FR variant, one more — E15_Pro?)
+  Candidates in `assets/robots/`: `ur_description` (UR10),
+  `Farino` (FR3/FR5/FR10), `E15_Pro` (Elfin?), `bunker_pro_description`.
 - Does FR5 have a nonzero J4 wrist offset, and what is its value?
+- The old `docs/inverse_kinematics.md` — how does its content
+  relate to the new unified derivation? Does it have anything
+  worth preserving as a pedagogical "simple case" section, or is
+  it fully superseded?
 
 ---
 

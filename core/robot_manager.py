@@ -293,7 +293,7 @@ class RobotManager:
                 {
                     "asset_id": asset_id,
                     "urdf_path": str(urdf_path),
-                    "model": model,
+                    "kinematic_model": model,
                 }
             )
 

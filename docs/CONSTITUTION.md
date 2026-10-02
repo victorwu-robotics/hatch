@@ -80,6 +80,92 @@ payload schema as a comment next to the constant. Example:
 Publishers must emit exactly these keys. Subscribers must read exactly these
 keys. No string literals for keys; use the documented names.
 
+## Part 3.5 — The Kinematic Boundary
+
+Every kinematic computation in Hatch — forward or inverse, extraction or evaluation — operates on **exactly one thing**: the 6R chain of the arm.
+
+The 6R chain has exactly two boundaries:
+
+- **The true root** — the parent link of the first movable revolute joint.
+- **The flange** — the child link of the last movable revolute joint.
+
+Everything before the true root (the world frame, mounting plates, pedestals, fixed base transforms) and everything after the flange (fixtures, tools, sensors, TCPs, grippers, camera mounts) is a **fixed transform the user defines and the controller composes**.
+
+Hatch's kinematic layer does not read these outer transforms, does not produce them, and does not depend on them. They are not part of the model, not part of the geometry, and not part of the solver.
+
+### 1. The contract
+
+| Layer | Transformation | Owner |
+|---|---|---|
+| World → true root | Fixed transform | User / controller |
+| True root → flange | The 6R chain | **Hatch** |
+| Flange → TCP | Fixed transform | User / controller |
+
+The solver's interface is exactly the middle row:
+
+- **FK:** `q → T_flange_in_true_root`
+- **IK:** `T_flange_in_true_root → q`
+
+A user who wants TCP-level control composes the outer two transforms themselves:
+
+```
+T_TCP_in_world = T_world_in_true_root · T_flange_in_true_root · T_TCP_in_flange
+```
+
+and passes only `T_flange_in_true_root` to the solver. The solver never sees the TCP. The solver never sees the world.
+
+### 2. Why this is a rule, not a convention
+
+Three reasons:
+
+**1. The 6R chain is the only thing the solver can solve.** Any analytical IK derivation for a 6R arm is a derivation about the six joint axes. The tool and the mounting are not part of the derivation. Feeding them into the solver adds nothing and removes the solver's ability to be reused across tools.
+
+**2. It decouples tool changes from solver changes.** A user who swaps a gripper for a camera changes one fixed transform (flange → TCP). The solver, the geometry, and the joint limits are untouched. This is what makes the solver reusable.
+
+**3. It makes the boundary testable.** The solver's correctness is a statement about the 6R chain. It can be tested by checking `FK(IK(T)) == T` for `T` in the flange frame. If the solver also carried the tool, the test would need to be parameterized by the tool, and the solver would be correct or incorrect relative to a tool choice, not relative to the robot.
+
+### 3. What the rule forbids
+
+- **No world-frame IK.** The solver does not take poses in the world frame.
+- **No TCP-frame IK.** The solver does not take poses in the TCP frame. The flange is the boundary.
+- **No implicit tool compensation in the solver.** If the solver needs a distance, it is the distance from P5 to the **flange**, never the distance from P5 to the TCP. The name of the field is `flange_offset`, not `tool_offset`.
+- **No kinematic computation outside the true-root → flange boundary.** A function that takes a world pose or a TCP pose is not a kinematic function; it belongs in the controller layer.
+
+### 4. The three layers
+
+The boundary separates three concerns. They live in three layers, and the layering is what makes the rule enforceable rather than aspirational.
+
+**Scene Model.** The URDF describes a whole scene — world, mounting, arm, fixtures, tool. The scene model reads the entire URDF, knows about every link and every joint, and answers scene-level questions: *"Where is link X in the world frame?"* It is correct for the scene model to know about the tool, because the tool is in the scene. This is Principle #4 ("Everything in URDF") in operation.
+
+**Arm Chain Extraction.** Given the scene, the extractor identifies the 6R chain between the true root and the flange, and produces the geometric quantities the solver needs (axes as lines in space, wrist center, offsets, limits). The extractor reads the scene, but it produces an object that lives only at the boundary — it does not pass the tool or the world through to the solver.
+
+**Solver.** Given the arm geometry and a flange pose in the true-root frame, the solver returns joint angles. It does not read the URDF, does not know what a tool is, does not know what a world frame is. Its inputs and outputs are entirely within the boundary.
+
+| Layer | Reads | Produces | Knows about tool? |
+|---|---|---|---|
+| Scene Model | Whole URDF | Link transforms, scene graph | Yes — it is in the scene |
+| Arm Chain Extraction | Scene Model | `ArmGeometry` (true root → flange) | No — it selects the chain |
+| Solver | `ArmGeometry` + flange pose | Joint angles | No |
+
+The layering is not a preference. It is what allows the scene model to be a general URDF reader — with fixtures, tools, sensors, and all — without violating the boundary. The scene model is allowed to know about the tool because it is not the solver. The solver is not allowed to know about the tool because it is the solver.
+
+### 5. The API obligation
+
+The scene model must expose the two boundary links so the extractor can find them without walking the scene graph itself:
+
+- `get_true_root()` → the parent link of the first movable revolute joint.
+- `get_flange()` → the child link of the last movable revolute joint.
+
+The scene model may *also* expose convenience methods that reach past the flange — `tool_mount_link`, `get_tcp_pose()`, `forward_kinematics(q)` returning TCP — because those are legitimate scene-level questions. The obligation is only that the two boundary links are available, and that the extractor uses them rather than inferring the boundary from the URDF's fixed-joint structure.
+
+The extraction layer must be the only place in the kinematic stack that reads the URDF's joint chain to determine what the arm is. Downstream code (the solver, and anything built on the solver) sees only `ArmGeometry`, never the URDF.
+
+### 6. How this rule interacts with other parts
+
+- **Part 1, Principle #4 ("Everything in URDF"):** the URDF is the source of truth for the scene model. The arm chain is a *selection* from the scene, not a replacement for it.
+- **Part 3 (dependency rule):** the boundary convention is what makes `core/kinematics/` a self-contained module. It has no dependency on world-frame or tool-frame code, because it does not operate in those frames.
+- **Part 7 (forbidden):** this section adds one concrete prohibition: **no kinematic computation outside the true-root → flange boundary.** A function that takes a world pose or a TCP pose is not a kinematic function; it belongs in the controller layer.
+
 ---
 
 ## Part 4 — Asset Resolution

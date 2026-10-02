@@ -74,6 +74,9 @@ class KinematicModel:
         # Transform state
         self.link_transforms: Dict[str, np.ndarray] = {}
 
+        self._flange_link: Optional[str] = None
+        self._arm_chain: Optional[List[str]] = None
+
         # Visual geometry info
         self.visual_geometries: Dict[str, List[Dict]] = {}
 
@@ -388,6 +391,32 @@ class KinematicModel:
         """Get the true kinematic root of the robot."""
         return self.true_root
 
+    def get_flange(self) -> str:
+        """
+        Child link of the last movable revolute joint. The outer kinematic
+        boundary.
+
+        This is NOT the same as tool_mount_link. The flange is the mechanical
+        face of the last link of the arm proper. The tool mount is wherever
+        the URDF's fixed joints lead after the flange, which is a scene
+        concept, not a kinematic one. For UR arms the two coincide; for the
+        FR5 they differ by one fixed joint (j6_Link vs tool_Link).
+
+        Cached after first call. Safe because Hatch loads exactly one model
+        per session (Principle #10); the arm chain cannot change.
+
+        Returns:
+            The link name of the flange.
+        """
+        if self._flange_link is None:
+            arm_chain = self.get_arm_chain(base_link_name=self.true_root)
+            if not arm_chain:
+                raise RuntimeError(
+                    f"No arm chain found from true root '{self.true_root}'"
+                )
+            self._flange_link = self.joints[arm_chain[-1]]['child']
+        return self._flange_link
+
     def get_true_base(self) -> str:
         """
         Get the robot's mounting base link.
@@ -681,6 +710,30 @@ class KinematicModel:
         transforms = self.compute_fk(q)
         mount_pose = transforms.get(self.tool_mount_link, np.eye(4))
         return mount_pose @ self._tool_transform
+
+    def get_flange_pose(self, q: np.ndarray) -> np.ndarray:
+        """
+        Flange pose in the true-root frame.
+
+        This is the FK contract for the kinematic layer. It returns the pose
+        of the flange — the child of the last revolute joint — with no tool
+        composition and no world transform. The tool transform is the
+        controller's responsibility; the world transform is the user's.
+
+        Contrast with forward_kinematics(q), which returns the TCP pose in
+        the world frame. Both are legitimate; they answer different questions.
+
+        Args:
+            q: Joint positions array, in joint order.
+
+        Returns:
+            4x4 transform of the flange relative to the true root.
+        """
+        transforms = self.compute_fk(q)
+        flange_link = self.get_flange()
+        T_flange_world = transforms[flange_link]
+        T_root_world = transforms[self.true_root]
+        return np.linalg.inv(T_root_world) @ T_flange_world
 
     def get_arm_chain(self, base_link_name: str = "base_link") -> List[str]:
         """

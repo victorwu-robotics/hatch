@@ -32,9 +32,11 @@ ROS was solving a different problem. It was built for warehouses **full of robot
 
 For an **engineering project**, motion planning is unnecessary. My welding environment was known. The seam was fixed. The robot moves from A to B to C along a path I defined. There are no surprises.
 
-But ROS included motion planning because they wanted to build a robot that could move through any unforeseeable space. Their **Descartes** package tried to **find paths in Cartesian space**. I wasted a great deal of time trying to use it, without knowing that a six-axis arm can reach the same pose in up to eight different configurations. **Shoulder left or right**. **Elbow up or down**. **Wrist flipped or not**.
+But ROS included motion planning because they wanted to build a robot that could move through any unforeseeable space. Their **Descartes** package tried to **find paths in Cartesian space**. I wasted a great deal of time trying to use it, without knowing that a six-axis arm can fold itself in several different ways and still put its tip in the same spot — up to eight different configurations. **Shoulder left or right**. **Elbow up or down**. **Wrist flipped or not**.
 
-Descartes, trying to be helpful, might choose one configuration for waypoint 1 and a different configuration for waypoint 2. The robot, moving between them, swings its elbow through space — potentially through the workpiece, through a fixture, through a person.
+Descartes, trying to be helpful, picked one shape for the arm at the first point on the path, and a different shape for the arm at the second. Both shapes reach the same place. But the arm cannot travel between two shapes without moving through the space between them — and the space between them passed through the workpiece.
+
+Nobody asked it to do that. The arm was not told which shape it should be in. It was only told where its tip should go, and both shapes send the tip to the right place. Left to choose, it chose each one on its own.
 
 The planner avoided **a collision that didn't exist** by creating **a collision that did**.
 
@@ -85,6 +87,8 @@ Hatch is not against automation. It is against automation whose behavior the use
 ## Prologue: On Understanding
 
 > *"Understand them, or you will not fully utilise them. Understand your life, or you will not live fully on earth."*
+
+What follows is the creed the story produced.
 
 Life is not about following. It is about **seeing**.
 

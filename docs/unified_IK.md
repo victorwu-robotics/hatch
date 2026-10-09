@@ -131,6 +131,12 @@ The same applies to the twist. The physical link does not twist. The two **axes*
 
 Naming the quantities after the axes, not the links, is more accurate. It also makes the geometry visible: when you read `axis_gap`, you know it is a distance between axes; when you read `axis_twist`, you know it is an angle between axes.
 
+**The indexing is the difference.** Our quantities are indexed by the joint pair (joint i and joint i+1). Each quantity describes a relationship between two consecutive joint axes: how far apart they are, how they are rotated, where along the first axis the common perpendicular meets it, and how much the joint has rotated.
+
+The DH parameters are indexed by the **link** (link i). They describe the transform from frame i−1 to frame i, and the frame placement is fixed by the DH convention. The four DH numbers look like our four quantities, and in the well-behaved case they carry the same physical information — but they are attached to a *link* in the DH scheme, and to a *joint pair* in ours.
+
+This indexing difference is why the two schemes are not the same, even when their numbers coincide. In our scheme, the quantity `axis_gap` between J2 and J3 is a statement about the two axes — the distance between them. In DH, the corresponding number `a` is a parameter of *link 3*, read off the transform between frames. The physical content is the same; the indexing is not. When the geometry is well-behaved, the two coincide. When the geometry is degenerate (parallel axes, non-unique common perpendiculars), the DH indexing loses meaning, while ours does not — because ours never depended on a link frame, only on the axes themselves.
+
 ## 8. The Two Pairs
 
 The four quantities form two natural pairs:
@@ -337,6 +343,8 @@ When the circle has radius zero (spherical wrist), the tangency condition become
 
 **The spherical wrist does not have fewer configurations than the offset wrist.** It has the same configuration structure. The difference is only in how the shoulder angle is computed — from tangency in the offset case, from projection in the spherical case.
 
+![Tangency construction: the arm plane is tangent to the circle of radius `wrist_offset` around P5'. The two tangent lines from O give the two shoulder solutions, and the angle between OP5' and each tangent line is α.](figures/tangency_diagram-1.png){#fig:tangency_diagram-1}
+
 ## 13. What Comes Next
 
 We have established the geometric foundation:
@@ -511,6 +519,7 @@ The angle **α** becomes:
 And the two solutions from the tangent construction become:
 
 **θ₁ = φ + 0 = φ**
+
 **θ₁ = φ − 0 = φ**
 
 They coincide.
@@ -1470,12 +1479,14 @@ For a serial arm, the DH table is a list of these four numbers per joint. The fo
 
 ## A.2 How the Four Geometric Quantities Relate to DH
 
-| Hatch quantity | DH analog | Relationship |
+| Quantity (joint pair) | DH parameter (link) | Relationship |
 |---|---|---|
 | `axis_gap(i)` | `a` (link length) | Perpendicular distance between axes i and i+1. Same value, different name. |
 | `axis_twist(i)` | `α` (link twist) | Angle between axes i and i+1. Same value, different name. |
 | `axis_shift(i)` | `d` (link offset) | Distance along axis i to the common perpendicular with axis i+1. Same value for joints 1, 2, 3, 5, 6. **Different for joint 4** (see A.4). |
 | `joint_angle(i)` | `θ` (joint variable) | The joint's rotation. Same value. |
+
+The quantities are indexed differently. Ours are attached to the **joint pair** — the relationship between two consecutive axes. DH's are attached to the **link** — a parameter of the transform between two consecutive frames. When the frames are placed canonically and the geometry is well-behaved, the two sets of numbers coincide. When the geometry is degenerate, DH's indexing becomes ill-defined, because it depends on a frame placement that the geometry does not support. Ours does not, because it depends only on the axes.
 
 For most joints, the mapping is a renaming. The four quantities Hatch uses are the same physical information DH encodes.
 

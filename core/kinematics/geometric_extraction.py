@@ -3,8 +3,14 @@ Geometric extraction from a KinematicModel.
 
 Reads the URDF-derived kinematic model and produces a pure geometric
 description of the arm: joint axes as lines in space, the wrist center,
-and the tool offset. No DH parameters. No frame assignment beyond the
-robot base frame that the model already provides.
+and the flange offset. No DH parameters. No frame assignment beyond the
+true-root frame that the model already provides.
+
+All quantities are in the true-root frame (the parent of the first
+movable revolute joint). The outer boundary is the flange (the child of
+the last movable revolute joint). Everything before the true root and
+everything after the flange is the controller's responsibility — see
+docs/CONSTITUTION.md Part 3.5.
 
 The output is the input to the unified IK solver.
 """
@@ -25,10 +31,10 @@ _INTERSECT_TOL = 1e-6     # distance between skew lines, in metres
 
 @dataclass
 class Axis:
-    """A joint axis as a line in the robot base frame."""
+    """A joint axis as a line in the true-root frame."""
     name: str
-    point: np.ndarray      # (3,) a point on the axis, in base frame
-    direction: np.ndarray  # (3,) unit vector along the axis, in base frame
+    point: np.ndarray      # (3,) a point on the axis, in true-root frame
+    direction: np.ndarray  # (3,) unit vector along the axis, in true-root frame
 
     def project(self, p: np.ndarray) -> np.ndarray:
         """Project a point onto this line."""
@@ -47,8 +53,15 @@ class ArmGeometry:
     """
     Pure geometric description of a 6R arm.
 
-    All quantities are in the robot base frame (the frame of the true root
-    link, as returned by KinematicModel.get_true_root()).
+    All quantities are in the true-root frame (the frame of the parent
+    of the first movable revolute joint, as returned by
+    KinematicModel.get_true_root()).
+
+    The arm proper is bounded by the true root at one end and the flange
+    at the other. The flange is the child of the last movable revolute
+    joint. Everything after the flange — fixtures, tools, TCPs — is the
+    controller's responsibility and is not represented here. See
+    docs/CONSTITUTION.md Part 3.5.
 
     No DH parameters. The solver computes whatever distances and angles
     it needs from these lines directly.
@@ -57,12 +70,15 @@ class ArmGeometry:
     axes: List[Axis]
 
     # The wrist center: the point where J5 and J6 axes intersect (spherical
-    # wrist) or come closest (offset wrist). In base frame.
+    # wrist) or come closest (offset wrist). In the true-root frame.
     wrist_center: np.ndarray
 
-    # Distance from wrist center to TCP, along the tool Z axis.
-    # This is the "d6" of the derivation, but named for what it is.
-    tool_offset: float
+    # Distance from the wrist center to the flange, along the flange's
+    # Z axis. This is the "d6" of the IK derivation (docs/unified_IK.md,
+    # Part IV §2). It is a property of the arm alone — the flange is the
+    # outer kinematic boundary — and is not the same as a distance to
+    # any attached tool or TCP.
+    flange_offset: float
 
     # Joint limits, in kinematic order. (lower, upper) per joint.
     joint_limits: List[Tuple[float, float]]
@@ -71,8 +87,11 @@ class ArmGeometry:
     joint_names: List[str]
 
     # The perpendicular distance from the J4 axis to the wrist center.
-    # This is the radius of the circle the J4 end traces around P5.
-    # Zero for a spherical wrist; nonzero for UR and (possibly) FR.
+    # This is the radius of the circle the J4 end traces around P5, and
+    # the quantity that decides whether the wrist is spherical (zero) or
+    # offset (nonzero). Called "J4 wrist offset" in the derivation. The
+    # J5 offset is zero by construction for the supported class.
+    #
     # Stored as a convenience; the solver could recompute it from axes[3]
     # and wrist_center, but it is the single most important number in the
     # derivation, so it is worth naming.
@@ -85,6 +104,19 @@ class ArmGeometry:
     # Derived quantities the solver will ask for.
     # These are computed on demand, not stored as a parameter table.
     # ------------------------------------------------------------------
+
+    def forearm_length(self) -> float:
+        """
+        Distance from J3's axis to the wrist center P5.
+
+        This is the corrected a3 of the IK derivation (docs/unified_IK.md,
+        Part VI §3). It is NOT axis_gap(2): the latter is the perpendicular
+        distance between J3 and J4 axes, which coincides with the forearm
+        length only for a spherical wrist. For an offset wrist (UR, FR),
+        they differ, and the law of cosines in Part VI §5 uses this
+        distance, not axis_gap(2).
+        """
+        return float(np.linalg.norm(self.wrist_center - self.axes[2].point))
 
     def axis_twist(self, i: int) -> float:
         """
@@ -106,6 +138,9 @@ class ArmGeometry:
         """
         Perpendicular distance between axis i and axis i+1.
         This is the renamed 'a' of the derivation.
+
+        Note: for i = 2, this is NOT the forearm length. See
+        forearm_length() for the corrected a3.
         """
         u = self.axes[i].direction
         v = self.axes[i + 1].direction
@@ -158,9 +193,11 @@ class ArmGeometry:
         for i, ax in enumerate(self.axes):
             lines.append(f"  J{i+1} {ax.name}: point={ax.point.round(6)}, "
                          f"dir={ax.direction.round(6)}")
-        lines.append(f"  wrist_center: {self.wrist_center.round(6)}")
-        lines.append(f"  wrist_offset: {self.wrist_offset:.6f}")
-        lines.append(f"  tool_offset:  {self.tool_offset:.6f}")
+        lines.append(f"  wrist_center:  {self.wrist_center.round(6)}")
+        lines.append(f"  wrist_offset:  {self.wrist_offset:.6f}")
+        lines.append(f"  flange_offset: {self.flange_offset:.6f}")
+        lines.append(f"  forearm_length (J3->P5): {self.forearm_length():.6f}")
+        lines.append(f"  axis_gap(2) (J3->J4):    {self.axis_gap(2):.6f}")
         for i in range(5):
             lines.append(f"  axis_twist[{i}] = {self.axis_twist(i):.6f} rad "
                          f"({self.axis_twist(i)/np.pi:.4f}π)")
@@ -191,9 +228,11 @@ def extract_arm_geometry(model, base_link: Optional[str] = None) -> ArmGeometry:
             f"{arm_chain}"
         )
 
-    # All transforms at zero configuration. compute_fk does not mutate state.
-    q_zero = np.zeros(len([j for j in model.joints.values()
-                           if j['type'] != 'fixed']))
+    # Zero configuration for the six arm joints only. Building q_zero from
+    # all non-fixed joints would include any joint outside the 6R chain
+    # (e.g., a gripper finger), and get_flange_pose would receive an array
+    # of the wrong length.
+    q_zero = np.zeros(6)
     transforms = model.compute_fk(q_zero)
 
     T_base = transforms[base_link]
@@ -232,13 +271,15 @@ def extract_arm_geometry(model, base_link: Optional[str] = None) -> ArmGeometry:
     # closest. Uses axes[4] (J5) and axes[5] (J6).
     wrist_center = _closest_point_between_axes(axes[4], axes[5])
 
-    # Tool offset: distance from wrist center to TCP along the tool Z axis.
-    # The tool transform is the model's current tool; TCP = tool_mount @ tool.
-    # At zero config, TCP is:
-    tcp_pose = model.forward_kinematics(q_zero)
-    tcp_in_base = T_base_inv @ tcp_pose
-    tcp_pos = tcp_in_base[:3, 3]
-    tool_offset = float(np.linalg.norm(tcp_pos - wrist_center))
+    # Flange offset: distance from the wrist center to the flange, in the
+    # true-root frame. The flange is the child of the last revolute joint
+    # — the outer kinematic boundary. get_flange_pose returns it directly
+    # in the true-root frame; no world transform is applied, and the tool
+    # and any fixture beyond the flange are not consulted. See
+    # docs/CONSTITUTION.md Part 3.5.
+    T_flange = model.get_flange_pose(q_zero)
+    flange_pos = T_flange[:3, 3]
+    flange_offset = float(np.linalg.norm(flange_pos - wrist_center))
 
     # Joint limits, in arm chain order.
     joint_limits = []
@@ -249,7 +290,7 @@ def extract_arm_geometry(model, base_link: Optional[str] = None) -> ArmGeometry:
     return ArmGeometry(
         axes=axes,
         wrist_center=wrist_center,
-        tool_offset=tool_offset,
+        flange_offset=flange_offset,
         joint_limits=joint_limits,
         joint_names=list(arm_chain),
     )
@@ -264,7 +305,7 @@ def _closest_point_between_axes(a: Axis, b: Axis) -> np.ndarray:
     (the choice doesn't affect the geometry — any point equidistant works).
     For skew lines, this is the midpoint of the common perpendicular.
 
-    Returns a point in the base frame.
+    Returns a point in the true-root frame.
     """
     u = a.direction
     v = b.direction

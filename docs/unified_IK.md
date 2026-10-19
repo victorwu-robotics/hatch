@@ -111,7 +111,7 @@ The common perpendicular hits the first joint axis at a specific point. The dist
 For a UR arm:
 
 - The `axis_shift` at J1 is the height from the base to the shoulder — the distance along the vertical axis to where the shoulder axis attaches.
-- The `axis_shift` at J4 is the **J4 wrist offset** — the distance along J4's axis to where P5 sits. This offset has a special significance: it determines whether the wrist is *spherical* or *offset*. We will define both terms in Part III.
+- The `axis_shift` at J4 is the **J4 wrist offset** — the distance along J4's axis to where P5 sits. This offset determines whether the wrist is *spherical* or *offset*. We will define both terms in Part III.
 
 ### joint_angle
 
@@ -130,12 +130,6 @@ So the physical length of the link and the distance between its two joint axes a
 The same applies to the twist. The physical link does not twist. The two **axes** are rotated relative to each other, and the link is the material that connects them.
 
 Naming the quantities after the axes, not the links, is more accurate. It also makes the geometry visible: when you read `axis_gap`, you know it is a distance between axes; when you read `axis_twist`, you know it is an angle between axes.
-
-**The indexing is the difference.** Our quantities are indexed by the joint pair (joint i and joint i+1). Each quantity describes a relationship between two consecutive joint axes: how far apart they are, how they are rotated, where along the first axis the common perpendicular meets it, and how much the joint has rotated.
-
-The DH parameters are indexed by the **link** (link i). They describe the transform from frame i−1 to frame i, and the frame placement is fixed by the DH convention. The four DH numbers look like our four quantities, and in the well-behaved case they carry the same physical information — but they are attached to a *link* in the DH scheme, and to a *joint pair* in ours.
-
-This indexing difference is why the two schemes are not the same, even when their numbers coincide. In our scheme, the quantity `axis_gap` between J2 and J3 is a statement about the two axes — the distance between them. In DH, the corresponding number `a` is a parameter of *link 3*, read off the transform between frames. The physical content is the same; the indexing is not. When the geometry is well-behaved, the two coincide. When the geometry is degenerate (parallel axes, non-unique common perpendiculars), the DH indexing loses meaning, while ours does not — because ours never depended on a link frame, only on the axes themselves.
 
 ## 8. The Two Pairs
 
@@ -180,7 +174,7 @@ We now have the vocabulary. In the next part, we use it to see the wrist — and
 
 ## 1. The Solver Boundary
 
-Before we solve anything, we must fix what we are solving for. The solver's input and output are entirely inside the **6R chain**: from the **true root** (the parent of the first movable revolute joint) to the **flange** (the child of the last movable revolute joint). Everything before the true root — the world, the mounting, the pedestal — and everything after the flange — the fixture, the tool, the TCP — is a fixed transform the user defines and the controller composes. The solver never sees it.
+Before we solve anything, we must fix what we are solving for. The solver's input and output are entirely inside the **6R chain**: from the **true root** (the parent of the first movable revolute joint) to the **flange** (the tool mount link — the end of the fixed-joint chain that follows the last movable revolute joint). Everything before the true root — the world, the mounting, the pedestal — and everything after the flange — the tool itself, the TCP — is a fixed transform the user defines and the controller composes. The solver never sees it.
 
 This is stated as a rule in `docs/CONSTITUTION.md` Part 3.5. In this document, it means:
 
@@ -284,7 +278,7 @@ The spherical wrist is not a different design. It is the offset wrist with a zer
 
 Now consider the arm — J1, J2, and J3.
 
-The upper arm and forearm move in a single vertical plane. The reason is that J2 and J3 are parallel: the `axis_twist` between them is zero. Because they are parallel, the two links they connect sweep through a common plane.
+The upper arm and forearm move in a single vertical plane. The reason is that J2 and J3 are parallel: the `axis_twist` between them is zero (or π — both mean parallel; the difference is whether the axes point the same way or opposite ways). Because they are parallel, the two links they connect sweep through a common plane.
 
 This plane is the **arm plane**. It contains:
 
@@ -343,8 +337,6 @@ When the circle has radius zero (spherical wrist), the tangency condition become
 
 **The spherical wrist does not have fewer configurations than the offset wrist.** It has the same configuration structure. The difference is only in how the shoulder angle is computed — from tangency in the offset case, from projection in the spherical case.
 
-![Tangency construction: the arm plane is tangent to the circle of radius `wrist_offset` around P5'. The two tangent lines from O give the two shoulder solutions, and the angle between OP5' and each tangent line is α.](figures/tangency_diagram-1.png){#fig:tangency_diagram-1}
-
 ## 13. What Comes Next
 
 We have established the geometric foundation:
@@ -362,7 +354,7 @@ In the next part, we solve J1 precisely, using the tangent-line construction. Th
 
 The derivation in this part works for a specific class of arms. It is worth being explicit about which class, now that you have seen the derivation.
 
-**We assumed J2 and J3 are parallel.** Their `axis_twist` is zero. This is what makes the upper arm and forearm move in a single plane — what we called the arm plane. If J2 and J3 are not parallel, there is no arm plane, and the derivation does not apply.
+**We assumed J2 and J3 are parallel.** Their `axis_twist` is zero or π. This is what makes the upper arm and forearm move in a single plane — what we called the arm plane. If J2 and J3 are not parallel, there is no arm plane, and the derivation does not apply.
 
 **We assumed J5 and J6 intersect.** They meet at a point, which we called P5. This is what gives the wrist a well-defined center. If J5 and J6 do not intersect, there is no P5, and the derivation does not apply.
 
@@ -519,7 +511,6 @@ The angle **α** becomes:
 And the two solutions from the tangent construction become:
 
 **θ₁ = φ + 0 = φ**
-
 **θ₁ = φ − 0 = φ**
 
 They coincide.
@@ -539,7 +530,7 @@ The formula **φ ± arcsin(wrist_offset / r)** with `wrist_offset = 0` gives onl
 
 **This is not a special case in the algebra — it is a singularity in the limit.** As `wrist_offset → 0`, the two tangent lines of the offset case collapse to the single line θ₁ = φ. The "second" solution does not emerge from the tangent construction; it emerges from the symmetry of the line itself. The spherical case has an additional discrete symmetry — the arm plane can point either way — that is not present in the offset case (where the two tangent lines are genuinely distinct).
 
-**The solver must handle the spherical case separately.** When `wrist_offset` is below a tolerance (say, 1e-6 m), the two shoulder solutions are **φ** and **φ + π**. When `wrist_offset` is above the tolerance, the two solutions are **φ ± α**.
+**The solver must handle the spherical case separately.** When `wrist_offset` is below a tolerance (say 1e-6 m), the two shoulder solutions are **φ** and **φ + π**. When `wrist_offset` is above the tolerance, the two solutions are **φ ± α**.
 
 This is **a branch between two exact regimes**, not a fallback. Both branches are exact. The tolerance is a numerical threshold between them, chosen small enough that the spherical formula is correct for robots whose geometry is spherical, and the offset formula is correct for robots whose geometry is offset. It is not a graceful degradation, and it does not violate the constitution's prohibition on silent fallbacks (Part 7).
 
@@ -621,9 +612,9 @@ The flange is offset from P5 by **d₆**, along the flange's Z axis. The flange'
 
 So the flange's total lateral offset from the arm plane is:
 
-**offset_flange = ± wrist_offset + d₆ · cos(θ₅)**
+**offset_flange = σ · wrist_offset + d₆ · cos(θ₅)**
 
-The sign of the `wrist_offset` term depends on which shoulder branch we are on (left or right). We will fix the sign convention in §6.
+The sign σ depends on which shoulder branch we are on (left or right). We will fix the sign convention in §6.
 
 ## 4. Why cos(θ₅)?
 
@@ -714,7 +705,7 @@ where **a_flange** is the flange's approach vector (the third column of R_flange
 
 This is a **branch in the solver**, not a fallback. The branch condition is `d₆ > tol`: if true, solve θ₅ from position; if false, solve θ₅ from orientation. Both branches are exact. Both produce two solutions (`± arccos`).
 
-**FR5 is the canonical example of the `d₆ = 0` case.** Its flange (`j6_Link`) is at P5, so d₆ = 0 and θ₅ must be solved from orientation. See the worked example in Part VII §4.
+**No current test arm exercises this branch.** The three Tier 1 arms — UR10, FR5, and Elfin — all have nonzero flange offsets (0.0922, 0.1000, and 0.2000 m respectively, from the extraction). The branch is preserved for correctness: some industrial arms do have the flange coincident with the wrist centre, and the solver must handle them. But the test suite does not exercise it, and none of the worked examples in Part VII uses it.
 
 ## 9. The Spherical Wrist Case
 
@@ -758,7 +749,7 @@ The relationship between J4 and P5 is:
 
 **p_J4 = p_P5 − wrist_offset · ẑ₄**
 
-where **ẑ₄** is J4's axis direction — perpendicular to the arm plane, and whose orientation depends on θ₁ (not θ₅, as was incorrectly stated in an earlier version of this document; J4's axis direction is determined by the arm plane, and the arm plane is determined by θ₁).
+where **ẑ₄** is J4's axis direction — perpendicular to the arm plane, and whose orientation depends on θ₁ (not θ₅; J4's axis direction is determined by the arm plane, and the arm plane is determined by θ₁).
 
 So J4's position is determined once we know P5 and θ₁.
 
@@ -850,7 +841,7 @@ Then:
 
 **θ₂ = ψ − β · sign(θ₃)**
 
-**Sign convention note:** The exact form depends on how θ₂ is defined relative to the reference direction, and how θ₃ is defined (positive = elbow-up or elbow-down). The code's convention is authoritative; the formula above is one consistent choice.
+**Sign convention note:** The exact form depends on how θ₂ is defined relative to the reference direction, and how θ₃ is defined (positive = elbow-up or elbow-down). The code's convention is authoritative; the formula above is one consistent choice. For the Elfin, whose `axis_twist[1] = π` rather than 0, the sign of θ₂ must respect the antiparallel J2/J3 relationship; the code handles this from the axis directions directly.
 
 ## 7. θ₄ from Orientation
 
@@ -1125,13 +1116,18 @@ Return all valid, tagged solutions. Do not select. The caller selects by continu
 
 ## 2. Worked Example: Elfin E15 Pro (Spherical Wrist)
 
-**Robot parameters** (representative values — exact numbers from extraction):
+**Robot parameters** (from extraction, `core/kinematics/geometric_extraction.py`):
 
-- `d₁` (shoulder height) = 0.450 m
-- `a₂` (upper arm) = 0.730 m
-- `a₃` (forearm, J3 to P5) = 0.570 m
-- `wrist_offset` = 0 (spherical)
-- `d₆` (flange offset) = 0.100 m
+| Quantity | Value |
+|---|---|
+| `d₁` (shoulder height) | 0.262 m |
+| `a₂` (upper arm, J2 → J3) | 0.730 m |
+| `a₃` (forearm, J3 → P5) | 0.570 m |
+| `wrist_offset` | 0 m (spherical) |
+| `d₆` (flange offset) | 0.200 m |
+| `axis_twist[1]` | π (J2 ∥ J3 antiparallel) |
+| `axis_twist[3]` | π/2 |
+| `axis_twist[4]` | π/2 |
 
 **Target** (in true-root frame):
 
@@ -1144,7 +1140,7 @@ R_flange = identity   (flange Z axis = +Z)
 
 ```
 a_flange = (0, 0, 1)
-P5 = P_flange − d₆ · a_flange = (0.5, 0.3, 0.7)
+P5 = P_flange − d₆ · a_flange = (0.5, 0.3, 0.8 − 0.200) = (0.5, 0.3, 0.600)
 ```
 
 ### Step 2 — Solve θ₁
@@ -1157,11 +1153,9 @@ r = √(0.5² + 0.3²) = √0.34 ≈ 0.5831
 Spherical case (`wrist_offset = 0`):
 
 ```
-θ₁_right = φ ≈ 0.5404    (σ = +1)
-θ₁_left  = φ + π ≈ 3.6820  (σ = −1)
+θ₁_right = φ ≈ 0.5404       (σ = +1)
+θ₁_left  = φ + π ≈ 3.6820   (σ = −1)
 ```
-
-Check limits: θ₁_right is valid; θ₁_left = 3.6820 rad wraps to −2.6012 rad, which is within [−π, π] and likely valid.
 
 ### Step 3 — Solve θ₅
 
@@ -1170,293 +1164,197 @@ Check limits: θ₁_right is valid; θ₁_left = 3.6820 rad wraps to −2.6012 r
 ```
 o_flange = −0.5 · sin(0.5404) + 0.3 · cos(0.5404)
          = −0.5 · 0.5142 + 0.3 · 0.8577
-         = −0.2571 + 0.2573
          ≈ 0.0002
 ```
 
 ```
-cos(θ₅) = (0.0002 − (+1) · 0) / 0.100 = 0.002
-θ₅ = ± arccos(0.002) ≈ ± 1.5688 rad
+cos(θ₅) = (0.0002 − (+1) · 0) / 0.200 ≈ 0.0010
+θ₅ = ± arccos(0.0010) ≈ ± 1.5698 rad
 ```
 
-Two solutions: θ₅ = +1.5688 (**no-flip**), θ₅ = −1.5688 (**flip**).
+Two solutions: θ₅ ≈ +1.5698 (**no-flip**), θ₅ ≈ −1.5698 (**flip**).
 
 **For θ₁_left = 3.6820:**
 
 ```
-o_flange = −0.5 · sin(3.6820) + 0.3 · cos(3.6820)
-         = −0.5 · (−0.5142) + 0.3 · (−0.8577)
-         = 0.2571 − 0.2573
-         ≈ −0.0002
+o_flange = −0.5 · sin(3.6820) + 0.3 · cos(3.6820) ≈ −0.0002
+cos(θ₅) = (−0.0002 − (−1) · 0) / 0.200 ≈ −0.0010
+θ₅ = ± arccos(−0.0010) ≈ ± 1.5708 rad
 ```
-
-```
-cos(θ₅) = (−0.0002 − (−1) · 0) / 0.100 = −0.002
-θ₅ = ± arccos(−0.002) ≈ ± 1.5728 rad
-```
-
-Same two solutions up to sign. The values are nearly equal to those from the right branch because the target is nearly on the arm plane (a degenerate-ish case chosen for clean numbers).
 
 ### Step 4 — Solve θ₂, θ₃
 
-**For θ₁_right = 0.5404, θ₅ = +1.5688:**
+**For θ₁_right = 0.5404, θ₅ = +1.5698:**
 
 ```
-u = 0.5 · cos(0.5404) + 0.3 · sin(0.5404) = 0.5 · 0.8577 + 0.3 · 0.5142 = 0.4289 + 0.1543 = 0.5832
-w = 0.7
+u = 0.5 · cos(0.5404) + 0.3 · sin(0.5404) ≈ 0.5832
+w = z₅ = 0.600
 Δu = 0.5832
-Δw = 0.7 − 0.450 = 0.250
-D² = 0.5832² + 0.250² = 0.3401 + 0.0625 = 0.4026
-D ≈ 0.6345
+Δw = 0.600 − 0.262 = 0.338
+D² = 0.5832² + 0.338² ≈ 0.3401 + 0.1142 = 0.4543
+D ≈ 0.6740
 ```
 
 ```
-cos(θ₃) = (0.4026 − 0.730² − 0.570²) / (2 · 0.730 · 0.570)
-        = (0.4026 − 0.5329 − 0.3249) / 0.8322
-        = −0.4552 / 0.8322
-        ≈ −0.5470
-θ₃ = ± arccos(−0.5470) ≈ ± 2.1571 rad
+cos(θ₃) = (0.4543 − 0.730² − 0.570²) / (2 · 0.730 · 0.570)
+        = (0.4543 − 0.5329 − 0.3249) / 0.8322
+        = −0.4035 / 0.8322
+        ≈ −0.4849
+θ₃ = ± arccos(−0.4849) ≈ ± 2.0773 rad
 ```
 
-For θ₃ = +2.1571 (**elbow-up**):
+For θ₃ = +2.0773 (**elbow-up**):
 
 ```
-ψ = atan2(0.250, 0.5832) ≈ 0.4054 rad
-β = arcsin(0.570 · sin(2.1571) / 0.6345) = arcsin(0.570 · 0.8325 / 0.6345)
-  = arcsin(0.7477) ≈ 0.8457 rad
-θ₂ = 0.4054 − 0.8457 = −0.4403 rad
+ψ = atan2(0.338, 0.5832) ≈ 0.5254 rad
+β = arcsin(0.570 · sin(2.0773) / 0.6740) = arcsin(0.570 · 0.8746 / 0.6740)
+  ≈ arcsin(0.7397) ≈ 0.8323 rad
+θ₂ = 0.5254 − 0.8323 = −0.3069 rad
 ```
 
-For θ₃ = −2.1571 (**elbow-down**):
+For θ₃ = −2.0773 (**elbow-down**):
 
 ```
-β = arcsin(0.570 · (−0.8325) / 0.6345) = −0.8457
-θ₂ = 0.4054 − (−0.8457) = 1.2511 rad
+θ₂ = 0.5254 + 0.8323 = 1.3577 rad
 ```
 
 ### Step 5 — Solve θ₄, θ₆
 
-For each (θ₁, θ₂, θ₃, θ₅), compute `R₀₃` and extract θ₄, θ₆.
-
-For θ₁ = 0.5404, θ₂ = −0.4403, θ₃ = +2.1571, θ₅ = +1.5688:
+For each (θ₁, θ₂, θ₃, θ₅), compute `R₀₃ = R(a₁, θ₁) · R(a₂, θ₂) · R(a₃, θ₃)` and `R_wrist = R₀₃ᵀ · R_flange`, then extract θ₄ and θ₆ using the known θ₅:
 
 ```
-R₀₃ = R(a₁, 0.5404) · R(a₂, −0.4403) · R(a₃, 2.1571)
-R_wrist = R₀₃ᵀ · I = R₀₃ᵀ
+θ₄ = atan2(R_wrist[1,2] / sin θ₅, R_wrist[0,2] / sin θ₅)
+θ₆ = atan2(R_wrist[2,1] / sin θ₅, −R_wrist[2,0] / sin θ₅)
 ```
 
-With θ₅ = +1.5688, sin θ₅ ≈ 1.0, so:
-
-```
-θ₄ = atan2(R_wrist[1,2], R_wrist[0,2])
-θ₆ = atan2(R_wrist[2,1], −R_wrist[2,0])
-```
-
-The specific numerical values depend on the axis directions from the URDF. The extraction layer provides them; the code computes the matrices.
+The specific numerical values depend on the axis directions from the URDF. With `R_flange = identity` and the joint angles above, `R_wrist` is determined, and θ₄, θ₆ follow.
 
 ### Step 6 — Assemble
 
-Up to 8 solutions. For this target, all 8 may be valid (no branch violates limits or reachability). The full table:
+Up to 8 solutions. For this target, all may be valid if the Elfin's joint limits allow the resulting angles (the Elfin's J1 limit is ±π, which accommodates both φ and φ + π).
 
 | Shoulder | Elbow | Wrist | θ₁ | θ₂ | θ₃ | θ₅ |
 |---|---|---|---|---|---|---|
-| right | up | no-flip | 0.5404 | −0.4403 | +2.1571 | +1.5688 |
-| right | up | flip | 0.5404 | −0.4403 | +2.1571 | −1.5688 |
-| right | down | no-flip | 0.5404 | +1.2511 | −2.1571 | +1.5688 |
-| right | down | flip | 0.5404 | +1.2511 | −2.1571 | −1.5688 |
-| left | up | no-flip | 3.6820 | ... | ... | +1.5728 |
-| left | up | flip | 3.6820 | ... | ... | −1.5728 |
-| left | down | no-flip | 3.6820 | ... | ... | +1.5728 |
-| left | down | flip | 3.6820 | ... | ... | −1.5728 |
+| right | up | no-flip | 0.5404 | −0.3069 | +2.0773 | +1.5698 |
+| right | up | flip | 0.5404 | −0.3069 | +2.0773 | −1.5698 |
+| right | down | no-flip | 0.5404 | +1.3577 | −2.0773 | +1.5698 |
+| right | down | flip | 0.5404 | +1.3577 | −2.0773 | −1.5698 |
+| left | up | no-flip | 3.6820 | ... | ... | +1.5708 |
+| left | up | flip | 3.6820 | ... | ... | −1.5708 |
+| left | down | no-flip | 3.6820 | ... | ... | +1.5708 |
+| left | down | flip | 3.6820 | ... | ... | −1.5708 |
 
 Filter by joint limits (modulo 2π). Return all valid ones, tagged.
 
 ### What this example shows
 
-1. **The algorithm is geometric.** Every step is a distance, an angle, or a projection.
-2. **The spherical case is clean.** With `wrist_offset = 0`, the two shoulder solutions are φ and φ + π.
-3. **The offset case follows the same steps.** Replace `{φ, φ + π}` with `{φ ± arcsin(wrist_offset/r)}`. The rest is identical.
-4. **Tagging is essential.** The 8 solutions are distinct branches. Without tags, the caller cannot know which branch it received.
+1. **The spherical case is clean.** With `wrist_offset = 0`, the two shoulder solutions are φ and φ + π.
+2. **The flange offset matters even for a spherical wrist.** With `d₆ = 0.200`, P5 sits 0.200 m below the flange along the flange's Z axis. Ignoring `d₆` would give wrong θ₂, θ₃, and θ₅.
+3. **The `axis_twist[1] = π` for Elfin.** J2 and J3 are antiparallel, not co-parallel. The arm-plane condition holds (`axis_twist ∈ {0, π}`), but the formula for θ₂ from Step 4 must respect the sign of this twist — the code's convention is authoritative.
 
 ---
 
 ## 3. Worked Example: UR10 (Offset Wrist)
 
-The UR10 is an **offset-wrist** arm: `wrist_offset ≈ 0.1157 m`, nonzero. The derivation is the same as the spherical case, with the offset formula in Step 2 and the sign convention σ in Step 3.
+**Robot parameters** (from extraction):
 
-The full numerical example is deferred to the test suite (`tests/test_unified_ik.py`), where the UR10 parameters are read directly from the extraction layer rather than quoted here. The reason is that the UR10's `a₃` (forearm length, J3 → P5) is a computed quantity — the distance from J3's axis to P5 — and quoting an approximate value in the document would invite confusion with `axis_gap(2) = 0.5723`. The extraction layer computes `a₃` correctly; the test suite verifies it against FK.
+| Quantity | Value |
+|---|---|
+| `d₁` (shoulder height) | 0.1273 m |
+| `a₂` (upper arm, J2 → J3) | 0.612 m |
+| `a₃` (forearm, J3 → P5) | 0.6065 m |
+| `wrist_offset` | 0.1157 m |
+| `d₆` (flange offset) | 0.0922 m |
+| `axis_twist[1]` | 0 (J2 ∥ J3) |
+| `axis_twist[3]` | π/2 |
+| `axis_twist[4]` | π/2 |
 
-**Summary of the UR10's expected behavior under the algorithm:**
+**Note on `a₃` vs `axis_gap(2)`:**
 
-- Step 2 produces two distinct θ₁ values (`φ ± α`), not `{φ, φ + π}`.
-- The reachability condition `r ≥ wrist_offset` can fail for targets near the base axis, and the solver must report the failure.
-- Step 3 uses the sign convention σ to distinguish the two shoulder branches.
-- Steps 4–8 are identical to the spherical case.
+- `axis_gap(2)` = 0.5723 m (perpendicular distance between J3 and J4 axes)
+- `a₃` = 0.6065 m (distance from J3's axis to P5)
 
-The **test suite** (`tests/test_unified_ik.py`) is the authoritative worked example for the UR10. It uses the actual URDF parameters, reproduces the Elfin example above, validates on UR10 with the offset included, and validates on FR5 with the `d₆ = 0` case.
+They differ by 0.034 m. The forearm length is the distance from J3 to P5, not the perpendicular distance between J3 and J4. Using `axis_gap(2)` here would be wrong.
 
----
+The algorithm is the same as for the Elfin, with two differences:
 
-## 4. Worked Example: FR5 (Offset Wrist with `d₆ = 0`)
+1. **Step 2 (shoulder):** uses the offset formula `θ₁ = φ ± arcsin(wrist_offset / r)`, not `{φ, φ + π}`.
+2. **Step 3 (θ₅):** the sign convention σ matters — the two branches are distinguished by whether P5 is on the +n̂ or −n̂ side of the arm plane. See Part V §6.
 
-The FR5 is an **offset-wrist** arm with an important property: its flange coincides with the wrist center. The flange offset `d₆` is **zero**.
+For a representative target such as `P_flange = (0.5, 0.3, 0.8), R_flange = identity`:
 
-**Robot parameters** (computed from the URDF in the previous session):
+- **Step 1:** `P5 = (0.5, 0.3, 0.8 − 0.0922) = (0.5, 0.3, 0.7078)`.
+- **Step 2:** `r ≈ 0.5831, φ ≈ 0.5404, α = arcsin(0.1157 / 0.5831) ≈ 0.1994 rad`. So `θ₁_right ≈ 0.3410`, `θ₁_left ≈ 0.7398`.
+- **Step 3:** the two branches give distinct `o_flange` values, hence distinct `cos(θ₅)`, hence distinct θ₅ solutions. The reachability condition `|o_flange − σ · wrist_offset| ≤ d₆` filters the branches.
+- **Step 4:** follows the same law of cosines with `a₂ = 0.612`, `a₃ = 0.6065`.
+- **Step 5:** follows the same `R_wrist` extraction with the URDF's axis directions.
+- **Step 6:** up to 8 tagged solutions.
 
-- `d₁` (shoulder height) = 0.152 m
-- `a₂` (upper arm, J2 → J3) = 0.425 m
-- `a₃` (forearm, J3 → P5) ≈ 0.4080 m
-- `wrist_offset` (J4 → P5) = 0.102 m
-- `d₆` (flange offset, P5 → flange) = **0**
-
-**Target** (in true-root frame):
-
-```
-P_flange = (0.5, 0.3, 0.7)
-R_flange = Rx(0.4) · Rz(0.3)   (non-trivial orientation)
-```
-
-The orientation is chosen non-identity because with `d₆ = 0`, θ₅ must be solved from the flange's approach direction, not from its position. A non-identity orientation exercises this branch.
-
-### Step 1 — Compute P5
-
-Since `d₆ = 0`:
-
-```
-P5 = P_flange = (0.5, 0.3, 0.7)
-```
-
-### Step 2 — Solve θ₁
-
-```
-r = √(0.5² + 0.3²) = √0.34 ≈ 0.5831
-φ = atan2(0.3, 0.5) ≈ 0.5404 rad
-α = arcsin(wrist_offset / r) = arcsin(0.102 / 0.5831) ≈ 0.1758 rad
-```
-
-Offset case:
-
-```
-θ₁_left  = 0.5404 + 0.1758 = 0.7162 rad   (σ = −1)
-θ₁_right = 0.5404 − 0.1758 = 0.3646 rad   (σ = +1)
-```
-
-Both branches are valid (`r ≥ wrist_offset`).
-
-### Step 3 — Solve θ₅ (orientation-determined)
-
-Since `d₆ = 0`, θ₅ cannot be determined from position. Use the orientation branch.
-
-Compute the flange's approach vector:
-
-```
-R_flange = Rx(0.4) · Rz(0.3)
-        ≈ [[0.9553, −0.2955, 0],
-           [0.2722, 0.8796, −0.3894],
-           [0.1150, 0.3719,  0.9211]]
-a_flange = R_flange · (0,0,1) = (0, −0.3894, 0.9211)
-```
-
-**For θ₁_right = 0.3646:**
-
-```
-n̂ = (−sin(0.3646), cos(0.3646), 0) ≈ (−0.3565, 0.9343, 0)
-cos(θ₅) = a_flange · n̂ = 0 · (−0.3565) + (−0.3894) · 0.9343 + 0.9211 · 0
-        ≈ −0.3638
-θ₅ = ± arccos(−0.3638) ≈ ± 1.9435 rad
-```
-
-**For θ₁_left = 0.7162:**
-
-```
-n̂ = (−sin(0.7162), cos(0.7162), 0) ≈ (−0.6566, 0.7543, 0)
-cos(θ₅) = 0 · (−0.6566) + (−0.3894) · 0.7543 + 0.9211 · 0
-        ≈ −0.2937
-θ₅ = ± arccos(−0.2937) ≈ ± 1.8692 rad
-```
-
-Both θ₁ branches give valid θ₅ solutions. Tags: `+` is **no-flip**, `−` is **flip**.
-
-### Step 4 — Solve θ₂, θ₃
-
-For θ₁_right = 0.3646:
-
-```
-u = 0.5 · cos(0.3646) + 0.3 · sin(0.3646) ≈ 0.5 · 0.9343 + 0.3 · 0.3565 ≈ 0.5741
-w = 0.7
-Δu = 0.5741
-Δw = 0.7 − 0.152 = 0.548
-D² = 0.5741² + 0.548² ≈ 0.3296 + 0.3003 = 0.6299
-D ≈ 0.7937
-```
-
-```
-cos(θ₃) = (0.6299 − 0.425² − 0.4080²) / (2 · 0.425 · 0.4080)
-        = (0.6299 − 0.1806 − 0.1665) / 0.3468
-        = 0.2828 / 0.3468
-        ≈ 0.8155
-θ₃ = ± arccos(0.8155) ≈ ± 0.6162 rad
-```
-
-For θ₃ = +0.6162 (**elbow-up**):
-
-```
-ψ = atan2(0.548, 0.5741) ≈ 0.7626 rad
-β = arcsin(0.4080 · sin(0.6162) / 0.7937) = arcsin(0.4080 · 0.5775 / 0.7937)
-  ≈ arcsin(0.2969) ≈ 0.3016 rad
-θ₂ = 0.7626 − 0.3016 = 0.4610 rad
-```
-
-For θ₃ = −0.6162 (**elbow-down**):
-
-```
-θ₂ = 0.7626 + 0.3016 = 1.0642 rad
-```
-
-### Step 5 — Solve θ₄, θ₆
-
-For each (θ₁, θ₂, θ₃, θ₅), compute `R₀₃` and extract θ₄, θ₆. The Z-Y-Z structure holds for FR5 (J4 ⊥ J5 ⊥ J6, J4 ∥ J6).
-
-For example, with θ₁ = 0.3646, θ₂ = 0.4610, θ₃ = 0.6162, θ₅ = +1.9435:
-
-```
-R₀₃ = R(a₁, 0.3646) · R(a₂, 0.4610) · R(a₃, 0.6162)
-R_wrist = R₀₃ᵀ · R_flange
-θ₄ = atan2(R_wrist[1,2] / sin(1.9435), R_wrist[0,2] / sin(1.9435))
-θ₆ = atan2(R_wrist[2,1] / sin(1.9435), −R_wrist[2,0] / sin(1.9435))
-```
-
-Numerical values depend on the axis directions from the FR5 URDF.
-
-### Step 6 — Assemble
-
-Up to 8 solutions (2 shoulder × 2 elbow × 2 wrist). Filter by FR5 limits:
-
-- J1: ±3.0543 rad
-- J2: [−4.6251, 1.4835] rad
-- J3: ±2.8274 rad
-- J4: [−4.6251, 1.4835] rad
-- J5: ±3.0543 rad
-- J6: ±3.0543 rad
-
-Both shoulder branches and both elbow branches are likely within limits for this target. Both wrist branches are valid (θ₅ is not near 0 or π, so no singularity). Up to 8 valid solutions.
-
-### What this example shows
-
-1. **The `d₆ = 0` case is a real case, not a corner to avoid.** FR5 exercises it. The solver has a branch for it, and the branch is exact.
-2. **θ₅ can be determined from orientation when it cannot be determined from position.** The two solutions still exist; they come from the `± arccos` of the orientation equation.
-3. **The offset-wrist arm-plane construction (`φ ± α` for shoulder) is used, not the spherical construction (`{φ, φ + π}`).** FR5's `wrist_offset = 0.102 m` is nonzero.
-4. **All eight branches are reachable for a typical target.** The limits on the FR5 are wide enough that most branches survive.
+The **test suite** (`tests/test_unified_ik.py`) is the authoritative worked example for UR10. It uses the URDF parameters directly and validates round-trip: `q_true → FK → IK → set containing q_true`.
 
 ---
 
-## 5. What the Examples Do Not Show
+## 4. Worked Example: FR5 (Offset Wrist)
+
+**Robot parameters** (from extraction):
+
+| Quantity | Value |
+|---|---|
+| `d₁` (shoulder height) | 0.152 m |
+| `a₂` (upper arm, J2 → J3) | 0.425 m |
+| `a₃` (forearm, J3 → P5) | 0.4205 m |
+| `wrist_offset` | 0.1020 m |
+| `d₆` (flange offset) | 0.1000 m |
+| `axis_twist[1]` | 0 (J2 ∥ J3) |
+| `axis_twist[3]` | π/2 |
+| `axis_twist[4]` | π/2 |
+
+**Note on `a₃` vs `axis_gap(2)`:**
+
+- `axis_gap(2)` = 0.3950 m
+- `a₃` = 0.4205 m
+
+The difference (0.0255 m) comes from the FR5's wrist geometry: J5 is offset from J4 in both Y and Z, and P5 is further offset in Z by the flange's own geometry. The forearm length accounts for the full distance from J3 to P5, not just the perpendicular offset between J3 and J4 axes.
+
+The algorithm is the same as for UR10:
+
+1. **Step 1:** `P5 = P_flange − 0.100 · a_flange`.
+2. **Step 2:** `θ₁ = φ ± arcsin(0.1020 / r)`.
+3. **Step 3:** the sign convention σ distinguishes the shoulder branches.
+4. **Step 4:** law of cosines with `a₂ = 0.425`, `a₃ = 0.4205`.
+5. **Step 5:** `R_wrist` extraction.
+6. **Step 6:** up to 8 tagged solutions.
+
+**FR5 is not the `d₆ = 0` case.** It is a standard offset-wrist arm with a small but nonzero flange offset. The `d₆ = 0` branch of Part V §8 is not exercised by FR5.
+
+The **test suite** is the authoritative worked example for FR5, as for UR10.
+
+---
+
+## 5. The `d₆ = 0` Branch and the Test Suite
+
+The `d₆ = 0` branch in Part V §8 — where θ₅ is determined from the flange's orientation rather than its position — is a correct and necessary branch of the solver, but **none of the three Tier 1 test arms exercises it**:
+
+| Arm | `d₆` | Branch exercised |
+|---|---|---|
+| UR10 | 0.0922 m | position-determined θ₅ |
+| FR5 | 0.1000 m | position-determined θ₅ |
+| Elfin | 0.2000 m | position-determined θ₅ |
+
+All three use the position-determined branch. The orientation-determined branch is preserved because some industrial arms do have the flange coincident with the wrist centre, and the solver must handle them. But the test suite does not cover it.
+
+This is a known gap, not a bug. If a future test arm is added whose flange sits at P5, it will exercise the branch. Until then, the branch is correct in the code but unverified by round-trip tests.
+
+---
+
+## 6. What the Examples Do Not Show
 
 The examples use simple targets to keep the numbers clean. Real targets have:
 
 - Larger lateral offsets, making `o_flange` far from `σ · wrist_offset` and `cos(θ₅)` far from 0 or ±1.
 - Configurations near singularities (θ₅ ≈ 0 or π), where θ₄ and θ₆ are not independent.
 - Targets near the reachability boundary (`r ≈ wrist_offset` or `D ≈ |a₂ ± a₃|`), where the solver must decide between reporting a solution and reporting a reach failure.
+- The `d₆ = 0` branch (see §5), which no current test arm exercises.
 
 The algorithm handles all of these. The examples show the structure; the test suite exercises the boundaries.
 
@@ -1479,14 +1377,12 @@ For a serial arm, the DH table is a list of these four numbers per joint. The fo
 
 ## A.2 How the Four Geometric Quantities Relate to DH
 
-| Quantity (joint pair) | DH parameter (link) | Relationship |
+| Hatch quantity | DH analog | Relationship |
 |---|---|---|
 | `axis_gap(i)` | `a` (link length) | Perpendicular distance between axes i and i+1. Same value, different name. |
 | `axis_twist(i)` | `α` (link twist) | Angle between axes i and i+1. Same value, different name. |
 | `axis_shift(i)` | `d` (link offset) | Distance along axis i to the common perpendicular with axis i+1. Same value for joints 1, 2, 3, 5, 6. **Different for joint 4** (see A.4). |
 | `joint_angle(i)` | `θ` (joint variable) | The joint's rotation. Same value. |
-
-The quantities are indexed differently. Ours are attached to the **joint pair** — the relationship between two consecutive axes. DH's are attached to the **link** — a parameter of the transform between two consecutive frames. When the frames are placed canonically and the geometry is well-behaved, the two sets of numbers coincide. When the geometry is degenerate, DH's indexing becomes ill-defined, because it depends on a frame placement that the geometry does not support. Ours does not, because it depends only on the axes.
 
 For most joints, the mapping is a renaming. The four quantities Hatch uses are the same physical information DH encodes.
 

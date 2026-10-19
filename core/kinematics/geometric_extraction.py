@@ -7,9 +7,10 @@ and the flange offset. No DH parameters. No frame assignment beyond the
 true-root frame that the model already provides.
 
 All quantities are in the true-root frame (the parent of the first
-movable revolute joint). The outer boundary is the flange (the child of
-the last movable revolute joint). Everything before the true root and
-everything after the flange is the controller's responsibility — see
+movable revolute joint). The outer boundary is the flange — the tool
+mount link, the end of the fixed-joint chain that follows the last
+movable revolute joint. Everything before the true root and everything
+after the flange is the controller's responsibility — see
 docs/CONSTITUTION.md Part 3.5.
 
 The output is the input to the unified IK solver.
@@ -58,10 +59,11 @@ class ArmGeometry:
     KinematicModel.get_true_root()).
 
     The arm proper is bounded by the true root at one end and the flange
-    at the other. The flange is the child of the last movable revolute
-    joint. Everything after the flange — fixtures, tools, TCPs — is the
-    controller's responsibility and is not represented here. See
-    docs/CONSTITUTION.md Part 3.5.
+    at the other. The flange is the tool mount link — the end of the
+    fixed-joint chain that follows the last movable revolute joint. It
+    is a property of the arm's mechanical description, not of any
+    specific tool. Everything past the flange is the controller's
+    responsibility. See docs/CONSTITUTION.md Part 3.5.
 
     No DH parameters. The solver computes whatever distances and angles
     it needs from these lines directly.
@@ -73,11 +75,10 @@ class ArmGeometry:
     # wrist) or come closest (offset wrist). In the true-root frame.
     wrist_center: np.ndarray
 
-    # Distance from the wrist center to the flange, along the flange's
-    # Z axis. This is the "d6" of the IK derivation (docs/unified_IK.md,
-    # Part IV §2). It is a property of the arm alone — the flange is the
-    # outer kinematic boundary — and is not the same as a distance to
-    # any attached tool or TCP.
+    # Distance from the wrist center to the flange (tool mount link),
+    # along the flange's Z axis. This is the "d6" of the IK derivation
+    # (docs/unified_IK.md, Part IV §2). It is a property of the arm alone
+    # and is not the same as a distance to any attached tool or TCP.
     flange_offset: float
 
     # Joint limits, in kinematic order. (lower, upper) per joint.
@@ -271,12 +272,12 @@ def extract_arm_geometry(model, base_link: Optional[str] = None) -> ArmGeometry:
     # closest. Uses axes[4] (J5) and axes[5] (J6).
     wrist_center = _closest_point_between_axes(axes[4], axes[5])
 
-    # Flange offset: distance from the wrist center to the flange, in the
-    # true-root frame. The flange is the child of the last revolute joint
-    # — the outer kinematic boundary. get_flange_pose returns it directly
-    # in the true-root frame; no world transform is applied, and the tool
-    # and any fixture beyond the flange are not consulted. See
-    # docs/CONSTITUTION.md Part 3.5.
+    # Flange offset: distance from the wrist center to the flange (tool
+    # mount link), in the true-root frame. The flange is the end of the
+    # fixed-joint chain following the last revolute joint — the outer
+    # kinematic boundary. get_flange_pose returns it directly in the
+    # true-root frame; the tool and any fixture beyond the flange are
+    # not consulted. See docs/CONSTITUTION.md Part 3.5.
     T_flange = model.get_flange_pose(q_zero)
     flange_pos = T_flange[:3, 3]
     flange_offset = float(np.linalg.norm(flange_pos - wrist_center))

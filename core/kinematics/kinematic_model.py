@@ -393,28 +393,26 @@ class KinematicModel:
 
     def get_flange(self) -> str:
         """
-        Child link of the last movable revolute joint. The outer kinematic
-        boundary.
+        Tool mount link — the outer kinematic boundary.
 
-        This is NOT the same as tool_mount_link. The flange is the mechanical
-        face of the last link of the arm proper. The tool mount is wherever
-        the URDF's fixed joints lead after the flange, which is a scene
-        concept, not a kinematic one. For UR arms the two coincide; for the
-        FR5 they differ by one fixed joint (j6_Link vs tool_Link).
+        This is the end of the fixed-joint chain that follows the last
+        movable revolute joint. It is the surface where tools attach. It is
+        a property of the arm's mechanical description, not of any specific
+        tool: the tool itself is beyond this boundary and is the controller's
+        responsibility.
+
+        For a URDF where the last revolute joint's child is directly the tool
+        mount (no fixed joints past J6), this coincides with that child. For
+        a URDF with a short fixed-joint chain past J6 (e.g., FR5's `tool`
+        joint), this returns the end of that chain.
 
         Cached after first call. Safe because Hatch loads exactly one model
         per session (Principle #10); the arm chain cannot change.
-
-        Returns:
-            The link name of the flange.
         """
         if self._flange_link is None:
-            arm_chain = self.get_arm_chain(base_link_name=self.true_root)
-            if not arm_chain:
-                raise RuntimeError(
-                    f"No arm chain found from true root '{self.true_root}'"
-                )
-            self._flange_link = self.joints[arm_chain[-1]]['child']
+            # tool_mount_link is set by _find_true_root() and walks the fixed-
+            # joint chain past the last revolute joint. It is the tool mount.
+            self._flange_link = self.tool_mount_link
         return self._flange_link
 
     def get_true_base(self) -> str:

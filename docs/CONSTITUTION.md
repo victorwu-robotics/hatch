@@ -114,6 +114,18 @@ T_TCP_in_world = T_world_in_true_root · T_flange_in_true_root · T_TCP_in_flang
 
 and passes only `T_flange_in_true_root` to the solver. The solver never sees the TCP. The solver never sees the world.
 
+**Where the boundary sits.**
+
+- **The true root** is the parent link of the first movable revolute joint.
+
+- **The flange** is the **tool mount link** — the link at which tools attach. This is the end of the fixed-joint chain that follows the last movable revolute joint. It is a property of the arm's mechanical description, not of any specific tool.
+
+The distinction matters. The **last movable revolute joint's child** is a kinematic reference point — where the sixth joint's frame sits. The **tool mount link** is a physical mounting surface — where a tool bolts on. On many industrial arms these are separated by one or more fixed joints (a mounting plate, a short adapter), and the distance between them is the arm's short **`d₆`** — the flange offset. The IK derivation uses the flange offset, not the distance to the kinematic reference point, because the tangency condition in the derivation is about where the tool attaches, not about where the joint frame happens to sit.
+
+The tool itself is **beyond** the flange. A user who attaches a gripper, a welder, or a camera changes `T_TCP_in_flange`; the flange, the flange offset, and the 6R chain are unchanged. This is what makes the solver reusable across tools.
+
+In most URDFs, the tool mount link is the child of a fixed joint named `tool` or `flange`, or the last revolute joint's child directly if the URDF has no fixed joints past J6. The `KinematicModel` identifies it once, when the model is loaded, and exposes it via `get_flange()`.
+
 ### 2. Why this is a rule, not a convention
 
 Three reasons:

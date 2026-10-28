@@ -1,4 +1,9 @@
 
 
+    arms = [
+        ("UR10",  base / "ur_description" / "urdf" / "ur10_nominal.urdf"),
+        ("FR5",   base / "Farino" / "frcobot_description" / "urdf" / "fr5v6.urdf"),
+        ("Elfin", base / "E15_Pro" / "urdf" / "E15_Pro.urdf"),
+    ]
 
 

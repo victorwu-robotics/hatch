@@ -1,46 +1,333 @@
 # Inverse Kinematics in Hatch (孵)
 
-## A Unified Derivation for Spherical and Offset Wrists
+## A Unified Derivation for Offset and Spherical Wrists
 
 ---
 
-# Part I: Seeing the Robot
+# Part 1 — The URDF: What It Is, and How to Read It
 
-## 1. What a Robot Arm Is Made Of
+## 1.1 Why we start here
 
-Before we solve anything, we must see what we are solving.
+Everything in this document — every axis, every offset, every angle — is extracted from a URDF file.
 
-A 6-DOF industrial arm is a chain of rigid bodies connected by joints. Each joint allows exactly one motion: rotation about a line. That line is the **joint axis**.
+The URDF is the single source of truth for the scene (Principle #4). The robot's geometry, its joints, its meshes, its limits: all of it lives in one XML file. If we do not understand what that file contains, we cannot understand what we extract from it, and we cannot check whether the extraction is correct.
 
-The robot's geometry is the collection of these axes and the fixed relationships between them:
+So before we solve anything, we learn to read the file. Not to *write* it — writing is the robot manufacturer's job. Our job is to *read* it completely, and to know exactly which numbers in it become the geometry of the solver.
 
-- Where each axis sits in space, relative to the previous axis
-- How each axis is oriented, relative to the previous axis
-- How far along each axis the next joint attaches
+This part is a reading exercise. By the end, you will be able to open any industrial arm's URDF and point to the line that gives each joint its axis, each link its mesh, and each joint its limits.
 
-Everything else — the meshes, the colors, the physical shape of the links — is decoration. The kinematics is entirely captured by the axes.
+## 1.2 What XML is
 
-## 2. What the URDF Gives Us
+A URDF is written in **XML**. XML is a way of writing structured data as text. It has only a few rules, and they are worth knowing precisely, because a URDF is nothing but XML.
 
-The URDF describes each joint with three pieces of information:
+**An element** is a pair of tags with content between them:
 
-- **The joint origin** (`xyz`, `rpy`): the position and orientation of the joint's frame relative to its parent
-- **The joint axis** (`xyz`): the direction the joint rotates about
-- **The joint type** (`revolute`, `continuous`, `prismatic`, `fixed`): what kind of motion the joint allows
+```xml
+<link name="base_link">
+  ...
+</link>
+```
 
-For a revolute joint, this is complete. The origin tells us where the axis sits and how it is oriented; the axis tells us the direction of rotation; the type tells us the joint moves.
+**An attribute** is a name-value pair inside a tag:
 
-**This is all the kinematics we need.** The URDF is not a description of a robot that *happens to include* kinematics — it *is* the kinematics, plus visual geometry.
+```xml
+<joint name="shoulder_pan_joint" type="revolute">
+```
 
-## 3. Why We Do Not Need DH
+**Nesting** is elements inside elements. **A self-closing element** is an element with no content:
 
-The Denavit–Hartenberg (DH) convention is a way of encoding the relationship between two consecutive joint axes into four numbers. It was invented in 1955, for a world where robots were specified on paper data sheets and the geometry had to be reconstructed from a small set of scalar parameters.
+```xml
+<link name="base_link"/>
+```
 
-The URDF gives us **more information than DH does**. Each joint origin is a full 6-DOF transform. DH compresses that transform into four scalars by assuming the frames are placed in a canonical way. The compression is lossy: it works only for the class of serial arms DH was designed for, and it becomes ambiguous when two consecutive axes are parallel.
+**A comment** begins with `<!--` and ends with `-->`.
 
-Hatch does not build a DH table. It reads the joint origins and axes directly from the URDF and works with them. The four quantities that DH would encode are still useful — we will name them and use them — but they are *derived from* the URDF, not *substituted for* it.
+**A processing instruction** begins with `<?` and ends with `?>`. Every XML file begins with one:
 
-The direction of derivation is:
+```xml
+<?xml version="1.0"?>
+```
+
+It declares the file as XML version 1.0 and carries no robot information.
+
+**Namespaces** — the `xacro:` prefix, the `xmlns` attributes — are a more advanced XML feature, used when a file is composed from parts. They matter for the `URDFPreprocessor`, which expands xacro templates into plain URDF. They do **not** matter here: by the time the file reaches the solver, it is plain URDF with no namespaces.
+
+That is the whole of XML that a URDF reader needs. Five constructs: elements, attributes, nesting, self-closing elements, comments.
+
+## 1.3 Links: the rigid bodies
+
+A **link** is a rigid body. It is a physical object that does not deform — a piece of metal, a bracket, a mounting plate, a sensor housing.
+
+```xml
+<link name="base_link">
+  <visual>   <geometry> <mesh filename="package://ur10/meshes/base_link.stl"/> </geometry> </visual>
+  <collision> <geometry> <mesh filename="package://ur10/meshes/base_link.stl"/> </geometry> </collision>
+  <inertial> <mass value="4.0"/> <inertia ixx="0.004" ixy="0" ixz="0" iyy="0.004" iyz="0" izz="0.004"/> </inertial>
+</link>
+```
+
+A link has three optional subsections:
+
+- **`<visual>`** — how the link looks. Its geometry, and optionally its material.
+- **`<collision>`** — the shape used for collision checking.
+- **`<inertial>`** — the mass and inertia tensor, used for dynamics.
+
+For the kinematic solver, only the link's **name** matters. The kinematics is entirely about *how links are connected*, not about what they look like or how heavy they are. Meshes and inertials are for visualization and simulation — they are not part of the solver's input.
+
+## 1.4 Joints: the connections
+
+A **joint** connects two links. It says: link A (the **parent**) and link B (the **child**) are attached, in this way, at this position, with this kind of motion allowed between them.
+
+```xml
+<joint name="shoulder_pan_joint" type="revolute">
+  <parent link="base_link_inertia"/>
+  <child link="shoulder_link"/>
+  <origin xyz="0 0 0.1273" rpy="0 0 0"/>
+  <axis xyz="0 0 1"/>
+  <limit lower="-6.283" upper="6.283" effort="150" velocity="3.15"/>
+</joint>
+```
+
+**`type`** — what kind of motion the joint allows:
+
+| Type | Motion | Used for |
+|---|---|---|
+| `fixed` | None. Rigid attachment. | Mounting plates, sensor brackets, the tool mount. |
+| `revolute` | Rotation about an axis, with limits. | Most robot joints. |
+| `continuous` | Rotation about an axis, no limits. | Wheels, some base joints. |
+| `prismatic` | Translation along an axis, with limits. | Linear actuators, some gantries. |
+
+The solver operates on **revolute and continuous** joints — the six that rotate the arm. Fixed joints define the boundary (the true root, the flange).
+
+**`<parent>` and `<child>`** — the two links the joint connects.
+
+**`<origin>`** — the position and orientation of the joint's frame, relative to the parent link's frame:
+
+```xml
+<origin xyz="0 0 0.1273" rpy="0 0 0"/>
+```
+
+`xyz` is a translation in meters. `rpy` is a rotation as roll-pitch-yaw angles in radians. Together they give a full 6-DOF transformation from the parent link to the joint's frame.
+
+**This is the most important element in the URDF for kinematics.** The joint origin tells us *where the joint sits* relative to its parent.
+
+**`<axis>`** — the direction of the joint's rotation, expressed in the joint's own frame:
+
+```xml
+<axis xyz="0 0 1"/>
+```
+
+The axis is a *direction*, not a position. The position of the axis is given by the joint origin.
+
+**`<limit>`** — the joint's physical limits:
+
+```xml
+<limit lower="-6.283" upper="6.283" effort="150" velocity="3.15"/>
+```
+
+The solver uses `lower` and `upper` to filter out joint angles outside the joint's range.
+
+### The Z-axis rule
+
+**All revolute joints rotate about the Z axis of their own frame, according to the right-hand rule.**
+
+This is the URDF convention, and it is the foundation of the entire kinematic description:
+
+- The `<axis>` element specifies the direction of rotation *in the joint's frame*. For a revolute joint that rotates about its own Z, the axis is `0 0 1`.
+- The joint angle θ is the angle of rotation about that Z, with the sign given by the right-hand rule (thumb along the axis, fingers curl in the positive direction).
+- When a later part says "J2's axis is normal to the arm plane," it means J2's frame Z, expressed in the true-root frame, is the arm plane's normal. When it says "the twist between J2 and J3 is 0," it means their Z axes point in the same direction.
+
+**The Z axis is the joint's axis of rotation, always.**
+
+## 1.5 The tree structure
+
+A URDF is a **tree**. There is exactly one root link — the link with no parent joint. Every other link has exactly one parent joint, and therefore exactly one parent link. No link is the child of two joints. No cycles exist.
+
+This is not a convention. It is a consequence of physics. **A rigid body cannot be in two places at once.** The tree structure is what makes a URDF consistent: every link's pose is determined uniquely by the path from the root.
+
+For a 6R arm, the tree contains **more than six joints in total** — but exactly six of them are movable. The six movable joints are the revolute joints of the arm chain. The rest are **fixed joints**: at the base (mounting the arm to the world) and at the flange (mounting the tool). There may also be fixed joints between consecutive revolute joints — for example, a `base_inertia` link between `base_link` and the first revolute joint, as in Universal Robots' URDFs.
+
+This is why the **true kinematic root** is not always the intuitive `base_link`. The solver detects it: the true root is the **parent link of the first movable revolute joint**. For UR10, that is `base_inertia`, not `base_link`. Using the wrong root produces wrong kinematics.
+
+## 1.6 Meshes: the visual geometry
+
+A **mesh** is a piece of 3D geometry — a collection of triangles that, together, form the surface of a link.
+
+```xml
+<geometry>
+  <mesh filename="package://ur10/meshes/base_link.stl"/>
+</geometry>
+```
+
+The mesh is referenced by **filename**, not embedded in the URDF. A robot's meshes are large; embedding them would make the file megabytes long. Referencing them keeps the URDF small — a few hundred lines of XML a human can read and a version control system can diff.
+
+The reference is a **URI**, most commonly `package://<package_name>/<relative_path>`. Hatch resolves it through the `PackageResolver` (Constitution Part 4): `~/hatch/assets/` first, then every directory in `HATCH_PACKAGE_PATH`.
+
+### The four mesh formats
+
+| Format | Stores | Encoding | Typical use |
+|---|---|---|---|
+| **STL** | Triangles only. No color. | ASCII or binary | The most common format for robot links. |
+| **OBJ** | Triangles, optionally normals and texture coordinates. | ASCII | Less common; used when texture coordinates are needed. |
+| **PLY** | Triangles, optionally per-vertex color and normals. | ASCII or binary | Used when per-vertex color is needed. |
+| **DAE** (COLLADA) | A full scene graph: triangles, materials, colors, textures. | XML | Used by some manufacturers (notably Universal Robots) because it carries color without an extra file. |
+
+For the kinematic solver, the mesh format does not matter. **The solver never reads a mesh.** Meshes are for visualization — the `MeshLoader` reads them, the `KinematicDisplay` renders them. The solver's input is the *joint origins and axes*.
+
+## 1.7 A minimal 6R arm
+
+Here is the **minimal** URDF of a 6R arm — the smallest file that still has the full structure. It has no meshes, and its links are short, but it is not a simplification: it is the **bone** of a real industrial arm. Six revolute joints, fixed joints at the base and the flange, and a true root that is not `base_link`. The structure is exactly the one the solver will consume; only the flesh — the mesh geometry and the long link lengths — has been removed so the structure is visible at a glance.
+
+```xml
+<?xml version="1.0"?>
+<!-- A minimal 6R arm. Six revolute joints, with fixed joints at the base
+     and the flange, mirroring the structure of a real industrial arm. -->
+<robot name="minimal_6r_arm">
+
+  <!-- The root link: the ground. No parent joint. -->
+  <link name="world"/>
+
+  <!-- Fixed joint: mounts the arm to the world. Not part of the 6R chain. -->
+  <joint name="mount_joint" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0.1" rpy="0 0 0"/>
+  </joint>
+
+  <!-- base_link: the arm's mounting plate. -->
+  <link name="base_link"/>
+  <!-- A <visual> with a <mesh> would go here. Omitted for brevity. -->
+
+  <!-- Fixed joint: the base_inertia link, with a 180° rotation about Z.
+       This mirrors Universal Robots' URDFs, where the true kinematic
+       root is base_inertia, not base_link. -->
+  <joint name="base_inertia_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="base_inertia"/>
+    <origin xyz="0 0 0" rpy="0 0 3.14159"/>
+  </joint>
+
+  <!-- base_inertia: the true kinematic root — the parent link of the
+       first movable revolute joint. -->
+  <link name="base_inertia"/>
+
+  <!-- Joint 1: the first movable joint. Rotates about the vertical axis. -->
+  <joint name="joint_1" type="revolute">
+    <parent link="base_inertia"/>
+    <child link="link_1"/>
+    <origin xyz="0 0 0.15" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14159" upper="3.14159" effort="150" velocity="3.15"/>
+  </joint>
+
+  <link name="link_1"/>
+  <!-- A <visual> with a <mesh> would go here. -->
+
+  <!-- Joint 2: shoulder. Rotates about the horizontal Y axis. -->
+  <joint name="joint_2" type="revolute">
+    <parent link="link_1"/>
+    <child link="link_2"/>
+    <origin xyz="0.1 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-3.14159" upper="3.14159" effort="150" velocity="3.15"/>
+  </joint>
+
+  <link name="link_2"/>
+  <!-- A <visual> with a <mesh> would go here. -->
+
+  <!-- Joint 3: elbow. Parallel to joint 2 — the arm plane condition. -->
+  <joint name="joint_3" type="revolute">
+    <parent link="link_2"/>
+    <child link="link_3"/>
+    <origin xyz="0.5 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-3.14159" upper="3.14159" effort="100" velocity="3.15"/>
+  </joint>
+
+  <link name="link_3"/>
+  <!-- A <visual> with a <mesh> would go here. -->
+
+  <!-- Joint 4: wrist 1. Perpendicular to joint 3. -->
+  <joint name="joint_4" type="revolute">
+    <parent link="link_3"/>
+    <child link="link_4"/>
+    <origin xyz="0.4 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-3.14159" upper="3.14159" effort="50" velocity="3.15"/>
+  </joint>
+
+  <link name="link_4"/>
+  <!-- A <visual> with a <mesh> would go here. -->
+
+  <!-- Joint 5: wrist 2. Perpendicular to joint 4. -->
+  <joint name="joint_5" type="revolute">
+    <parent link="link_4"/>
+    <child link="link_5"/>
+    <origin xyz="0 0 0.1" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-3.14159" upper="3.14159" effort="50" velocity="3.15"/>
+  </joint>
+
+  <link name="link_5"/>
+  <!-- A <visual> with a <mesh> would go here. -->
+
+  <!-- Joint 6: wrist 3. Parallel to joint 4 — the tool roll. -->
+  <joint name="joint_6" type="revolute">
+    <parent link="link_5"/>
+    <child link="link_6"/>
+    <origin xyz="0 0 0.1" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-3.14159" upper="3.14159" effort="50" velocity="3.15"/>
+  </joint>
+
+  <link name="link_6"/>
+  <!-- A <visual> with a <mesh> would go here. -->
+
+  <!-- Fixed joint: the flange. The end of the 6R chain. -->
+  <joint name="flange_joint" type="fixed">
+    <parent link="link_6"/>
+    <child link="flange"/>
+    <origin xyz="0.05 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- flange: the tool mount link. Everything past this point is the tool,
+       which the solver never sees. -->
+  <link name="flange"/>
+
+</robot>
+```
+
+Read it against the concepts:
+
+- **The tree.** `world` is the root; its single child is `base_link` through the fixed `mount_joint`. `base_link` has one child, `base_inertia`, through the fixed `base_inertia_joint`. `base_inertia` is the **true kinematic root** — the parent of the first movable joint. From there the chain is `link_1` through `link_6`, connected by six revolute joints, then a fixed `flange_joint` to the `flange` link. Every link has exactly one parent. No cycles.
+- **The fixed joints.** There are three: `mount_joint`, `base_inertia_joint` (with a 180° rotation about Z), and `flange_joint`. None of them move. They define the boundary — the world below, the tool above.
+- **The true root.** `base_inertia` is not the first link in the file, and it is not the intuitive `base_link`. It is the parent of the first *movable* joint. The 180° rotation in `base_inertia_joint` means the entire arm chain is flipped relative to `base_link`. Using `base_link` as the kinematic root would produce wrong kinematics.
+- **The six movable joints.** `joint_1` through `joint_6` are `type="revolute"`. Each has an origin, an axis, and limits. The axes are arranged so that `joint_1` rotates about the vertical Z axis; `joint_2` and `joint_3` about the horizontal Y axis and are **parallel** — the arm-plane condition; `joint_4` about X, perpendicular to J3; `joint_5` about Y, perpendicular to J4; `joint_6` about X, parallel to J4 — the tool roll.
+- **The origins.** Each joint origin places the joint relative to its parent. These translations are the link geometry: the shoulder offset, the upper arm length (0.5 m, in `joint_3`'s origin), the forearm length (0.4 m, in `joint_4`'s origin), and the wrist offsets (0.1 m each, in `joint_5`'s and `joint_6`'s origins).
+- **The flange.** `flange_joint` is fixed, with origin `xyz="0.05 0 0"` — the flange sits 0.05 m past `link_6`. The solver's output is the pose of this frame; everything past it is the tool.
+- **The meshes.** Each link in a real file would carry a `<visual>` with a `<mesh>` reference. They are omitted here to keep the example small.
+
+A reader who can read this file can read any industrial arm's URDF. The real UR10 file has more links and more detail, but the structure is the same: a tree of links, connected by joints, with fixed joints at the base and the flange, exactly six movable revolute joints in between, and the true root one or two fixed joints below the first movable one.
+
+## 1.8 The limitation of this document
+
+This document is about **6R arms** — six-joint serial robots with revolute joints, of the class described in Part 9. Not every robot is a 6R arm:
+
+- **SCARA arms** have two parallel revolute joints and a prismatic joint. Different structure; different solver.
+- **Delta robots** have three parallel kinematic chains meeting at a common platform. Not a serial chain.
+- **Parallel robots** (Stewart platforms, etc.) have closed kinematic loops, not a tree.
+- **7-DOF redundant arms** have more than six joints; the solver's counting argument does not apply.
+- **Mobile robots** have a kinematic structure that is not a fixed-base arm.
+
+Hatch's analytical solver does not support these. The refusal is deliberate (Part 9, §9.1 Step 0). The URDF is general — it can describe any of these — but *our use of it* is specific to 6R arms.
+
+## 1.9 What we have, and what comes next
+
+We now know what a URDF contains: a tree of links, joints with origins and axes, meshes referenced by URI, a tree structure rooted at a single link.
+
+And we know what the URDF does *not* give us directly: the **geometric quantities** the solver needs. Those are *derived* from the joint origins and axes. They are not named in the URDF, and they are not the DH parameters.
+
+In the next part, we derive them. The direction of derivation is:
 
 > **URDF → geometric quantities → solver**
 
@@ -48,1042 +335,710 @@ not:
 
 > **URDF → DH table → solver**
 
-This matters because the first direction works for every robot the URDF can describe. The second direction works only for robots whose geometry fits the DH assumptions, and it fails silently when it does not.
-
-## 4. What We Will Use
-
-From the URDF, we will extract four geometric quantities for each joint pair:
-
-- **shift** — the distance along a joint axis to where the next joint attaches
-- **gap** — the distance between two consecutive joint axes
-- **twist** — the angle between two consecutive joint axes
-- **joint_angle** — the rotation of the joint itself (the variable we solve for)
-
-These four quantities are the same physical information DH encodes. We name them for what they are, not for the letters `d`, `a`, `α`, `θ`. The names tell the reader what the quantity *means*, and they make the derivation readable without a DH reference table.
-
-In the next part, we define each quantity geometrically.
+Part 2 begins the derivation.
 
 ---
 
-# Part II: The Four Geometric Quantities
+# Part 2 — Seeing the Robot
 
-## 5. The Question We Are Answering
+## 2.1 What a robot arm is made of
 
-Every joint in a serial arm rotates about a line — its **joint axis**. To describe the robot, we need to describe how each joint axis relates to the next one.
+A 6-DOF industrial arm is a chain of rigid bodies connected by joints. Each joint allows exactly one motion: rotation about a line. That line is the **joint axis**.
 
-Two lines in space are related by four numbers:
+The robot's geometry is the collection of these axes and the fixed relationships between them: where each axis sits in space relative to the previous axis, how it is oriented, how far along the axis the next joint attaches.
 
-- How far apart are they?
-- How are they rotated relative to each other?
-- Where along the first line does the second one attach?
-- How much has the joint rotated?
+Everything else — the meshes, the colors, the physical shape of the links — is decoration. **The kinematics is entirely captured by the axes.**
 
-These are the four quantities. We will name them for what they mean.
+## 2.2 What the URDF gives us
 
-## 6. The Four Quantities
+The URDF describes each joint with three pieces of information:
 
-### axis_gap
+- **The joint origin** (`xyz`, `rpy`): the position and orientation of the joint's frame relative to its parent.
+- **The joint axis** (`xyz`): the direction the joint rotates about, in the joint's own frame.
+- **The joint type** (`revolute`, `continuous`, `prismatic`, `fixed`).
 
-**How far apart are two consecutive joint axes?**
+For a revolute joint, this is complete. The origin tells us where the axis sits and how it is oriented; the axis tells us the direction of rotation; the type tells us the joint moves.
 
-The distance between two lines in space is measured along their **common perpendicular** — the shortest line segment connecting them. That segment's length is the `axis_gap`.
+**This is all the kinematics we need.** The URDF is not a description of a robot that *happens to include* kinematics — it *is* the kinematics, plus visual geometry.
 
-For a UR arm, the `axis_gap` between J2 and J3 is the distance between the shoulder axis and the elbow axis. The `axis_gap` between J3 and J4 is the distance between the elbow axis and the wrist-1 axis.
+## 2.3 The wrist
 
-### axis_twist
+The last three joints — J4, J5, J6 — form the wrist. Their geometry has a property that the rest of the arm does not: **J5 and J6 always intersect** (for the class of arms this document covers). Their intersection is a point — the **wrist center**, P5.
 
-**How are two consecutive joint axes rotated relative to each other?**
+This is what makes the wrist separable from the arm:
 
-Each joint axis is a line in space, and each line has a direction. The angle between the two directions is the `axis_twist`. It is measured about the common perpendicular, and it is signed — the sign tells you the direction of the twist.
+- **P5 is fixed by the flange pose.** Given the target flange pose, P5 is determined: it is the flange position offset by the flange's own length along the flange's Z axis. (Part 5, Step 1.)
+- **J4 may or may not pass through P5.** If it does, the wrist is *spherical*. If it does not, the wrist is *offset*.
+- **The offset is the quantity that varies.** In the spherical wrist, J4, J5, J6 all intersect at P5. In the offset wrist, J4's axis passes at a perpendicular distance from P5. That distance is the wrist's defining quantity.
 
-For a UR arm:
+**The document derives the general case — the offset wrist — and lets the spherical wrist fall out at offset zero.** The conventional derivation does the reverse (spherical first, offset as a complication); this document reverses it (§9.5).
 
-- Between J1 and J2, the `axis_twist` is 90° — the base axis is vertical, the shoulder axis is horizontal.
-- Between J2 and J3, the `axis_twist` is 0° — the shoulder and elbow axes are parallel. This is what makes the upper arm and forearm move in a single plane.
-- Between J4 and J5, the `axis_twist` is 90° — the forearm axis and the wrist axis are perpendicular.
+## 2.4 The three points
 
-### axis_shift
+The wrist geometry is captured by three points:
 
-**Where along the first joint axis does the common perpendicular meet it?**
+- **A** — the **wrist root**. The point where J4's axis meets the **arm plane** (the plane the upper arm and forearm sweep through). A is the end of the forearm; it is the point the arm chain must reach.
+- **B** — the **wrist's first bend**. The point where J4's axis meets J5's axis. B is on J4's axis, at the perpendicular distance from A that the wrist geometry requires.
+- **C = P5** — the **wrist center**. The point where J5's axis meets J6's axis. C is on J5's axis.
 
-The common perpendicular hits the first joint axis at a specific point. The distance from the joint's origin to that point is the `axis_shift`.
+These three points form a **right triangle at B**:
 
-For a UR arm:
+- **AB** is along J4's axis — **perpendicular** to the arm plane.
+- **BC** is along J5's axis — **parallel** to the arm plane (since J5 ⊥ J4, and J4 is normal to the plane).
+- **AC** is the hypotenuse — from the wrist root to the wrist center.
 
-- The `axis_shift` at J1 is the height from the base to the shoulder — the distance along the vertical axis to where the shoulder axis attaches.
-- The `axis_shift` at J4 is the **J4 wrist offset** — the distance along J4's axis to where P5 sits. This offset determines whether the wrist is *spherical* or *offset*. We will define both terms in Part III.
+The three sides are the three wrist quantities (Part 3). The right angle at B is what makes them a triangle.
 
-### joint_angle
+**When the wrist is spherical, A, B, and C coincide.** The triangle collapses to a point. But the triangle's *structure* — the right angle, the three sides, the hypotenuse — is still the structure of the geometry; it is just the structure at zero. **The spherical wrist is not a different geometry; it is the geometry at a limit.**
 
-**How much has the joint rotated?**
+## 2.5 Why we do not need DH
 
-This is the variable we solve for. It is the rotation of the joint about its own axis.
+The Denavit–Hartenberg convention compresses the relationship between two consecutive joint axes into four scalars, by assuming the frames are placed in a canonical way. The URDF gives us **more information than DH does**: each joint origin is a full 6-DOF transform. The compression is lossy, works only for the class DH was designed for, and is ambiguous when two consecutive axes are parallel.
 
-## 7. Why These Names
+Hatch does not build a DH table. It reads the joint origins and axes directly from the URDF and works with them. The geometric quantities that DH would encode are still useful — we will name them and use them — but they are *derived from* the URDF, not *substituted for* it.
 
-The classical names for these quantities describe the **link** — the rigid body between the joints. But the four quantities do not describe the link. They describe the **relationship between two joint axes**.
+The direction is:
 
-Consider the length of a link. A physical link is a solid object. If you pick it up and measure it, you measure from one end to the other. But the joint axes are not at the very ends of the link. They sit inside it, at the points where the "pin" of the joint passes through. The link extends a little past each axis — enough material to hold the pin, enough clearance to allow rotation.
+> **URDF → geometric quantities → solver**
 
-So the physical length of the link and the distance between its two joint axes are **different numbers**. The link is longer than the gap between the axes. Naming the distance between axes "link length" invites the reader to picture the wrong thing.
+not:
 
-The same applies to the twist. The physical link does not twist. The two **axes** are rotated relative to each other, and the link is the material that connects them.
+> **URDF → DH table → solver**
 
-Naming the quantities after the axes, not the links, is more accurate. It also makes the geometry visible: when you read `axis_gap`, you know it is a distance between axes; when you read `axis_twist`, you know it is an angle between axes.
-
-## 8. The Two Pairs
-
-The four quantities form two natural pairs:
-
-**The "shape" pair** — `axis_gap` and `axis_twist`:
-These describe how two consecutive axes are arranged relative to each other. Given the shape pair, you can picture the geometry of the joint pair: how far apart the axes are, and how they are rotated. These quantities are fixed by the robot's design; they do not change when the joint moves.
-
-**The "attachment" pair** — `axis_shift` and `joint_angle`:
-These describe where along the current axis the next joint attaches, and how much the current joint has rotated. Given the attachment pair, you can determine where the next joint sits in space. `axis_shift` is fixed; `joint_angle` is the variable.
-
-## 9. What the URDF Tells Us
-
-The URDF does not name these quantities. It describes each joint with a full 6-DOF origin transform and an axis direction. The four geometric quantities are **derived** from those:
-
-- `axis_gap` is the distance between the current joint's axis and the next joint's axis.
-- `axis_twist` is the angle between those two axis directions.
-- `axis_shift` is the position along the current joint's axis where the common perpendicular meets it.
-- `joint_angle` is the variable we solve for.
-
-The derivation from URDF to these quantities is geometric, not conventional. It does not require placing frames in a canonical way. It reads the geometry that is already there.
-
-This is why Hatch can support both UR-style and FR-style wrists with the same code: it never assumed a specific axis convention in the first place. It reads where the axes are, computes the four quantities, and proceeds.
-
-## 10. What the URDF Describes, and What the Four Quantities Describe
-
-The URDF tells us **what the robot looks like**. It says where each link is, where each joint sits, what shape each mesh has. It is a static description — a snapshot of the robot's geometry.
-
-The four quantities tell us **how the robot moves**. They describe the relationships between joint axes: how far apart the axes are, how they are rotated, where along each axis the next joint attaches. From these, we can compute where any link will be, given the joint angles. They are a kinematic model — a description of the robot's motion, not its appearance.
-
-Both are derived from the same URDF. But they serve different purposes. The URDF is what the robot *is*. The four quantities are what the robot *can do*.
-
-The rest of this document works with the four quantities, not the raw URDF. The derivation that follows is a derivation of motion.
-
-## 11. What Comes Next
-
-We now have the vocabulary. In the next part, we use it to see the wrist — and to see why the spherical wrist and the offset wrist are the same thing, with one quantity set to zero.
+The first direction works for every robot the URDF can describe. The second works only for robots whose geometry fits the DH assumptions, and it fails silently when it does not.
 
 ---
 
-# Part III: Working Backward from the Flange
+# Part 3 — The Five Geometric Quantities
 
-## 1. The Solver Boundary
+## 3.1 The question we are answering
 
-Before we solve anything, we must fix what we are solving for. The solver's input and output are entirely inside the **6R chain**: from the **true root** (the parent of the first movable revolute joint) to the **flange** (the tool mount link — the end of the fixed-joint chain that follows the last movable revolute joint). Everything before the true root — the world, the mounting, the pedestal — and everything after the flange — the tool itself, the TCP — is a fixed transform the user defines and the controller composes. The solver never sees it.
+Every joint in a serial arm rotates about a line — its **joint axis**. To describe the robot, we need to describe how each joint axis relates to the next.
 
-This is stated as a rule in `docs/CONSTITUTION.md` Part 3.5. In this document, it means:
+Two lines in space are related by four numbers: how far apart are they? how are they rotated relative to each other? where along the first line does the second one attach? how much has the joint rotated?
 
-- The pose we are given is the **flange pose in the true-root frame**.
-- The distance we will call `d₆` is the distance from the **wrist center P5** to the **flange**, measured along the flange's Z axis. It is not the distance to the TCP.
-- The quantities `d₆`, `wrist_offset`, `a₂`, `a₃`, `d₁` are all properties of the 6R chain, computed by the extraction layer from the URDF between the two boundaries.
+These are the four quantities. The wrist adds a fifth, because its axes do not all lie in a common plane the way the arm's do.
 
-## 2. Why Six Joints
+## 3.2 The four axis quantities
 
-When we use a robot arm, we want to place the flange at a specific position and with a specific orientation.
+For each consecutive pair of joint axes (i, i+1), for i = 1 to 5:
 
-**Position** is three numbers: where the flange is, along three independent directions.
+**`axis_gap(i)`** — **how far apart are two consecutive joint axes?** The distance between two lines in space is measured along their **common perpendicular** — the shortest line segment connecting them. That segment's length is `axis_gap(i)`.
 
-**Orientation** is three more numbers: how the flange is rotated, about three independent axes.
+For UR10: `axis_gap(2)` (J2 to J3) is 0.612 m, the upper arm length. `axis_gap(3)` (J3 to J4) is 0.5723 m.
 
-Together, that is **six numbers**. A flange pose has six degrees of freedom.
+**`axis_twist(i)`** — **how are two consecutive joint axes rotated relative to each other?** Each joint axis is a line with a direction. The angle between the two directions is `axis_twist(i)`. It is signed, and measured about the common perpendicular.
 
-To control six degrees of freedom, we need six joints. Each joint contributes one independent motion. With six joints, we can independently control all six numbers. With fewer, we cannot reach every pose. With more, we have redundancy — more joints than we need, which is a different problem.
+For UR10: `axis_twist(1)` (J1 to J2) is π/2 — the base axis is vertical, the shoulder axis horizontal. `axis_twist(2)` (J2 to J3) is 0 — the shoulder and elbow axes are parallel. `axis_twist(3)` (J3 to J4) is π/2.
 
-This is why industrial arms have six joints. It is not a convention. It is a counting argument.
+**`axis_shift(i)`** — **where along the first joint axis does the common perpendicular meet it?** The common perpendicular hits the first joint's axis at a specific point. The signed distance along that axis between the feet of the common perpendiculars with the previous and next axes is `axis_shift(i)`.
 
-## 3. The First Three Joints Reach a Point
+`axis_shift` is **origin-dependent**: it is measured from the joint's origin. For UR10, `axis_shift(3)` is 0.0, while `wrist_normal_offset` is 0.163941 — they are *not* the same quantity, and the solver uses `wrist_normal_offset` (see §3.4 and Appendix A).
 
-To reach a specific **position** — ignoring orientation for a moment — we need only three joints.
+**`joint_angle(i)`** — **how much has the joint rotated?** The rotation of the joint about its own axis. This is the variable we solve for.
 
-Think of your own arm. You can reach a point in front of you by:
+**Indexing.** The quantities are indexed **1-based**, matching the joint numbers: `axis_gap(2)` is the gap between J2 and J3. (The extraction code uses 0-based indexing; this is a bug to fix — see Appendix C.)
 
-- Rotating your body (the base joint)
-- Raising your upper arm (the shoulder joint)
-- Bending your elbow (the elbow joint)
+## 3.3 Why these names
 
-Three joints, three links, one point. The base rotates the whole arm. The shoulder and elbow position the hand in the vertical plane that the base has aimed.
+The classical names describe the **link** — the rigid body between the joints. But the quantities do not describe the link; they describe the relationship between two **joint axes**.
 
-Industrial arms work the same way. The first three joints — J1, J2, J3 — are arranged to reach any point within the arm's workspace. J1 rotates the arm plane. J2 and J3 position the end of the forearm within that plane.
+Consider the length of a link. A physical link is a solid object; if you measure it end to end, the joint axes are not at its very ends. The pin of each joint sits inside the link, with material past it. So the physical length of the link and the distance between its two joint axes are **different numbers**. Naming the distance between axes "link length" invites the reader to picture the wrong thing.
 
-The first three joints handle **position**.
+The same applies to the twist. The physical link does not twist. The two **axes** are rotated relative to each other, and the link is the material connecting them.
 
-## 4. Adding Orientation Changes the Problem
+Naming the quantities after the axes makes the geometry visible: `axis_gap` is a distance between axes; `axis_twist` is an angle between axes.
 
-If we only wanted to reach a point, three joints would be enough. But we need to reach a point *with a specific orientation*.
+## 3.4 The fifth quantity: `wrist_normal_offset`
 
-The orientation is set by the last three joints — the wrist. J4, J5, and J6 rotate the flange so that it points in the desired direction.
+The arm's four quantities describe how each axis relates to the next. The wrist needs a fifth, because J5's axis relates not to J4's axis alone, but to the **arm plane**.
 
-But here is the difficulty: **the wrist's job depends on where the arm has placed it.**
+**`wrist_normal_offset` = the perpendicular distance from the arm plane to J5's axis.**
 
-If the arm places the wrist at a different point, the wrist has to work differently to achieve the same flange orientation. Position and orientation are not independent — they are coupled through the wrist.
+This is the quantity the arm-chain derivation uses — for the θ₁ tangency (Part 5) and the θ₅ lateral offset (Part 6). It is computed from the axes as lines, not from the joint origins:
 
-This is why the problem is hard. If we could solve position first and orientation second, the solution would be simple. But the two are linked.
+- **B** = J4's axis ∩ J5's axis.
+- **`wrist_normal_offset` = |dot(B − J2's origin, n̂)|**, where `n̂` is J2's axis direction (normal to the arm plane).
 
-## 5. Solving in Reverse: Starting from the Flange
+**Why it is origin-independent.** B is an axis intersection — an invariant point. J2's origin is on the arm plane. The perpendicular distance from B to the plane is a geometric fact, independent of where any joint origin sits along its axis. This matters: UR and FR place J4's origin at opposite ends of the A–B segment, so any origin-derived computation would disagree between the two arms. The line-based computation does not.
 
-The way to untangle the coupling is to work **backward** from the flange.
+## 3.5 The right triangle at B
 
-The user specifies the flange pose. That is the input. Everything else follows from it.
+The fifth quantity is one side of the **right triangle A–B–C**, right-angled at B. The three sides are the three wrist quantities:
 
-**Step 1: The flange pose is given.** We know the position and orientation of the flange.
-
-**Step 2: The flange's relationship to J6 is fixed.** The flange is attached to the last joint with a fixed transformation — known from the URDF. So we can apply the inverse of that transformation to find J6's pose.
-
-**Step 3: J6's pose is now known.** We know both the position and the orientation of the last joint's frame.
-
-**Step 4: J5 and J6 intersect at a point.** Call it P5. The position of P5 can be found from J6's pose and the geometry of the wrist.
-
-This is the key: **the flange pose determines P5 completely.** P5 is fixed. It cannot move.
-
-## 6. The Wrist Root and the Wrist-1 Link
-
-Now we have P5 fixed. The question is: where is J4?
-
-J4 is the beginning of the wrist. It sits at the end of the forearm. We call its position the **wrist root**.
-
-Between J4 and P5, there is a rigid connection — the **wrist-1 link**. It connects the end of the forearm to the point where J5 and J6 intersect.
-
-The length of the wrist-1 link is the **J4 wrist offset** — the perpendicular distance from J4's axis to P5.
-
-## 7. The Circle
-
-P5 is fixed. The wrist-1 link has fixed length. It is rigid.
-
-So the only freedom left in the link is its **direction**. As J4 rotates, the link swings around P5. The far end of the link — the J4 end — traces a **circle**:
-
-- **Center**: P5
-- **Radius**: the J4 wrist offset, `wrist_offset`
-- **Plane**: perpendicular to J4's axis direction
-
-This circle is fixed. It does not change as we search for solutions. It is a property of the given flange pose.
-
-**The wrist root — the position of J4 — must lie on this circle.**
-
-## 8. The Spherical Wrist: When the Circle Has Radius Zero
-
-If `wrist_offset` is zero, the wrist-1 link has length zero. J4 and P5 are the **same point**.
-
-The circle has radius zero. It is not a circle at all — it is a single point.
-
-This is the **spherical wrist**: J4, J5, and J6 all intersect at P5. The wrist root and the wrist center are the same point.
-
-The spherical wrist is not a different design. It is the offset wrist with a zero-length wrist-1 link. The geometry is the same. The circle is just smaller.
-
-## 9. The Arm Plane
-
-Now consider the arm — J1, J2, and J3.
-
-The upper arm and forearm move in a single vertical plane. The reason is that J2 and J3 are parallel: the `axis_twist` between them is zero (or π — both mean parallel; the difference is whether the axes point the same way or opposite ways). Because they are parallel, the two links they connect sweep through a common plane.
-
-This plane is the **arm plane**. It contains:
-
-- The base axis (J1)
-- The upper arm
-- The forearm
-- **The wrist root (J4)**
-
-The last point is crucial. J4 sits at the end of the forearm, and the forearm moves within the arm plane. So **J4 must lie on the arm plane**.
-
-J1 rotates the arm plane about the base axis. The plane is not fixed; it is rotated by the `joint_angle` of J1. As J1 rotates, the plane sweeps around the base.
-
-## 10. The Constraint
-
-Now we have two facts:
-
-1. **J4 must lie on the circle** traced by the wrist-1 link.
-2. **J4 must lie on the arm plane.**
-
-Therefore: **the circle and the arm plane must meet at a point, and that point is J4.**
-
-This is the geometric heart of the solution. Everything else follows from it.
-
-## 11. Tangency, Not Crossing
-
-A circle and a plane can meet in three ways:
-
-| Relationship | Result |
-|---|---|
-| Plane too far from circle's center | No intersection |
-| Plane at distance exactly equal to radius | One point (tangency) |
-| Plane closer than radius | Two points (crossing) |
-
-Which case applies to our robot?
-
-The answer comes from the wrist-1 link itself. The link extends from J4 to P5 **along J4's axis direction** — which is perpendicular to the arm plane. The link has fixed length: the J4 wrist offset.
-
-So the perpendicular distance from P5 to the arm plane is exactly `wrist_offset` — the radius of the circle.
-
-That is the **tangency** case. The circle and the plane meet at exactly one point. That point is J4.
-
-**The arm plane must be tangent to the circle.**
-
-## 12. Two Solutions, from Two Tangent Planes
-
-The circle is fixed once the flange pose is fixed. The arm plane rotates about the base axis. For the arm to reach J4, the plane must be tangent to the circle.
-
-There are exactly **two** tangent planes:
-
-- One touching the circle on the near side — **shoulder left**
-- One touching the circle on the far side — **shoulder right**
-
-These correspond to the two solutions for J1's angle.
-
-When the circle has radius zero (spherical wrist), the tangency condition becomes trivial: any plane through P5 is tangent to the point. The two tangent planes become the two planes through P5 — one pointing toward it, one pointing away. These are still two solutions, and they still correspond to shoulder left and shoulder right.
-
-**The spherical wrist does not have fewer configurations than the offset wrist.** It has the same configuration structure. The difference is only in how the shoulder angle is computed — from tangency in the offset case, from projection in the spherical case.
-
-## 13. What Comes Next
-
-We have established the geometric foundation:
-
-- The flange pose determines P5 completely.
-- The wrist-1 link traces a circle around P5, of radius equal to the J4 wrist offset.
-- The wrist root — the position of J4 — must lie on this circle and on the arm plane.
-- The arm plane must be tangent to the circle.
-- There are two tangent planes — shoulder left and shoulder right — giving two solutions for J1.
-- The spherical wrist is the special case where the radius is zero.
-
-In the next part, we solve J1 precisely, using the tangent-line construction. Then we move to the remaining joints.
-
-## 14. What We Have Assumed
-
-The derivation in this part works for a specific class of arms. It is worth being explicit about which class, now that you have seen the derivation.
-
-**We assumed J2 and J3 are parallel.** Their `axis_twist` is zero or π. This is what makes the upper arm and forearm move in a single plane — what we called the arm plane. If J2 and J3 are not parallel, there is no arm plane, and the derivation does not apply.
-
-**We assumed J5 and J6 intersect.** They meet at a point, which we called P5. This is what gives the wrist a well-defined center. If J5 and J6 do not intersect, there is no P5, and the derivation does not apply.
-
-Most industrial arms are in this class. Not all. Some arms — particularly painting robots, welding robots, and some collaborative robots — use different arrangements for cable routing, safety, or structural reasons. These are not edge cases. They are different kinematic classes, and they require different solutions.
-
-If you are working with a robot that violates these assumptions, Hatch's analytical solver will refuse it. That refusal is deliberate. It is better to say "this robot is not in the class I can solve" than to produce a solution that is subtly wrong.
-
----
-
-# Part IV: Solving θ₁
-
-## 1. What We Need to Find
-
-In Part III, we established the geometric picture:
-
-- The flange pose determines P5 completely.
-- The wrist-1 link traces a circle around P5, of radius equal to `wrist_offset`.
-- The arm plane must be tangent to this circle.
-- The point of tangency is J4.
-
-Now we need to turn this picture into a number: **the angle of J1**.
-
-We will do this in three steps:
-
-1. Compute P5 from the flange pose.
-2. Find the two tangent planes to the circle.
-3. Read off the angle of J1 for each tangent plane.
-
-## 2. Computing P5
-
-The flange pose is given as a 4×4 transformation matrix. We need to find P5 — the point where J5 and J6 intersect.
-
-P5 is offset from the flange by the length of the last link, along the flange's Z axis. In matrix form:
-
-**p₅ = p_flange − d₆ · a**
-
-where:
-
-- **p_flange** is the position part of the flange pose (the fourth column of the transformation matrix)
-- **d₆** is the **flange offset** — the distance from P5 to the flange along the flange's Z axis
-- **a** is the **flange approach vector** — the direction the flange's Z axis points, which is the third column of the rotation part of the flange pose
-
-This is the same reverse transformation described in Part III, §5. The flange's pose relative to J6 is fixed; we undo it to find P5.
-
-**Note:** If the flange is mounted with a rotation relative to J6 (not just a translation), the full inverse transformation must be applied, not just a translation. The extraction layer handles this; for the derivation, the translation form is sufficient to see the geometry.
-
-## 3. The Arm Chain as a Planar Mechanism
-
-The arm chain — J2, J3, J4 — is a planar mechanism:
-
-- **J2** rotates the upper arm about an axis perpendicular to the plane.
-- **J3** rotates the forearm about an axis parallel to J2.
-- **J4** rotates the wrist about an axis parallel to J2 and J3.
-
-The upper arm has length **a₂** — the `axis_gap` between J2 and J3.
-
-The forearm has length **a₃** — the **distance from J3's axis to the wrist center P5**, measured in the arm plane.
-
-**This is not the same as `axis_gap(2)`.** The `axis_gap` between J3 and J4 is the perpendicular distance between their axes. For a spherical wrist, J3 and J4 may intersect (`axis_gap(2) = 0`), but the forearm is still nonzero — it extends from J3 to P5, which is the same point as J4 for a spherical wrist. For an offset wrist, J3 and J4 are separated by `axis_gap(2)`, and P5 is further offset from J4 by `wrist_offset`. The forearm length is the total distance from J3 to P5, which includes both contributions.
-
-The solver must compute **a₃** as the distance from J3's axis to P5, not as `axis_gap(2)`.
-
-The shoulder is at the origin of the arm plane — where J2's axis sits. The distance from the base to the shoulder, along the base axis, is `d₁`.
-
-So the planar problem is:
-
-> Given a target point **(u₅, w₅)** for P5, find the angles θ₂, θ₃, θ₄ of a three-link chain with link lengths a₂ (J2 to J3), a₃ (J3 to P5), and zero (the last "link" is the rotation at J4, which does not move P5).
-
-The third joint, J4, does not change P5's position — it only rotates the wrist about its own axis. So the **position** problem involves only J2 and J3. The **orientation** problem — determining θ₄ — comes afterward.
-
-## 4. The Circle in the Horizontal Plane
-
-In Part III, the circle was described in 3D: centered at P5, radius `wrist_offset`, in a plane perpendicular to J4's axis.
-
-For solving J1, it is easier to work with the circle's **projection** onto the horizontal plane. This projection is where the tangency condition becomes visible.
-
-Two facts about this projection:
-
-**Fact 1:** The center of the projected circle is at **(r, φ)** in polar coordinates. That is, the projected circle is centered at the horizontal projection of P5.
-
-**Fact 2:** The projected circle is a circle, not an ellipse, only in the special case where J4's axis is vertical. In general, the projection of a tilted circle is an ellipse.
-
-For now, we will work with the simplified case — the circle projects to a circle. We will handle the general case at the end of this part.
-
-The radius of the projected circle is still `wrist_offset`.
-
-So in the horizontal plane, we have:
-
-- A circle of radius **wrist_offset**, centered at **(r, φ)**.
-- The base axis, which is a point at the origin.
-
-## 5. The Tangent Lines
-
-The arm plane, viewed from above, is a **line** through the origin. It is rotated by the angle of J1.
-
-We need this line to be **tangent** to the circle.
-
-A line through the origin that is tangent to a circle centered at distance **r** with radius **wrist_offset** makes an angle **α** with the line from the origin to the circle's center, where:
-
-**sin α = wrist_offset / r**
-
-This comes from the right triangle formed by:
-
-- The origin
-- The circle's center
-- The tangent point
-
-The tangent from an external point to a circle makes this angle with the line to the center. This is a standard result in Euclidean geometry.
-
-Therefore:
-
-**α = arcsin(wrist_offset / r)**
-
-## 6. The Two Solutions for J1 (Offset Case)
-
-The line from the origin to the circle's center is at angle **φ**. The tangent line is offset from this by **α**.
-
-There are two tangent lines:
-
-- One rotated by **+α** from φ — **shoulder left**
-- One rotated by **−α** from φ — **shoulder right**
-
-So the two solutions for J1, when `wrist_offset > 0`, are:
-
-**θ₁_left  = φ + α**
-**θ₁_right = φ − α**
-
-Or, written out:
-
-**θ₁ = atan2(y₅, x₅) ± arcsin(wrist_offset / r)**
-
-## 7. The Reachability Condition
-
-The formula contains a reachability condition. If **r < wrist_offset**, then:
-
-**wrist_offset / r > 1**
-
-and the arcsine is undefined. No tangent line exists.
-
-Physically: if P5 is too close to the base axis, the circle surrounds the base axis entirely, and no line through the origin can be tangent to it. The arm cannot reach.
-
-**The wrist center must be at least `wrist_offset` from the base axis.**
-
-This is a real, physical constraint — and it is the reason a UR cannot reach points directly above its base in certain configurations.
-
-## 8. The Spherical Case: `wrist_offset = 0`
-
-When the wrist is spherical, the J4 wrist offset is zero. The circle has radius zero. It is a point.
-
-The angle **α** becomes:
-
-**α = arcsin(0 / r) = 0**
-
-And the two solutions from the tangent construction become:
-
-**θ₁ = φ + 0 = φ**
-**θ₁ = φ − 0 = φ**
-
-They coincide.
-
-This is the correct behavior for a spherical wrist: the two tangent lines collapse to a single line through P5's projection. There is only one J1 angle that points the arm plane *at* P5.
-
-But the spherical wrist still has **two shoulder solutions**. They do not come from the tangent angle — they come from the fact that the arm plane can point **toward** P5 or **away** from it.
-
-A line through the origin at angle **φ** passes through P5's projection. A line through the origin at angle **φ + π** also passes through P5's projection — because a line is infinite in both directions. Both lines satisfy the constraint that the arm plane contains P5's projection. They are different configurations of the arm:
-
-- **θ₁ = φ** — the arm plane points toward P5. The upper arm and forearm extend in the direction of P5.
-- **θ₁ = φ + π** — the arm plane points away from P5. The arm reaches "backward" to put J4 at P5's projection.
-
-These are the two shoulder solutions for the spherical case: **φ** and **φ + π**.
-
-The formula **φ ± arcsin(wrist_offset / r)** with `wrist_offset = 0` gives only φ, missing the "pointing away" solution. The solver must add the second solution explicitly for the spherical case.
-
-**This is not a special case in the algebra — it is a singularity in the limit.** As `wrist_offset → 0`, the two tangent lines of the offset case collapse to the single line θ₁ = φ. The "second" solution does not emerge from the tangent construction; it emerges from the symmetry of the line itself. The spherical case has an additional discrete symmetry — the arm plane can point either way — that is not present in the offset case (where the two tangent lines are genuinely distinct).
-
-**The solver must handle the spherical case separately.** When `wrist_offset` is below a tolerance (say 1e-6 m), the two shoulder solutions are **φ** and **φ + π**. When `wrist_offset` is above the tolerance, the two solutions are **φ ± α**.
-
-This is **a branch between two exact regimes**, not a fallback. Both branches are exact. The tolerance is a numerical threshold between them, chosen small enough that the spherical formula is correct for robots whose geometry is spherical, and the offset formula is correct for robots whose geometry is offset. It is not a graceful degradation, and it does not violate the constitution's prohibition on silent fallbacks (Part 7).
-
-**Joint limits must be checked modulo 2π.** The two solutions φ and φ + π differ by π, but both may be valid angles for J1 if the limits allow. The limit check must wrap the angle into the joint's range (or check both the angle and the angle ± 2π).
-
-## 9. The General Case: A Tilted Circle
-
-In the derivation above, we assumed that the circle projects to a circle in the horizontal plane. This is true only when J4's axis is vertical.
-
-In general, J4's axis is tilted, and the circle's projection is an **ellipse**. The tangency condition becomes a tangency-to-ellipse problem, which is more complex.
-
-There are two ways to handle this:
-
-**Option A: Work in a rotated frame.** If we rotate the coordinate system so that J4's axis is vertical, the circle projects to a circle in the new frame, and the derivation above applies. Then we transform the resulting θ₁ back to the original frame. This is the cleaner approach.
-
-**Option B: Work with the ellipse directly.** The tangency condition for an ellipse is a quadratic equation, and its solution is more involved. This is the approach used in the standard UR IK derivations.
-
-For this document, we present Option A, because it preserves the geometric clarity of the tangent-line construction. The rotation is a technical detail handled in the code.
-
-**However:** for the class of arms Hatch supports (J2 parallel to J3, J5 intersecting J6), J4's axis is always perpendicular to the arm plane by construction. The arm plane contains the base axis and J2's axis; J4's axis is perpendicular to both. So in the frame of the arm plane, J4's axis is always vertical *relative to the arm plane*, and the circle always projects to a circle *in that frame*. The tilt only matters when working in the base frame directly. The cleaner approach is to work in the arm-plane frame from the start, and Option B is not needed for the supported class.
-
-## 10. The Order of Computation
-
-We have now derived the formula for θ₁:
-
-**Offset case (`wrist_offset > tol`):**
-**θ₁ = atan2(y₅, x₅) ± arcsin(wrist_offset / r)**
-
-with the reachability condition **r ≥ wrist_offset**.
-
-**Spherical case (`wrist_offset ≤ tol`):**
-**θ₁ ∈ { φ, φ + π }** where **φ = atan2(y₅, x₅)**.
-
-The next steps, which will be covered in later parts, are:
-
-1. Solve θ₅ using the lateral position of the flange relative to the arm plane.
-2. Solve θ₃, θ₂ using the law of cosines in the arm plane.
-3. Solve θ₄ and θ₆ from the wrist orientation.
-
-The order matters: θ₁ must be solved first, because the remaining angles are defined relative to the arm plane that θ₁ determines.
-
-## 11. What Comes Next
-
-We have the first joint angle. In the next part, we will solve θ₅ — the wrist angle — using the same geometric picture. Once θ₁ and θ₅ are known, the remaining problem reduces to a planar one, and the last four angles follow from the law of cosines and the orientation constraints.
-
----
-
-# Part V: Solving θ₅
-
-## 1. What We Need to Find
-
-In Part IV, we found θ₁. We now know which vertical plane the arm lies in — the **arm plane**.
-
-The next joint to solve is **θ₅**, the second wrist joint. The reason we solve it before θ₂, θ₃, and θ₄ is that θ₅ is determined by the *position* of the flange, while θ₂, θ₃, and θ₄ require both position and orientation. Position information is available first, so we use it first.
-
-## 2. What θ₅ Controls
-
-J5 rotates about an axis that passes through P5 — the point where J5 and J6 intersect. This is true for both spherical and offset wrists: P5 is where J5 and J6 meet.
-
-The wrist-1 link connects J4 to P5. It has length equal to `wrist_offset` — the J4 wrist offset.
-
-The `axis_shift` at J5 — the distance from P5 to the next wrist joint along J5's axis — is **zero by construction** for the class of robots Hatch supports. J5 and J6 intersect at P5, and there is no offset between them along J5's axis.
-
-This is not the same quantity as the J4 wrist offset. The J4 wrist offset is the perpendicular distance from J4's axis to P5. It is nonzero for UR and FR robots and zero for the Elfin. It is the radius of the circle in the tangency condition. When this document says "wrist offset" without qualification, it means the **J4 wrist offset**. The J5 offset is always zero for the supported class.
-
-So P5 is *on* J5's axis. And it is also *on* J6's axis. J5 and J6 share this point.
-
-θ₅ rotates the link that connects P5 to the next frame — the flange frame. This link has length **d₆** — the **flange offset**, the distance from P5 to the flange along the flange's Z axis.
-
-## 3. The Lateral Offset from the Arm Plane
-
-Here is the key observation.
-
-In Part III, we established that P5 lies at perpendicular distance **wrist_offset** from the arm plane. This is the radius of the circle — the perpendicular offset that created the whole tangency problem.
-
-But `wrist_offset` is only the offset of P5 from the arm plane. What about the flange itself?
-
-The flange is offset from P5 by **d₆**, along the flange's Z axis. The flange's Z axis has some component **perpendicular to the arm plane**. This component, multiplied by d₆, gives the flange's additional lateral offset from the arm plane.
-
-So the flange's total lateral offset from the arm plane is:
-
-**offset_flange = σ · wrist_offset + d₆ · cos(θ₅)**
-
-The sign σ depends on which shoulder branch we are on (left or right). We will fix the sign convention in §6.
-
-## 4. Why cos(θ₅)?
-
-The angle θ₅ tilts the flange's Z axis relative to J5's axis. When θ₅ = 0, the flange's Z axis is aligned with the direction away from the forearm — and the flange sits at maximum distance from the arm plane, at offset `wrist_offset + d₆`.
-
-As θ₅ increases, the flange's Z axis tilts. The projection of the flange along the direction perpendicular to the arm plane decreases as **cos(θ₅)**. At θ₅ = π/2, the flange's Z axis is parallel to the arm plane, and the flange sits at offset exactly `wrist_offset` from the arm plane.
-
-At θ₅ = π, the flange's Z axis points back toward the arm plane, and the flange sits at offset `wrist_offset − d₆` from the arm plane.
-
-This is why the lateral offset from the arm plane is a function of cos(θ₅).
-
-## 5. Computing the Flange's Lateral Offset
-
-We know the flange position in the true-root frame. We know the arm plane — it was determined by θ₁ in Part IV.
-
-The flange's lateral offset from the arm plane is the component of the flange's position that is perpendicular to the arm plane.
-
-The arm plane contains the base Z axis and is rotated by θ₁ about it. Define the unit normal to the arm plane, pointing to the "left" of the arm plane (the direction from the arm plane toward the left-shoulder solution):
-
-**n̂ = (−sin θ₁, cos θ₁, 0)**
-
-A point **(x, y, z)** has signed perpendicular offset from the arm plane of:
-
-**o(p) = p · n̂ = −p_x · sin(θ₁) + p_y · cos(θ₁)**
-
-This is the signed distance from the point to the plane, measured in the direction perpendicular to the plane within the horizontal plane.
-
-Call the flange's offset **o_flange**. We can compute it directly from the flange position and θ₁.
-
-## 6. The Equation for θ₅
-
-Now we have two expressions for the flange's lateral offset from the arm plane:
-
-**From geometry:** o_flange = σ · wrist_offset + d₆ · cos(θ₅)
-
-where σ = +1 for the right-shoulder branch (P5 on the +n̂ side of the arm plane) and σ = −1 for the left-shoulder branch (P5 on the −n̂ side).
-
-**From computation:** o_flange = −x_flange · sin(θ₁) + y_flange · cos(θ₁)
-
-Equating them:
-
-**σ · wrist_offset + d₆ · cos(θ₅) = o_flange**
-
-Solving for cos(θ₅):
-
-**cos(θ₅) = (o_flange − σ · wrist_offset) / d₆**
-
-**This is the single, unambiguous formula.** The sign convention is fixed by the definitions above:
-
-- **σ = +1** for the right-shoulder branch, where P5 is on the +n̂ side of the arm plane.
-- **σ = −1** for the left-shoulder branch, where P5 is on the −n̂ side.
-
-The n̂ direction is `(−sin θ₁, cos θ₁, 0)`, fixed in §5.
-
-## 7. The Two Solutions for θ₅
-
-The equation cos(θ₅) = c has two solutions in the range [−π, π]:
-
-**θ₅ = ± arccos(c)**
-
-These correspond to the **wrist flip** and **wrist no-flip** configurations. The two values of θ₅ give the same flange position, because the flange's Z axis points in the same direction but the wrist is rotated differently.
-
-**Tag convention:** θ₅ = +arccos(c) is tagged **no-flip**. θ₅ = −arccos(c) is tagged **flip**. The code uses these tags to select by continuity.
-
-The reachability condition is:
-
-**|c| ≤ 1**
-
-that is:
-
-**|o_flange − σ · wrist_offset| ≤ d₆**
-
-If this condition is violated, no solution for θ₅ exists with the given θ₁ branch. The solver must try the other shoulder branch — but if the robot is in a valid configuration, at least one of the two shoulder branches will give a valid θ₅.
-
-## 8. The Special Case: d₆ = 0
-
-If the flange coincides with P5 — that is, the flange offset d₆ is zero — then the equation becomes:
-
-**σ · wrist_offset = o_flange**
-
-which is independent of θ₅. In this case, θ₅ cannot be determined from the position alone. Instead, θ₅ is determined from the **orientation** of the flange.
-
-The angle between the flange's Z axis and the arm plane's normal is exactly θ₅ (by the definition of J5, since the flange's Z axis is J6's axis, tilted by θ₅ out of the arm plane):
-
-**cos(θ₅) = a_flange · n̂ = −a_x · sin(θ₁) + a_y · cos(θ₁)**
-
-where **a_flange** is the flange's approach vector (the third column of R_flange).
-
-This is a **branch in the solver**, not a fallback. The branch condition is `d₆ > tol`: if true, solve θ₅ from position; if false, solve θ₅ from orientation. Both branches are exact. Both produce two solutions (`± arccos`).
-
-**No current test arm exercises this branch.** The three Tier 1 arms — UR10, FR5, and Elfin — all have nonzero flange offsets (0.0922, 0.1000, and 0.2000 m respectively, from the extraction). The branch is preserved for correctness: some industrial arms do have the flange coincident with the wrist centre, and the solver must handle them. But the test suite does not exercise it, and none of the worked examples in Part VII uses it.
-
-## 9. The Spherical Wrist Case
-
-For a spherical wrist, `wrist_offset = 0`. The equation becomes:
-
-**cos(θ₅) = o_flange / d₆**
-
-The geometry is simpler — there is no offset contribution from the wrist-1 link — but the formula is the same. The spherical case is not a special case of the algebra; it is the offset case with `wrist_offset = 0`.
-
-## 10. What Comes Next
-
-We now have θ₁ and θ₅. The remaining joints are θ₂, θ₃, and θ₄ (the arm chain) and **θ₆** (the flange roll).
-
-With θ₁ and θ₅ known, the problem becomes **planar**. The arm chain — J2, J3, J4 — moves entirely within the arm plane. We can project the problem onto that plane and solve for θ₂, θ₃, and θ₄ using the law of cosines and simple trigonometry.
-
-Then θ₆ is extracted from the orientation of the flange — once θ₁ through θ₅ are known, the only remaining degree of freedom is J6's rotation about its own axis.
-
-In the next part, we solve the arm chain.
-
----
-
-# Part VI: Solving the Arm Chain
-
-## 1. What We Need to Find
-
-We now have θ₁ and θ₅. The arm plane is fixed — θ₁ determined it. And the flange's lateral position is fixed — θ₅ accounted for it.
-
-What remains is the arm chain: **θ₂, θ₃, and θ₄**. These three joints move the wrist root — the position of J4 — within the arm plane.
-
-Because θ₁ and θ₅ are known, the problem has collapsed from 3D to **2D**. We are now solving a planar problem: place J4 at a specific point within a plane, using a three-joint chain whose joints rotate about parallel axes.
-
-This is the same problem your own arm solves when you reach for something in front of you — shoulder, elbow, and wrist roll, all moving within a single plane.
-
-## 2. Reducing the Problem to a Point
-
-Before solving the three joints, we need to know **where J4 must be** within the arm plane.
-
-We know P5 — the wrist center — from the flange pose. We know θ₅. And we know the wrist-1 link has length **wrist_offset**, extending from J4 to P5.
-
-The relationship between J4 and P5 is:
-
-**p_J4 = p_P5 − wrist_offset · ẑ₄**
-
-where **ẑ₄** is J4's axis direction — perpendicular to the arm plane, and whose orientation depends on θ₁ (not θ₅; J4's axis direction is determined by the arm plane, and the arm plane is determined by θ₁).
-
-So J4's position is determined once we know P5 and θ₁.
-
-In the arm plane, J4 sits at some 2D coordinates. Call them **(u₄, w₄)** — where u is the direction along the plane's horizontal projection, and w is the vertical direction. These are the coordinates we need to reach with the first three joints.
-
-## 3. The Arm Chain as a Planar Mechanism
-
-The arm chain — J2, J3, J4 — is a planar mechanism:
-
-- **J2** rotates the upper arm about an axis perpendicular to the plane.
-- **J3** rotates the forearm about an axis parallel to J2.
-- **J4** rotates the wrist about an axis parallel to J2 and J3.
-
-The upper arm has length **a₂** — the `axis_gap` between J2 and J3.
-
-The forearm has length **a₃** — the **distance from J3's axis to the wrist center P5**, measured in the arm plane. This is not `axis_gap(2)`. See Part IV §3 for the full statement of why.
-
-The shoulder is at the origin of the arm plane — where J2's axis sits. The distance from the base to the shoulder, along the base axis, is `d₁`.
-
-So the planar problem is:
-
-> Given a target point **(u₄, w₄)** for J4, find the angles θ₂, θ₃, θ₄ of a three-link chain with link lengths a₂, a₃, and zero (the last "link" is the rotation at J4, which does not move J4).
-
-The third joint, J4, does not change J4's position — it only rotates the wrist about its own axis. So the **position** problem involves only J2 and J3. The **orientation** problem — determining θ₄ — comes afterward.
-
-## 4. The Two-Link Position Problem
-
-For position, we only need J2 and J3.
-
-Define the coordinates within the arm plane:
-
-- **u** — the horizontal direction along the plane
-- **w** — the vertical direction (parallel to the base axis)
-
-The shoulder sits at **(0, d₁)** in these coordinates.
-
-J4's target is at **(u₄, w₄)**.
-
-The vector from the shoulder to J4's target is:
-
-**Δu = u₄ − 0 = u₄**
-**Δw = w₄ − d₁**
-
-The distance is:
-
-**D = √(Δu² + Δw²)**
-
-## 5. The Law of Cosines for θ₃
-
-The elbow angle θ₃ is determined by the law of cosines. The triangle has:
-
-- Side **a₂** — the upper arm
-- Side **a₃** — the forearm
-- Side **D** — the distance from shoulder to J4's target
-
-The angle at the elbow — the interior angle between the two links — satisfies:
-
-**D² = a₂² + a₃² − 2 · a₂ · a₃ · cos(θ₃)**
-
-Solving for cos(θ₃):
-
-**cos(θ₃) = (a₂² + a₃² − D²) / (2 · a₂ · a₃)**
-
-Then:
-
-**θ₃ = ± arccos[(a₂² + a₃² − D²) / (2 · a₂ · a₃)]**
-
-The two signs correspond to **elbow up** and **elbow down** — the two ways the forearm can reach the same target point. Tag convention: θ₃ = +arccos(...) is **elbow-up**, θ₃ = −arccos(...) is **elbow-down**.
-
-**Reachability condition:** |D − a₂| ≤ a₃ ≤ D + a₂. Equivalently, the target must be within the workspace of the two-link chain. If not, no solution exists.
-
-## 6. The Law of Sines for θ₂
-
-Once θ₃ is known, θ₂ follows from the angle of the vector from shoulder to target.
-
-Let:
-
-**ψ = atan2(Δw, Δu)**
-
-This is the angle of the line from shoulder to target, measured from the horizontal direction within the arm plane.
-
-The angle between the upper arm and this line is:
-
-**β = arcsin(a₃ · sin(θ₃) / D)**
-
-This comes from the law of sines in the same triangle.
-
-Then:
-
-**θ₂ = ψ − β · sign(θ₃)**
-
-**Sign convention note:** The exact form depends on how θ₂ is defined relative to the reference direction, and how θ₃ is defined (positive = elbow-up or elbow-down). The code's convention is authoritative; the formula above is one consistent choice. For the Elfin, whose `axis_twist[1] = π` rather than 0, the sign of θ₂ must respect the antiparallel J2/J3 relationship; the code handles this from the axis directions directly.
-
-## 7. θ₄ from Orientation
-
-We now have θ₂ and θ₃. Together with θ₁ and θ₅ (from Parts IV and V), we know where every joint is positioned — except θ₄ and θ₆.
-
-θ₄ is the wrist roll — the rotation of the wrist about the forearm's axis. It does not affect the position of anything; it only affects the orientation of the wrist.
-
-To find θ₄, we use the **known orientation of the flange** and work backward.
-
-The orientation of the flange is the product of rotations from J1 through J6:
-
-**R_flange = R₁(θ₁) · R₂(θ₂) · R₃(θ₃) · R₄(θ₄) · R₅(θ₅) · R₆(θ₆)**
-
-With θ₁, θ₂, θ₃, θ₅ known, and R_flange known from the input, we can solve for θ₄ and θ₆. The standard approach is to **isolate the wrist subchain** — the product R₄ · R₅ · R₆ — and solve for θ₄ and θ₆ from its entries.
-
-The exact formulas depend on the geometry. We present them for the structure used by UR, FR, and Elfin robots — where the wrist is a Z-Y-Z rotation in the frame of the forearm.
-
-## 8. The Z-Y-Z Wrist
-
-In UR, FR, and Elfin robots, the wrist is a **Z-Y-Z rotation** — θ₄ rotates about Z, θ₅ about Y, and θ₆ about Z again, all in the frame of the forearm.
-
-Define **R₀₃** as the rotation from the true-root frame to the frame after applying θ₁, θ₂, θ₃:
-
-**R₀₃ = R(a₁, θ₁) · R(a₂, θ₂) · R(a₃, θ₃)**
-
-where **aᵢ** is the direction of joint `i`'s axis in the true-root frame (available from `ArmGeometry.axes[i].direction`), and **R(a, θ)** is the Rodrigues rotation about `a` by `θ`. This definition is convention-independent: it uses the actual URDF axis directions, not canonical frame choices.
-
-**Claim:** For an arm in the supported class, `R_wrist = R₀₃ᵀ · R_flange` has the form `R_z(θ₄) · R_y(θ₅) · R_z(θ₆)` in the frame whose Z axis is J4's direction.
-
-**Proof sketch:** J4's axis is perpendicular to J5's axis, which is perpendicular to J6's axis, and J4 and J6 are parallel (for the supported class, both are perpendicular to the arm plane). The composition of rotations about these three axes, starting and ending with rotations about parallel axes, is a Z-Y-Z rotation. ∎
-
-So we can write:
-
-**R_wrist = R_z(θ₄) · R_y(θ₅) · R_z(θ₆)**
-
-Given R_wrist, and using the **known** θ₅ from Part V, we extract θ₄ and θ₆ directly:
-
-**θ₄ = atan2(R_wrist[1,2] / sin θ₅, R_wrist[0,2] / sin θ₅)**
-**θ₆ = atan2(R_wrist[2,1] / sin θ₅, −R_wrist[2,0] / sin θ₅)**
-
-Since θ₅ is already known from Step 3 of the algorithm (Part VII §1), we do not re-extract it. We use the known value, which is consistent with the branch we selected.
-
-This is the cleaner form: the wrist decomposition is consistent with the θ₅ already chosen.
-
-## 9. The Wrist Singularity
-
-When θ₅ = 0 or π, the axes of J4 and J6 become parallel. This is the **wrist singularity** — the wrist has lost a degree of freedom, and θ₄ and θ₆ are no longer independent. Only their sum (or difference) is determined by the orientation.
-
-The standard approach:
-
-- Set θ₄ to a convenient value (usually its current value, to maintain continuity).
-- Solve for θ₆ from the remaining matrix entries.
-
-The code does this with a check on sin(θ₅): if it is near zero, the solver picks a convention (like θ₄ = 0) and proceeds. The user should be aware that the choice of θ₄ in this case is arbitrary — the flange achieves the correct orientation regardless, but θ₄ may not match the robot's previous state.
-
-## 10. The Full Solution Set
-
-Combining all the choices:
-
-| Level | Choice | Tag values | Options |
+| Symbol | Name | What it is | Role |
 |---|---|---|---|
-| Shoulder | Which tangent plane (or which direction for spherical) | `left`, `right` | 2 |
-| Elbow | Up or down | `up`, `down` | 2 |
-| Wrist | Flip or no-flip | `flip`, `no-flip` | 2 |
-| **Total** | | | **Up to 8** |
+| `\|AB\|` | **`wrist_normal_offset`** | Perpendicular distance from the arm plane to J5's axis. AB is normal to the arm plane. | **θ₁ tangency, θ₅ lateral offset** |
+| `\|BC\|` | **`wrist_radial_offset`** | Perpendicular distance from C to J4's axis. BC is parallel to the arm plane, in the plane through B at distance `\|AB\|` from the arm plane. | Wrist inversion geometry |
+| `\|AC\|` | **`wrist_offset`** | The hypotenuse: `√(\|AB\|² + \|BC\|²)`. Distance from wrist root A to wrist center C. | Arm-chain target distance (`a₃` in conventional notation) |
 
-Each combination gives a distinct joint vector (θ₁, θ₂, θ₃, θ₄, θ₅, θ₆), and each vector places the flange at the same pose.
+**The solver's scalar inputs are `|AB|`, `flange_offset`, `axis_gap(2)`, and `elbow_to_wrist`. The other two sides of the triangle — `|BC|` and `|AC|` — are derived quantities.** They are stated here because they make the geometry visible (the triangle, the right angle at B, the spherical case as all three going to zero), and because the wrist inversion's origins encode the same information. But the solver does not take `|BC|` or `|AC|` as scalars.
 
-For the spherical wrist, the situation is the same — up to 8 configurations — but the "shoulder" tag values are computed differently, as discussed in Part IV §8.
+**All three are zero for a spherical wrist.** They are distinct quantities, and the solver uses each for a different part of the derivation. The conventional term "wrist offset" is ambiguous — it is used sometimes for `|BC|` and sometimes for `|AC|`. This document names all three explicitly.
 
-## 11. Selection by Continuity, Not Proximity
+## 3.6 The derived lengths
 
-The solver returns **all valid solutions, tagged with their branch**. It does not select one silently.
+Two lengths the arm chain uses are not among the five quantities, and are not `axis_gap` of anything. They are geometric distances involving a **point** (an axis intersection or an origin), not two axes:
 
-Each solution carries three tags:
+**`elbow_to_wrist`** — the distance from J3's axis to A (the wrist root). This is the "forearm length" in the law of cosines (Part 7). It is **not** `axis_gap(3)` (the J3–J4 perpendicular distance), and it is **not** the physical forearm link length. It is the distance the arm chain must span with its forearm.
 
-- **shoulder**: `left` or `right`
-- **elbow**: `up` or `down`
-- **wrist**: `flip` or `no-flip`
+**`flange_offset`** — the distance from P5 to the flange along the flange's Z axis. This is `d₆` in the conventional notation. It is the offset the flange carries beyond the wrist center.
 
-The caller selects by **continuity** — preferring the solution whose branch tags match the current configuration. This is the only safe selection criterion for multi-waypoint motion: it keeps the arm in the same kinematic branch across waypoints, preventing the arm from swinging through space to reach a different branch.
+The law of cosines uses `axis_gap(2)` (the upper arm, J2 to J3) and `elbow_to_wrist` (the forearm, J3 to A). The θ₅ formula uses `flange_offset`.
 
-Proximity — choosing the solution with the smallest joint-space distance — is a **fallback**, not the primary criterion. It can select a solution in a different branch if that branch happens to be closer in joint space, which is exactly the unsafe behavior the branch tagging is designed to prevent.
+## 3.7 What the five quantities describe — and what they do not
 
-**Why tagging matters.** A solver returning one untagged solution cannot support safe multi-waypoint motion for 6-DOF arms. The caller has no way to know whether the solution it received is in the same branch as the previous waypoint's solution. If it is not, the arm will move through a different configuration, possibly crossing a singularity or exceeding a joint limit along the way. Tagging makes the branch structure explicit, and continuity-based selection keeps the motion safe.
+The five quantities describe the **class of arms this document covers**: arm-plane 6R arms with intersecting wrist axes. They plus the URDF's joint origin transforms are a complete kinematic description of that class.
 
-This is the design lesson that Hatch's solver encodes: the branch is not a property of a solution in isolation, but of the *relationship* between consecutive solutions. Returning tags is what makes the relationship expressible.
+They do **not** describe every 6R arm. For an arm outside the class — skew J2/J3, non-intersecting J5/J6 — the five quantities are not sufficient, and the solver refuses (Part 9, Step 0). The refusal is honest: the five quantities are not claimed to be universal.
 
-## 12. What Comes Next
+**They are not a replacement for the URDF.** They are a *selection* from the URDF — the geometric quantities the derivation needs, named for what they mean. The solver still reads the URDF's origins for the wrist inversion (Part 8) and for the class check. Principle #4 is not violated; the five quantities are derived from the URDF, not substituted for it.
 
-We have now derived all six joint angles:
-
-- θ₁ from the tangency condition (Part IV)
-- θ₅ from the lateral position of the flange (Part V)
-- θ₂, θ₃ from the law of cosines in the arm plane (Part VI, §5–6)
-- θ₄ from the wrist orientation (Part VI, §8)
-- θ₆ from the wrist orientation (Part VI, §8)
-
-The next part presents the complete algorithm — the order of computation and the handling of special cases — and worked examples on real robots.
+**DH is not needed and not used.** The five quantities are not DH parameters under different names — they are geometric quantities. `wrist_normal_offset` in particular is not a DH parameter at all; DH's `d₄` happens to equal it for these arms, but that is a frame-placement coincidence (Appendix A).
 
 ---
 
-# Part VII: The Full Algorithm and Worked Examples
+# Part 4 — The Wrist Root and the Arm Plane
 
-## 1. The Algorithm, Stated as a Sequence
+## 4.1 The arm plane
 
-We have the geometric picture (Parts I–III), the derivation for θ₁ (Part IV), θ₅ (Part V), and the arm chain (Part VI). Now we state the algorithm as a sequence of steps — the order in which a computer would execute it.
+The **arm plane** is the plane containing the origins of J2 and J3 — the plane the upper arm and forearm sweep through as J2 and J3 rotate. It is **normal** to J2's axis direction (and to J3's, and to J4's, when they are parallel to J2).
+
+The plane also contains J1's axis (vertical), and rotates about it as θ₁ changes. **θ₁ determines the arm plane's azimuth.**
+
+## 4.2 The wrist root A
+
+**A is the point where J4's axis meets the arm plane.** This is the end of the forearm — the point the two-link arm chain must reach.
+
+The unified computation of A, valid for both offset and spherical wrists:
+
+- **B** = J4's axis ∩ J5's axis.
+- **A = B − dot(B − J2_origin, n̂) · n̂**, where `n̂` is the arm plane's normal (J2's axis direction).
+
+For the offset wrist, B is at perpendicular distance `wrist_normal_offset` from the arm plane, and A is the projection of B onto the plane. For the spherical wrist, B is on the plane, and **A = B = P5**.
+
+**No `intersect_plane` call, no branch.** The projection of B onto the plane is well-defined for every arm in the class, whether J4's axis pierces the plane or lies in it.
+
+## 4.3 `|AP5|` — the quantity that collapses
+
+The distance from A to P5:
+
+```
+|AP5| = √(|AB|² + |BC|²) = √(wrist_normal_offset² + wrist_radial_offset²)
+```
+
+- For the offset wrist: A and P5 are distinct, and `|AP5|` is the length of the hypotenuse.
+- For the spherical wrist: A = B = C, and `|AP5| = 0`.
+
+`|AP5|` is **the quantity that collapses to zero for the spherical wrist**. The arm chain reaches A; the wrist begins at A; the distance from A to P5 is the wrist's offset from its root. At zero, the wrist root and the wrist center coincide.
+
+## 4.4 The spherical case
+
+When `wrist_normal_offset = 0` and `wrist_radial_offset = 0`:
+
+- A = B = C = P5.
+- `|AP5| = 0`.
+- The wrist triangle collapses to a point.
+
+**The formulas of Parts 5–8 remain valid.** They degenerate to the spherical case as the geometry requires: the tangency radius goes to zero, the lateral offset loses its wrist contribution, the arm-chain target becomes P5 itself, and the wrist inversion's origins become identity. **The spherical case is the value at zero, not a branch.**
+
+## 4.5 The class condition for the arm chain
+
+The projection argument for θ₁ (Part 5) requires the perpendicular direction between the arm plane and the J5-plane to be **horizontal** — so that the X-Y projection preserves `|AB|`.
+
+- **When `wrist_normal_offset > 0`:** J4's axis must be horizontal. (The perpendicular direction between the arm plane and the J5-plane is J4's axis.)
+- **When `wrist_normal_offset = 0`:** no condition — P5 is on the arm plane, the distance is zero, and zero is preserved by any projection.
+
+This is a **conditional class condition**, checked at extraction time (Part 9, Step 0). For the three arms:
+
+| Arm | `wrist_normal_offset` | J4 direction | Condition |
+|---|---|---|---|
+| UR10 | 0.163941 | `(0, −1, 0)` — horizontal | ✓ |
+| FR5 | 0.102100 | `(0, −1, −4e-6)` — horizontal | ✓ |
+| Elfin | 0 | `(0, 0, 1)` — vertical, but offset is zero | ✓ |
+
+---
+
+# Part 5 — Solving θ₁
+
+## 5.1 What we need to find
+
+θ₁ is the rotation of the base joint. It determines the **arm plane's azimuth** — the vertical plane through the base axis in which the upper arm and forearm move. Everything after θ₁ is expressed relative to this plane, so θ₁ must be solved first.
+
+The geometry is entirely in the **top view**: the X-Y plane of the true-root frame, looking down J1's axis. In the top view, the arm plane is a line through the origin, and θ₁ is the angle of that line.
+
+## 5.2 The line and the circle
+
+In the top view:
+
+- **The arm plane is a line through the origin**, at azimuth θ₁. The azimuth is measured from the J1 frame's X axis, with `φ₀` as the zero reference — the azimuth of the J1 frame's X axis in the true-root frame (`φ₀ = 0` for UR10, FR5, and Elfin).
+- **P5 projects to a point** at `(x₅, y₅)`. Let `r = √(x₅² + y₅²)` and `φ = atan2(y₅, x₅)`.
+- **The perpendicular distance from P5's projection to the arm-plane line must equal `|AB| = wrist_normal_offset`.**
+
+**Why `|AB|`?** P5 lies in the J5-axis plane, which is parallel to the arm plane. The perpendicular distance between the two planes is `|AB|` — the distance from the arm plane to B, measured along J4's axis. When `|AB| > 0`, J4's axis is horizontal (the class condition, Part 4.5), so the perpendicular direction is horizontal, and the X-Y projection preserves the distance: the perpendicular distance from P5's projection to the arm-plane line in the top view is also `|AB|`. When `|AB| = 0`, P5 is on the arm plane, and the distance is zero — preserved trivially.
+
+## 5.3 The tangent condition
+
+The arm-plane line through the origin must be at perpendicular distance `|AB|` from P5's projection. This is the tangency condition: **the line through the origin is tangent to a circle of radius `|AB|` centered at P5's projection.**
+
+At the tangent point, the radius (from P5's projection to the tangent point) is perpendicular to the tangent line (the arm plane). This gives a right triangle with the origin, the tangent point, and P5's projection as vertices, right-angled at the tangent point. Its hypotenuse is `r`; the side opposite the angle at the origin is `|AB|`. So:
+
+```
+sin(α) = |AB| / r
+α = arcsin(|AB| / r)
+```
+
+where `α` is the angle between the line from the origin to P5's projection and the tangent line (the arm plane).
+
+## 5.4 The two tangent lines
+
+The line from the origin to P5's projection is at azimuth `φ`. The tangent line is offset from it by `α`. There are two tangent lines:
+
+- One rotated by `+α` from `φ` — **shoulder left** (`σ = −1`).
+- One rotated by `−α` from `φ` — **shoulder right** (`σ = +1`).
+
+The sign convention: `σ = +1` for the right-shoulder branch (P5 on the +n̂ side of the arm plane), `σ = −1` for the left-shoulder branch, where `n̂ = (−sin θ₁, cos θ₁, 0)` is the arm plane's normal.
+
+## 5.5 The line-symmetry branch
+
+A line through the origin at azimuth `θ` is the same line as one at `θ + π`. The tangency condition is satisfied by two **lines**, each of which can be traversed in two directions. So the full solution set is:
+
+```
+θ₁ ∈ { a1_sign · (φ − φ₀) ± α,  a1_sign · (φ − φ₀) ± α + π }
+```
+
+where `a1_sign = +1` if J1's axis points up in the true-root frame, `−1` if down (`+1` for all three arms). The `+π` solutions are the arm plane pointing in the opposite direction — the arm reaches toward P5 or away from it. Both are valid configurations, and both must be returned.
+
+## 5.6 The reachability condition
+
+If `r < |AB|`, then `|AB| / r > 1` and `α` is undefined. No tangent line exists — the circle surrounds the base axis entirely, and the arm cannot reach. **The reachability condition is `r ≥ |AB|`.** When `|AB| = 0`, the condition is `r ≥ 0`, always satisfied.
+
+## 5.7 The spherical case
+
+When `wrist_normal_offset = 0`, `α = 0`. The formula gives:
+
+```
+θ₁ ∈ { a1_sign · (φ − φ₀),  a1_sign · (φ − φ₀) + π }
+```
+
+These are the two shoulder solutions for the spherical wrist: the arm plane points toward P5 or away from it. **No branch — the general formula at `|AB| = 0`.**
+
+## 5.8 The formula
+
+```
+P5 = P_flange − flange_offset · a_flange
+r  = √(x₅² + y₅²)
+φ  = atan2(y₅, x₅)
+
+if r < wrist_normal_offset: no solution on this arm
+α = arcsin(wrist_normal_offset / r)
+
+θ₁ ∈ { a1_sign · (φ − φ₀) ± α,  a1_sign · (φ − φ₀) ± α + π }
+```
+
+with `wrist_normal_offset = |AB|` from the extraction, and `φ₀`, `a1_sign` as properties of the true-root frame.
+
+---
+
+# Part 6 — Solving θ₅
+
+## 6.1 What we need to find
+
+θ₅ is the second wrist joint. It rotates the flange about J5's axis. After θ₁, the arm plane is fixed; θ₅ determines how far the flange tilts away from J5's axis. It is solved after θ₁ and before θ₂ and θ₃ because θ₅ is determined by the **position** of the flange's lateral offset from the arm plane — position information that is available before the full arm chain is solved.
+
+## 6.2 The two contributions to the flange's lateral offset
+
+The arm plane's normal, pointing left of the plane's direction, is `n̂ = (−sin θ₁, cos θ₁, 0)`. A point `p` has signed offset from the arm plane:
+
+```
+o(p) = dot(p − origin, n̂)
+```
+
+The flange's signed offset has two contributions:
+
+**The wrist contribution.** P5 is at perpendicular distance `|AB|` from the arm plane, on the side selected by the shoulder branch. With `σ = +1` for right shoulder and `σ = −1` for left shoulder, the wrist contributes `σ · |AB|`.
+
+**The flange contribution.** The flange is offset from P5 by `flange_offset` along the flange's Z axis. The flange's Z axis is J6's axis, tilted from J5's axis by θ₅. Its component perpendicular to the arm plane is `flange_offset · cos(θ₅)`.
+
+**The total:**
+
+```
+o_flange = σ · wrist_normal_offset + flange_offset · cos(θ₅)
+```
+
+where `o_flange = −x_flange · sin θ₁ + y_flange · cos θ₁`.
+
+## 6.3 Solving for θ₅
+
+Equating the two expressions and solving:
+
+```
+cos(θ₅) = (o_flange − σ · wrist_normal_offset) / flange_offset
+```
+
+**Reachability condition:** `|o_flange − σ · wrist_normal_offset| ≤ flange_offset`.
+
+**Two solutions:** `θ₅ = ± arccos(...)` — **no-flip** (`+`) and **flip** (`−`). Both produce the same flange position; they differ in how the wrist is rotated about J5's axis.
+
+## 6.4 The `flange_offset = 0` case
+
+If `flange_offset = 0` — the flange coincides with P5 — the position equation gives `σ · wrist_normal_offset = o_flange`, independent of θ₅. Then θ₅ is determined from the flange's **orientation**:
+
+```
+cos(θ₅) = dot(a_flange, n̂) = −a_x · sin θ₁ + a_y · cos θ₁
+```
+
+where `a_flange` is the flange's approach vector (the third column of `R_flange`). Two solutions: `± arccos(...)`, same tag convention. **This is a branch in the solver, not a fallback** — both the position-determined and orientation-determined forms are exact, and the condition is `flange_offset > tolerance`.
+
+## 6.5 The spherical case
+
+When `wrist_normal_offset = 0`:
+
+```
+cos(θ₅) = o_flange / flange_offset
+```
+
+Same formula, at `|AB| = 0`. **No branch.**
+
+## 6.6 The formula
+
+```
+o_flange = −x_flange · sin θ₁ + y_flange · cos θ₁
+
+if flange_offset > tol:
+    c = (o_flange − σ · wrist_normal_offset) / flange_offset
+    if |c| > 1: no solution on this branch
+    θ₅ ∈ { +arccos(c) (no-flip),  −arccos(c) (flip) }
+
+if flange_offset ≤ tol:
+    c = −a_x · sin θ₁ + a_y · cos θ₁
+    if |c| > 1: no solution
+    θ₅ ∈ { +arccos(c) (no-flip),  −arccos(c) (flip) }
+```
+
+---
+
+# Part 7 — Solving θ₂ and θ₃
+
+## 7.1 What we need to find
+
+We now have θ₁ and θ₅. The arm plane is fixed; the flange's lateral position is accounted for. The remaining arm-chain problem is **2D**: place the wrist root A at a specific point **within the arm plane**, using the upper arm (J2) and forearm (J3).
+
+## 7.2 The wrist root A
+
+A is the point where J4's axis meets the arm plane. It is computed from B (J4 ∩ J5) by projection onto the arm plane along the plane's normal:
+
+```
+A = B − dot(B − J2_origin, n̂_plane) · n̂_plane
+```
+
+where `n̂_plane = axes[2].direction` (J2's direction, normalized) is the arm plane's normal. For the offset wrist, B is at distance `wrist_normal_offset` from the plane, and A is the projection. For the spherical wrist, B is on the plane, and A = B = P5.
+
+**A is the wrist root.** The arm chain reaches A; the wrist begins at A.
+
+## 7.3 The two-link problem
+
+Within the arm plane, with the shoulder at J2's origin:
+
+- **Shoulder point:** J2's origin.
+- **Target point:** A.
+- **Upper arm length:** `axis_gap(2)` — the perpendicular distance between J2's axis and J3's axis. (1-based index: `axis_gap(2)` is the gap between J2 and J3.)
+- **Forearm length:** `elbow_to_wrist` — the distance from J3's axis to A, `|A − J3_origin|`.
+
+Compute the vector from the shoulder to A, in the arm plane:
+
+```
+Δu = dot(A − J2_origin, ê_u)
+Δw = dot(A − J2_origin, ê_w)
+D² = Δu² + Δw²
+D  = √D²
+```
+
+where `ê_u`, `ê_w` are two orthogonal unit vectors spanning the arm plane. Concretely, `ê_w` can be J1's axis direction — the vertical direction within the plane — and `ê_u = cross(ê_w, n̂_plane)` the horizontal direction within the plane.
+
+## 7.4 Law of cosines for θ₃
+
+The triangle has sides `axis_gap(2)` (upper arm), `elbow_to_wrist` (forearm), and `D` (shoulder to target). The law of cosines:
+
+```
+cos(θ₃) = (D² − axis_gap(2)² − elbow_to_wrist²) / (2 · axis_gap(2) · elbow_to_wrist)
+```
+
+**Reachability:** `|axis_gap(2) − elbow_to_wrist| ≤ D ≤ axis_gap(2) + elbow_to_wrist`. If not, no solution exists.
+
+**Two solutions:** `θ₃ = ± arccos(cos θ₃)`. `+` is **elbow-up**; `−` is **elbow-down**.
+
+## 7.5 Law of sines for θ₂
+
+The angle of the shoulder-to-target line, measured from `ê_u`:
+
+```
+ψ = atan2(Δw, Δu)
+```
+
+The angle between the upper arm and the shoulder-to-target line:
+
+```
+β = arcsin(elbow_to_wrist · sin(θ₃) / D)
+```
+
+Then:
+
+```
+θ₂ = ψ − β · sign(θ₃)
+```
+
+The exact form of the sign convention depends on how `ê_u`, `ê_w` are oriented and how θ₂ is defined relative to the J2 frame. **The code's convention is authoritative** — for the Elfin, where J2 and J3 are anti-parallel (`axis_twist(2) = π` in 1-based indexing), the sign of θ₂ must respect the antiparallel relationship; the code handles this from the axis directions directly.
+
+## 7.6 The spherical case
+
+When `wrist_normal_offset = 0` (spherical wrist), B is on the arm plane, so A = B = P5. The forearm length becomes `elbow_to_wrist = |P5 − J3_origin|`. **Same formula, with A = P5.** The law of cosines is unchanged — no branch.
+
+## 7.7 The formula
+
+```
+A = B − dot(B − J2_origin, n̂_plane) · n̂_plane
+Δu = dot(A − J2_origin, ê_u)
+Δw = dot(A − J2_origin, ê_w)
+D  = √(Δu² + Δw²)
+
+if not (|axis_gap(2) − elbow_to_wrist| ≤ D ≤ axis_gap(2) + elbow_to_wrist):
+    no solution
+
+cos(θ₃) = (D² − axis_gap(2)² − elbow_to_wrist²) / (2 · axis_gap(2) · elbow_to_wrist)
+θ₃ ∈ { +arccos(...) (elbow-up),  −arccos(...) (elbow-down) }
+
+ψ = atan2(Δw, Δu)
+β = arcsin(elbow_to_wrist · sin(θ₃) / D)
+θ₂ = ψ − β · sign(θ₃)
+```
+
+with `axis_gap(2)` = upper arm, `elbow_to_wrist = |A − J3_origin|`.
+
+---
+
+# Part 8 — Solving θ₄ and θ₆
+
+## 8.1 The equation
+
+The flange orientation is the product of all six joint rotations, each about its own axis, **each expressed back in the base frame** by the origin transform between consecutive joint frames:
+
+```
+R_flange = R₁(θ₁) · R₂(θ₂) · R₃(θ₃) · R₄(θ₄) · R₅(θ₅) · R₆(θ₆)
+```
+
+The first three are known (θ₁, θ₂, θ₃ are solved). Define:
+
+```
+R_frame4 = R₁(θ₁) · R₂(θ₂) · R₃(θ₃) · R_o4
+R_diff   = R_frame4ᵀ · R_flange
+```
+
+where `R_o4` is the rotation part of J4's origin transform. Then the wrist subchain must produce:
+
+```
+R_z(θ₄) · R_o5 · R_z(θ₅) · R_o6 · R_z(θ₆) = R_diff
+```
+
+Each `R_z(θᵢ)` is the rotation about joint i's local Z axis. Each `R_oi` is the **re-expression** — the origin transform that carries the next joint's axis into the base frame after the previous joint's rotation.
+
+**The axes can be apart.** J4's axis and J5's axis need not intersect; J5's and J6's need not intersect. When they are apart, the re-expression is not identity, and the `R_oi` carry the offset's orientation.
+
+**This is the general case: the offset wrist.**
+
+## 8.2 The spherical limit
+
+When all the wrist axes intersect at one point — the wrist center P5 — the re-expression becomes identity:
+
+- Rotating about one axis carries the other axes with it, but if the axes intersect at a common point, the **position** of the intersection does not change, and the next axis's direction relative to the current frame is unchanged by the rotation.
+- In frame terms: `R_o5 = R_o6 = I` when the axes intersect at a common point.
+- The composition reduces to `R_z(θ₄) · R_z(θ₅) · R_z(θ₆) = R_diff` — the **ZYZ** form.
+
+**The ZYZ form is the spherical limit of the origin-included form.** It is not a separate derivation; it is what the general equation becomes when the re-expression is identity.
+
+## 8.3 The solution — Paden-Kahan subproblem 2
+
+Define:
+
+```
+A = R_o5 · R_z(θ₅) · R_o6
+B = R_diff
+```
+
+**`A` is known** — a fixed 3×3 rotation computed from the origins and θ₅. The equation becomes:
+
+```
+R_z(θ₄) · A · R_z(θ₆) = B
+```
+
+**This is Paden-Kahan subproblem 2:** rotation about two axes (both local Z) to achieve a given rotation, with a fixed rotation `A` between them.
+
+**Key observation:** the equation is linear in `R_z(θ₄)` on the left and `R_z(θ₆)` on the right:
+
+```
+R_z(θ₄) · A = B · R_z(−θ₆)
+```
+
+The unknown θ₄ appears only on the left; θ₆ only on the right.
+
+### Step 1 — θ₄ from the third column
+
+Consider the **third column** of both sides. The right side `B · R_z(−θ₆)` has third column `b₃` (the third column of `B`), independent of θ₆. The left side `R_z(θ₄) · A` has third column `R_z(θ₄) · a₃`, where `a₃ = A[:,2]`. So:
+
+```
+R_z(θ₄) · a₃ = b₃
+```
+
+`R_z` preserves the Z component, so this requires `a₃_z = b₃_z` — a **consistency condition** on the input. Given that, θ₄ is determined by the X-Y components:
+
+```
+θ₄ = atan2(b₃_y, b₃_x) − atan2(a₃_y, a₃_x)
+```
+
+**θ₄ is solved from the third column alone.**
+
+### Step 2 — θ₆ from the first column
+
+With θ₄ known, the equation becomes `A · R_z(θ₆) = R_z(−θ₄) · B`. The third column is automatically satisfied. Consider the **first column**: `A · R_z(θ₆)` has first column `cos θ₆ · a₁ + sin θ₆ · a₂`, where `a₁`, `a₂` are the first two columns of `A`. The right side has first column `c₁ = R_z(−θ₄) · b₁`. Since `a₁`, `a₂` are orthogonal:
+
+```
+θ₆ = atan2(dot(c₁, a₂), dot(c₁, a₁))
+```
+
+**θ₆ is solved from the first column, given θ₄.**
+
+### Step 3 — the spherical limit
+
+When `R_o5 = R_o6 = I` (spherical wrist, canonical frame placement):
+
+```
+A = R_z(θ₅)   →   a₃ = (0, 0, 1)ᵀ
+```
+
+The third column is invariant under θ₄ (`R_z(θ₄) · (0,0,1)ᵀ = (0,0,1)ᵀ`), so the third-column method degenerates. **The solution must come from the other columns**, and it gives the standard **ZYZ formulas**:
+
+```
+θ₄ = atan2(B[1,2], B[0,2])       (with sign flips for sin θ₅ < 0)
+θ₆ = atan2(B[2,1], −B[2,0])
+```
+
+**These are not a separate derivation.** They are the `A[:,2] ∥ ẑ` limit of the general method — the spherical case, where the third column is invariant and the solution uses the other columns.
+
+### Step 4 — the singularity
+
+When `sin θ₅ = 0` (θ₅ = 0 or π), the axes `a₄` and `a₆` become **parallel in the effective composition** — the rotations about J4 and J6 are about the same axis (spherical) or about parallel axes (offset with `sin θ₅ = 0`). **θ₄ and θ₆ are not independent.** Only their **sum** (θ₅ = 0) or **difference** (θ₅ = π) is determined.
+
+**The solver sets θ₄ to a convenient value** — its current value, for continuity — and solves θ₆ from the remaining matrix entries. The choice of θ₄ is arbitrary; the flange reaches the correct orientation regardless, but θ₄ may not match the robot's previous state.
+
+## 8.4 The formula
+
+```
+R_frame4 = R₁(θ₁) · R₂(θ₂) · R₃(θ₃) · R_o4
+B        = R_frame4ᵀ · R_flange
+A        = R_o5 · R_z(θ₅) · R_o6
+
+if |A[:,2]_xy| > tol:   # offset wrist: third-column method
+    θ₄ = atan2(B[1,2], B[0,2]) − atan2(A[1,2], A[0,2])
+else:                    # spherical limit: ZYZ formulas
+    θ₄ = atan2(B[1,2], B[0,2])    (sign flips for sin θ₅ < 0)
+
+if |sin θ₅| > tol:       # non-singular
+    c₁ = R_z(−θ₄) · B[:,0]
+    θ₆ = atan2(dot(c₁, A[:,1]), dot(c₁, A[:,0]))
+else:                    # singular: θ₅ = 0 or π
+    θ₄ = current θ₄      # for continuity
+    θ₆ = solve from remaining entries
+```
+
+## 8.5 What the wrist inversion uses
+
+The wrist inversion uses:
+
+- **`R_frame4`** — J4's frame in the base frame, from the arm chain and `R_o4`.
+- **The origins `R_o5`, `R_o6`** — the rotation parts of J5's and J6's origin transforms.
+- **`θ₅`** — from Part 6.
+- **`R_flange`** — the target orientation.
+
+It does **not** use `wrist_normal_offset`, `wrist_radial_offset`, or `wrist_offset` as scalars. The wrist inversion uses the **axes and origins** directly, because the geometry of the wrist is the geometry of the origins and axes — not of the scalar distances. **The distances are for the arm chain (Parts 5–7); the origins and axes are for the wrist inversion (Part 8).**
+
+---
+
+# Part 9 — The Full Algorithm and Worked Examples
+
+## 9.1 The algorithm, stated as a sequence
 
 The input is the **flange pose in the true-root frame**: a 4×4 homogeneous transformation `T_flange`. The output is a list of up to 8 tagged joint vectors.
 
 **Step 0 — Precondition check.** Verify the arm is in the supported class:
-- J2 and J3 are parallel (`axis_twist(1) ≈ 0` or `≈ π`).
-- J5 and J6 intersect (`distance between axes[4] and axes[5] < tol`).
-- The arm has exactly 6 revolute joints.
 
-If any fails, refuse loudly. Do not approximate.
+- Six revolute joints.
+- J5 and J6 intersect (within tolerance) — this is what makes P5 exist.
+- J4 ⊥ J5, J5 ⊥ J6, J4 ∥ J6 (within tolerance).
+- If `wrist_normal_offset > 0`: J4's axis is horizontal.
 
-**Step 1 — Compute P5 (the wrist center).**
+If any fails, refuse loudly with a message naming the violation and the measured value.
 
-The flange is offset from P5 by the **flange offset** `d₆` along the flange's Z axis. The flange's Z axis is the third column of the flange rotation. So:
-
-```
-P5 = P_flange − d₆ · a_flange
-```
-
-where `P_flange` is the translation part of `T_flange`, `a_flange = T_flange[:3, 2]`, and `d₆` is the **flange offset** from `ArmGeometry`.
-
-**Step 2 — Solve the shoulder (θ₁).**
-
-Project P5 onto the horizontal plane:
+**Step 1 — Compute P5:**
 
 ```
-r = √(x₅² + y₅²)
-φ = atan2(y₅, x₅)
+P5 = P_flange − flange_offset · a_flange
 ```
 
-If `wrist_offset > tol` (offset wrist):
+**Step 2 — Solve θ₁:**
 
 ```
-α = arcsin(wrist_offset / r)
-θ₁_left  = φ + α     (σ = −1)
-θ₁_right = φ − α     (σ = +1)
+r = √(x₅² + y₅²);  φ = atan2(y₅, x₅)
+if r < wrist_normal_offset: no solution
+α = arcsin(wrist_normal_offset / r)
+θ₁ ∈ { a1_sign·(φ−φ₀) ± α,  a1_sign·(φ−φ₀) ± α + π }
 ```
 
-If `wrist_offset ≤ tol` (spherical wrist):
+Each θ₁ carries a shoulder sign `σ = +1` (right) or `σ = −1` (left).
+
+**Step 3 — Solve θ₅:** For each θ₁ branch:
 
 ```
-θ₁_right = φ          (σ = +1)
-θ₁_left  = φ + π      (σ = −1)
+o_flange = −x_flange · sin θ₁ + y_flange · cos θ₁
+
+if flange_offset > tol:
+    c = (o_flange − σ · wrist_normal_offset) / flange_offset
+else:
+    c = −a_x · sin θ₁ + a_y · cos θ₁
+if |c| > 1: no solution on this branch
+θ₅ ∈ { +arccos(c) (no-flip),  −arccos(c) (flip) }
 ```
 
-For each θ₁, check `r ≥ wrist_offset` (offset case only). If violated, this branch is invalid.
-
-**Step 3 — Solve the wrist angle (θ₅).**
-
-For each θ₁ branch, with branch sign `σ = +1` for right-shoulder and `σ = −1` for left-shoulder, compute the flange's signed offset from the arm plane:
+**Step 4 — Solve θ₂, θ₃:** For each (θ₁, θ₅):
 
 ```
-o_flange = −x_flange · sin(θ₁) + y_flange · cos(θ₁)
+A = B − dot(B − J2_origin, n̂) · n̂
+Δu = dot(A − J2_origin, ê_u);  Δw = dot(A − J2_origin, ê_w)
+D  = √(Δu² + Δw²)
+if not (|axis_gap(2) − elbow_to_wrist| ≤ D ≤ axis_gap(2) + elbow_to_wrist): no solution
+cos(θ₃) = (D² − axis_gap(2)² − elbow_to_wrist²) / (2·axis_gap(2)·elbow_to_wrist)
+θ₃ ∈ { +arccos (elbow-up),  −arccos (elbow-down) }
+ψ = atan2(Δw, Δu);  β = arcsin(elbow_to_wrist·sin θ₃ / D)
+θ₂ = ψ − β·sign(θ₃)
 ```
 
-**Case `d₆ > tol` (position-determined θ₅):**
+**Step 5 — Solve θ₄, θ₆:** For each (θ₁, θ₂, θ₃, θ₅):
 
 ```
-cos(θ₅) = (o_flange − σ · wrist_offset) / d₆
+R_frame4 = R₁(θ₁)·R₂(θ₂)·R₃(θ₃)·R_o4
+B = R_frame4ᵀ · R_flange
+A = R_o5 · R_z(θ₅) · R_o6
+
+if |A[:,2]_xy| > tol:  θ₄ = atan2(B[1,2], B[0,2]) − atan2(A[1,2], A[0,2])
+else:                   θ₄ = atan2(B[1,2], B[0,2])
+
+if |sin θ₅| > tol:
+    c₁ = R_z(−θ₄)·B[:,0]
+    θ₆ = atan2(dot(c₁, A[:,1]), dot(c₁, A[:,0]))
+else:
+    θ₄ = current θ₄;  θ₆ = solve from remaining
 ```
-
-Check `|cos(θ₅)| ≤ 1`. If violated, this (θ₁) branch is invalid.
-
-Two solutions: `θ₅ = ± arccos(cos(θ₅))`. Tag: `+` is **no-flip**, `−` is **flip**.
-
-**Case `d₆ ≤ tol` (orientation-determined θ₅):**
-
-```
-cos(θ₅) = a_flange · n̂ = −a_x · sin(θ₁) + a_y · cos(θ₁)
-```
-
-where `a_flange = T_flange[:3, 2]` and `n̂ = (−sin θ₁, cos θ₁, 0)`.
-
-Check `|cos(θ₅)| ≤ 1`. Two solutions: `θ₅ = ± arccos(cos(θ₅))`. Same tag convention.
-
-**Step 4 — Solve the arm chain (θ₂, θ₃).**
-
-For each (θ₁, θ₅), compute P5's coordinates in the arm plane:
-
-```
-u = x₅ · cos(θ₁) + y₅ · sin(θ₁)
-w = z₅
-```
-
-Subtract the shoulder offset `d₁`:
-
-```
-Δu = u
-Δw = w − d₁
-D² = Δu² + Δw²
-```
-
-Law of cosines for θ₃:
-
-```
-cos(θ₃) = (D² − a₂² − a₃²) / (2 · a₂ · a₃)
-```
-
-Check `|cos(θ₃)| ≤ 1`. Two solutions: `θ₃ = ± arccos(cos(θ₃))`. Tag: `+` is **elbow-up**, `−` is **elbow-down**.
-
-Law of sines for θ₂:
-
-```
-ψ = atan2(Δw, Δu)
-β = arcsin(a₃ · sin(θ₃) / D)
-θ₂ = ψ − β · sign(θ₃)
-```
-
-**Step 5 — Solve θ₄ and θ₆ (wrist roll and tool roll).**
-
-Compute `R₀₃` from the base-frame axis directions:
-
-```
-R₀₃ = R(a₁, θ₁) · R(a₂, θ₂) · R(a₃, θ₃)
-```
-
-where `aᵢ = ArmGeometry.axes[i].direction` and `R(a, θ)` is the Rodrigues rotation about `a` by `θ`.
-
-Isolate the wrist rotation:
-
-```
-R_wrist = R₀₃ᵀ · R_flange
-```
-
-Using the **known** θ₅ from Step 3, extract θ₄ and θ₆:
-
-```
-θ₄ = atan2(R_wrist[1,2] / sin θ₅, R_wrist[0,2] / sin θ₅)
-θ₆ = atan2(R_wrist[2,1] / sin θ₅, −R_wrist[2,0] / sin θ₅)
-```
-
-**Singularity at θ₅ ≈ 0 or π:** J4 and J6 axes become parallel. Only θ₄ + θ₆ (or θ₄ − θ₆) is determined. Set θ₄ to its current value (or 0 if no current value), and solve for θ₆ from the remaining matrix entries. The choice of θ₄ is arbitrary; the flange reaches the correct orientation regardless.
 
 **Step 6 — Assemble and tag.**
-
-Combine the choices:
 
 | Level | Tag values |
 |---|---|
@@ -1091,389 +1046,254 @@ Combine the choices:
 | Elbow | `up`, `down` |
 | Wrist | `flip`, `no-flip` |
 
-Each combination gives one solution. Up to 8 total.
+Up to 8 solutions total.
 
-**Step 7 — Filter by joint limits.**
-
-For each solution, check each joint angle against its limits **modulo 2π**:
+**Step 7 — Filter by joint limits**, modulo 2π:
 
 ```
-for each joint i:
-    θ = solution[i]
-    if not (lower_i ≤ θ ≤ upper_i):
-        θ += 2π  (or − 2π)
-        if not (lower_i ≤ θ ≤ upper_i):
-            reject
+if not (lower ≤ θ ≤ upper):
+    θ += 2π  (or − 2π)
+    if not (lower ≤ θ ≤ upper): reject
 ```
 
-This is critical: the two shoulder solutions φ and φ + π differ by π, and both may be valid if the limits allow. The modulo-2π check must be done for every joint.
+**Step 8 — Return** all valid, tagged solutions. Do not select. The caller selects by continuity — preferring the branch that matches the current configuration.
 
-**Step 8 — Return.**
+## 9.2 Worked example: UR10 (offset wrist)
 
-Return all valid, tagged solutions. Do not select. The caller selects by continuity.
-
----
-
-## 2. Worked Example: Elfin E15 Pro (Spherical Wrist)
-
-**Robot parameters** (from extraction, `core/kinematics/geometric_extraction.py`):
+**Parameters** (from the extraction):
 
 | Quantity | Value |
 |---|---|
-| `d₁` (shoulder height) | 0.262 m |
-| `a₂` (upper arm, J2 → J3) | 0.730 m |
-| `a₃` (forearm, J3 → P5) | 0.570 m |
-| `wrist_offset` | 0 m (spherical) |
-| `d₆` (flange offset) | 0.200 m |
-| `axis_twist[1]` | π (J2 ∥ J3 antiparallel) |
-| `axis_twist[3]` | π/2 |
-| `axis_twist[4]` | π/2 |
+| `wrist_normal_offset` (`\|AB\|`) | 0.163941 |
+| `wrist_radial_offset` (`\|BC\|`) | 0.115700 |
+| `wrist_offset` (`\|AC\|`) | 0.200657 |
+| `flange_offset` | 0.092200 |
+| `axis_gap(2)` (upper arm) | 0.612000 |
+| `elbow_to_wrist` (J3→A) | 0.606457 |
+| J4 axis direction | `(0, −1, 0)` — horizontal ✓ |
 
-**Target** (in true-root frame):
+**Target** (in true-root frame): `P_flange = (0.5, 0.3, 0.8)`, `R_flange = identity`.
 
-```
-P_flange = (0.5, 0.3, 0.8)
-R_flange = identity   (flange Z axis = +Z)
-```
+**Step 1:** `P5 = (0.5, 0.3, 0.8 − 0.0922) = (0.5, 0.3, 0.7078)`.
 
-### Step 1 — Compute P5
+**Step 2:** `r = 0.5831`, `φ = 0.5404`, `α = arcsin(0.163941/0.5831) = 0.2852`. So `θ₁_right ≈ 0.2552` (`σ = +1`), `θ₁_left ≈ 0.8256` (`σ = −1`), plus the `+π` branches.
 
-```
-a_flange = (0, 0, 1)
-P5 = P_flange − d₆ · a_flange = (0.5, 0.3, 0.8 − 0.200) = (0.5, 0.3, 0.600)
-```
+**Step 3:** For the right-shoulder branch: `o_flange ≈ 0.1640`, `c ≈ 0.0006`, `θ₅ ≈ ±1.5702` (flip and no-flip).
 
-### Step 2 — Solve θ₁
+**Step 4:** Compute A, Δu, Δw, D, then the law of cosines. The exact values depend on the full computation; the test suite (`test_unified_ik.py`) is the authoritative round-trip check: `q_true → FK → IK → set containing q_true`.
 
-```
-r = √(0.5² + 0.3²) = √0.34 ≈ 0.5831
-φ = atan2(0.3, 0.5) ≈ 0.5404 rad
-```
+**Step 5:** `A[:,2]` is not along ẑ (the origins are not identity), so the third-column method applies. `θ₄` from the third column; `θ₆` from the first.
 
-Spherical case (`wrist_offset = 0`):
+**Steps 6–8:** Assemble, tag, filter by limits, return.
 
-```
-θ₁_right = φ ≈ 0.5404       (σ = +1)
-θ₁_left  = φ + π ≈ 3.6820   (σ = −1)
-```
+**What the example shows:** every step uses the settled quantities (`wrist_normal_offset`, `axis_gap(2)`, `elbow_to_wrist`, `flange_offset`). **No DH symbols.**
 
-### Step 3 — Solve θ₅
+## 9.3 Worked example: FR5 (offset wrist)
 
-**For θ₁_right = 0.5404:**
-
-```
-o_flange = −0.5 · sin(0.5404) + 0.3 · cos(0.5404)
-         = −0.5 · 0.5142 + 0.3 · 0.8577
-         ≈ 0.0002
-```
-
-```
-cos(θ₅) = (0.0002 − (+1) · 0) / 0.200 ≈ 0.0010
-θ₅ = ± arccos(0.0010) ≈ ± 1.5698 rad
-```
-
-Two solutions: θ₅ ≈ +1.5698 (**no-flip**), θ₅ ≈ −1.5698 (**flip**).
-
-**For θ₁_left = 3.6820:**
-
-```
-o_flange = −0.5 · sin(3.6820) + 0.3 · cos(3.6820) ≈ −0.0002
-cos(θ₅) = (−0.0002 − (−1) · 0) / 0.200 ≈ −0.0010
-θ₅ = ± arccos(−0.0010) ≈ ± 1.5708 rad
-```
-
-### Step 4 — Solve θ₂, θ₃
-
-**For θ₁_right = 0.5404, θ₅ = +1.5698:**
-
-```
-u = 0.5 · cos(0.5404) + 0.3 · sin(0.5404) ≈ 0.5832
-w = z₅ = 0.600
-Δu = 0.5832
-Δw = 0.600 − 0.262 = 0.338
-D² = 0.5832² + 0.338² ≈ 0.3401 + 0.1142 = 0.4543
-D ≈ 0.6740
-```
-
-```
-cos(θ₃) = (0.4543 − 0.730² − 0.570²) / (2 · 0.730 · 0.570)
-        = (0.4543 − 0.5329 − 0.3249) / 0.8322
-        = −0.4035 / 0.8322
-        ≈ −0.4849
-θ₃ = ± arccos(−0.4849) ≈ ± 2.0773 rad
-```
-
-For θ₃ = +2.0773 (**elbow-up**):
-
-```
-ψ = atan2(0.338, 0.5832) ≈ 0.5254 rad
-β = arcsin(0.570 · sin(2.0773) / 0.6740) = arcsin(0.570 · 0.8746 / 0.6740)
-  ≈ arcsin(0.7397) ≈ 0.8323 rad
-θ₂ = 0.5254 − 0.8323 = −0.3069 rad
-```
-
-For θ₃ = −2.0773 (**elbow-down**):
-
-```
-θ₂ = 0.5254 + 0.8323 = 1.3577 rad
-```
-
-### Step 5 — Solve θ₄, θ₆
-
-For each (θ₁, θ₂, θ₃, θ₅), compute `R₀₃ = R(a₁, θ₁) · R(a₂, θ₂) · R(a₃, θ₃)` and `R_wrist = R₀₃ᵀ · R_flange`, then extract θ₄ and θ₆ using the known θ₅:
-
-```
-θ₄ = atan2(R_wrist[1,2] / sin θ₅, R_wrist[0,2] / sin θ₅)
-θ₆ = atan2(R_wrist[2,1] / sin θ₅, −R_wrist[2,0] / sin θ₅)
-```
-
-The specific numerical values depend on the axis directions from the URDF. With `R_flange = identity` and the joint angles above, `R_wrist` is determined, and θ₄, θ₆ follow.
-
-### Step 6 — Assemble
-
-Up to 8 solutions. For this target, all may be valid if the Elfin's joint limits allow the resulting angles (the Elfin's J1 limit is ±π, which accommodates both φ and φ + π).
-
-| Shoulder | Elbow | Wrist | θ₁ | θ₂ | θ₃ | θ₅ |
-|---|---|---|---|---|---|---|
-| right | up | no-flip | 0.5404 | −0.3069 | +2.0773 | +1.5698 |
-| right | up | flip | 0.5404 | −0.3069 | +2.0773 | −1.5698 |
-| right | down | no-flip | 0.5404 | +1.3577 | −2.0773 | +1.5698 |
-| right | down | flip | 0.5404 | +1.3577 | −2.0773 | −1.5698 |
-| left | up | no-flip | 3.6820 | ... | ... | +1.5708 |
-| left | up | flip | 3.6820 | ... | ... | −1.5708 |
-| left | down | no-flip | 3.6820 | ... | ... | +1.5708 |
-| left | down | flip | 3.6820 | ... | ... | −1.5708 |
-
-Filter by joint limits (modulo 2π). Return all valid ones, tagged.
-
-### What this example shows
-
-1. **The spherical case is clean.** With `wrist_offset = 0`, the two shoulder solutions are φ and φ + π.
-2. **The flange offset matters even for a spherical wrist.** With `d₆ = 0.200`, P5 sits 0.200 m below the flange along the flange's Z axis. Ignoring `d₆` would give wrong θ₂, θ₃, and θ₅.
-3. **The `axis_twist[1] = π` for Elfin.** J2 and J3 are antiparallel, not co-parallel. The arm-plane condition holds (`axis_twist ∈ {0, π}`), but the formula for θ₂ from Step 4 must respect the sign of this twist — the code's convention is authoritative.
-
----
-
-## 3. Worked Example: UR10 (Offset Wrist)
-
-**Robot parameters** (from extraction):
+**Parameters:**
 
 | Quantity | Value |
 |---|---|
-| `d₁` (shoulder height) | 0.1273 m |
-| `a₂` (upper arm, J2 → J3) | 0.612 m |
-| `a₃` (forearm, J3 → P5) | 0.6065 m |
-| `wrist_offset` | 0.1157 m |
-| `d₆` (flange offset) | 0.0922 m |
-| `axis_twist[1]` | 0 (J2 ∥ J3) |
-| `axis_twist[3]` | π/2 |
-| `axis_twist[4]` | π/2 |
+| `wrist_normal_offset` | 0.102100 |
+| `wrist_radial_offset` | 0.102000 |
+| `wrist_offset` | 0.144319 |
+| `flange_offset` | 0.100000 |
+| `axis_gap(2)` | 0.425000 |
+| `elbow_to_wrist` | 0.420549 |
+| J4 axis direction | `(0, −1, −4e-6)` — horizontal ✓ |
 
-**Note on `a₃` vs `axis_gap(2)`:**
+**Same target, same algorithm.** The values differ; the steps are identical. The wrist inversion uses the third-column method (`A[:,2]` not along ẑ).
 
-- `axis_gap(2)` = 0.5723 m (perpendicular distance between J3 and J4 axes)
-- `a₃` = 0.6065 m (distance from J3's axis to P5)
+**Note on the origin trap:** for FR5, `axis_shift(3) = wrist_normal_offset = 0.1021` (J4's origin is at A), while for UR10 `axis_shift(3) = 0.0`. **The algorithm is immune to this** because it uses `wrist_normal_offset`, not `axis_shift(3)`. This is why the origin trap was important to identify: the algorithm never touches the origin-dependent quantity.
 
-They differ by 0.034 m. The forearm length is the distance from J3 to P5, not the perpendicular distance between J3 and J4. Using `axis_gap(2)` here would be wrong.
+## 9.4 Worked example: Elfin (spherical wrist)
 
-The algorithm is the same as for the Elfin, with two differences:
-
-1. **Step 2 (shoulder):** uses the offset formula `θ₁ = φ ± arcsin(wrist_offset / r)`, not `{φ, φ + π}`.
-2. **Step 3 (θ₅):** the sign convention σ matters — the two branches are distinguished by whether P5 is on the +n̂ or −n̂ side of the arm plane. See Part V §6.
-
-For a representative target such as `P_flange = (0.5, 0.3, 0.8), R_flange = identity`:
-
-- **Step 1:** `P5 = (0.5, 0.3, 0.8 − 0.0922) = (0.5, 0.3, 0.7078)`.
-- **Step 2:** `r ≈ 0.5831, φ ≈ 0.5404, α = arcsin(0.1157 / 0.5831) ≈ 0.1994 rad`. So `θ₁_right ≈ 0.3410`, `θ₁_left ≈ 0.7398`.
-- **Step 3:** the two branches give distinct `o_flange` values, hence distinct `cos(θ₅)`, hence distinct θ₅ solutions. The reachability condition `|o_flange − σ · wrist_offset| ≤ d₆` filters the branches.
-- **Step 4:** follows the same law of cosines with `a₂ = 0.612`, `a₃ = 0.6065`.
-- **Step 5:** follows the same `R_wrist` extraction with the URDF's axis directions.
-- **Step 6:** up to 8 tagged solutions.
-
-The **test suite** (`tests/test_unified_ik.py`) is the authoritative worked example for UR10. It uses the URDF parameters directly and validates round-trip: `q_true → FK → IK → set containing q_true`.
-
----
-
-## 4. Worked Example: FR5 (Offset Wrist)
-
-**Robot parameters** (from extraction):
+**Parameters:**
 
 | Quantity | Value |
 |---|---|
-| `d₁` (shoulder height) | 0.152 m |
-| `a₂` (upper arm, J2 → J3) | 0.425 m |
-| `a₃` (forearm, J3 → P5) | 0.4205 m |
-| `wrist_offset` | 0.1020 m |
-| `d₆` (flange offset) | 0.1000 m |
-| `axis_twist[1]` | 0 (J2 ∥ J3) |
-| `axis_twist[3]` | π/2 |
-| `axis_twist[4]` | π/2 |
+| `wrist_normal_offset` | 0 |
+| `wrist_radial_offset` | 0 |
+| `wrist_offset` | 0 |
+| `flange_offset` | 0.200000 |
+| `axis_gap(2)` | 0.730000 |
+| `elbow_to_wrist` (J3→P5) | 0.570000 |
+| J4 axis direction | `(0, 0, 1)` — vertical, but offset is zero ✓ |
+| `axis_twist(2)` (J2–J3, 1-based) | π (anti-parallel) |
 
-**Note on `a₃` vs `axis_gap(2)`:**
+**Same target, same algorithm.**
 
-- `axis_gap(2)` = 0.3950 m
-- `a₃` = 0.4205 m
+**Step 2:** `α = arcsin(0/r) = 0`, so `θ₁ ∈ { φ, φ + π }`.
 
-The difference (0.0255 m) comes from the FR5's wrist geometry: J5 is offset from J4 in both Y and Z, and P5 is further offset in Z by the flange's own geometry. The forearm length accounts for the full distance from J3 to P5, not just the perpendicular offset between J3 and J4 axes.
+**Step 3:** `c = o_flange / 0.2` (since `wrist_normal_offset = 0`). Two solutions: ± arccos.
 
-The algorithm is the same as for UR10:
+**Step 4:** A = B = P5, so `elbow_to_wrist = |P5 − J3_origin| = 0.570000`. The law of cosines uses `axis_gap(2) = 0.730000` and `elbow_to_wrist = 0.570000`.
 
-1. **Step 1:** `P5 = P_flange − 0.100 · a_flange`.
-2. **Step 2:** `θ₁ = φ ± arcsin(0.1020 / r)`.
-3. **Step 3:** the sign convention σ distinguishes the shoulder branches.
-4. **Step 4:** law of cosines with `a₂ = 0.425`, `a₃ = 0.4205`.
-5. **Step 5:** `R_wrist` extraction.
-6. **Step 6:** up to 8 tagged solutions.
+**Step 5:** For Elfin, `A = R_o5 · R_z(θ₅) · R_o6`. With the canonical spherical frame placement, `R_o5 = R_o6 = I`, so `A = R_z(θ₅)` and `A[:,2] = (0,0,1)ᵀ` — the spherical limit. The third-column method degenerates and the ZYZ formulas apply.
 
-**FR5 is not the `d₆ = 0` case.** It is a standard offset-wrist arm with a small but nonzero flange offset. The `d₆ = 0` branch of Part V §8 is not exercised by FR5.
+**What the example shows:** the spherical wrist is the **limit** of the general algorithm. Every step is the same; the quantities that are zero (`wrist_normal_offset`, `wrist_radial_offset`, `wrist_offset`) make the formulas degenerate, and the ZYZ formulas are the `A[:,2] ∥ ẑ` limit of the wrist inversion. **No branch — the spherical case is the value at zero.**
 
-The **test suite** is the authoritative worked example for FR5, as for UR10.
+## 9.5 The reversal, stated
+
+The conventional derivation treats the **spherical wrist** as the natural case and the **offset wrist** as a complication. It derives the spherical formulas first, and the offset wrist is a fourth branch, a perturbation, a separate derivation.
+
+**This document reverses that.** The general case is the **offset wrist** — the axes are apart, and each joint's rotation must be re-expressed in the base frame by the origin transform. The **spherical wrist** is the case where the axes intersect at one point, and the re-expression becomes identity. The ZYZ formulas are the spherical limit of the origin-included form; they are not a separate derivation.
+
+**The algorithm is one.** Every step uses the settled quantities, and the spherical case falls out at `wrist_normal_offset = 0`, `wrist_radial_offset = 0`, `wrist_offset = 0`. No branch, no special case — the general formula degenerates to the spherical formulas as the geometry requires.
+
+**This is the reversal:** the offset wrist is the general case; the spherical wrist is the value at zero. The conventional derivation has it backwards.
+
+## 9.6 The full formula set
+
+```
+# Step 1
+P5 = P_flange − flange_offset · a_flange
+
+# Step 2
+r = √(x₅² + y₅²);  φ = atan2(y₅, x₅)
+α = arcsin(wrist_normal_offset / r)   (if r ≥ wrist_normal_offset)
+θ₁ ∈ { a1_sign·(φ−φ₀) ± α,  a1_sign·(φ−φ₀) ± α + π }
+
+# Step 3
+o_flange = −x_flange·sin θ₁ + y_flange·cos θ₁
+c = (o_flange − σ·wrist_normal_offset) / flange_offset   (if flange_offset > tol)
+c = −a_x·sin θ₁ + a_y·cos θ₁                              (if flange_offset ≤ tol)
+θ₅ ∈ { ± arccos(c) }   (if |c| ≤ 1)
+
+# Step 4
+A = B − dot(B − J2_origin, n̂)·n̂
+D = |A − J2_origin|  (in the arm plane)
+cos(θ₃) = (D² − axis_gap(2)² − elbow_to_wrist²) / (2·axis_gap(2)·elbow_to_wrist)
+θ₃ ∈ { ± arccos(cos θ₃) }
+ψ = atan2(Δw, Δu);  β = arcsin(elbow_to_wrist·sin θ₃ / D)
+θ₂ = ψ − β·sign(θ₃)
+
+# Step 5
+A = R_o5 · R_z(θ₅) · R_o6
+B = (R₁·R₂·R₃·R_o4)ᵀ · R_flange
+θ₄ = atan2(B[1,2], B[0,2]) − atan2(A[1,2], A[0,2])   (offset)
+θ₄ = atan2(B[1,2], B[0,2])                            (spherical limit)
+c₁ = R_z(−θ₄)·B[:,0]
+θ₆ = atan2(dot(c₁, A[:,1]), dot(c₁, A[:,0]))          (non-singular)
+θ₄ = current θ₄;  θ₆ = solve from remaining           (singular, sin θ₅ = 0)
+
+# Steps 6–8
+Tag (shoulder, elbow, wrist), filter by joint limits modulo 2π, return all valid.
+```
+
+**No DH symbols anywhere.** `wrist_normal_offset`, `axis_gap(2)`, `elbow_to_wrist`, `flange_offset` — all geometric, all named for what they are.
 
 ---
 
-## 5. The `d₆ = 0` Branch and the Test Suite
+# Appendix A — DH Comparison
 
-The `d₆ = 0` branch in Part V §8 — where θ₅ is determined from the flange's orientation rather than its position — is a correct and necessary branch of the solver, but **none of the three Tier 1 test arms exercises it**:
+## A.1 What DH encodes
 
-| Arm | `d₆` | Branch exercised |
-|---|---|---|
-| UR10 | 0.0922 m | position-determined θ₅ |
-| FR5 | 0.1000 m | position-determined θ₅ |
-| Elfin | 0.2000 m | position-determined θ₅ |
+The Denavit–Hartenberg convention describes the relationship between two consecutive joint axes with four numbers: `d` (offset along the previous joint's axis), `a` (distance along the common perpendicular), `α` (twist angle between the axes), `θ` (joint angle, the variable).
 
-All three use the position-determined branch. The orientation-determined branch is preserved because some industrial arms do have the flange coincident with the wrist centre, and the solver must handle them. But the test suite does not cover it.
-
-This is a known gap, not a bug. If a future test arm is added whose flange sits at P5, it will exercise the branch. Until then, the branch is correct in the code but unverified by round-trip tests.
-
----
-
-## 6. What the Examples Do Not Show
-
-The examples use simple targets to keep the numbers clean. Real targets have:
-
-- Larger lateral offsets, making `o_flange` far from `σ · wrist_offset` and `cos(θ₅)` far from 0 or ±1.
-- Configurations near singularities (θ₅ ≈ 0 or π), where θ₄ and θ₆ are not independent.
-- Targets near the reachability boundary (`r ≈ wrist_offset` or `D ≈ |a₂ ± a₃|`), where the solver must decide between reporting a solution and reporting a reach failure.
-- The `d₆ = 0` branch (see §5), which no current test arm exercises.
-
-The algorithm handles all of these. The examples show the structure; the test suite exercises the boundaries.
-
----
-
-# Appendix A: DH Comparison
-
-## A.1 What DH Encodes
-
-The Denavit–Hartenberg convention describes the relationship between two consecutive joint axes with four numbers:
-
-| DH symbol | Meaning |
-|---|---|
-| `d` | offset along the previous joint's axis |
-| `a` | distance along the common perpendicular between axes |
-| `α` | twist angle between the axes |
-| `θ` | joint angle (the variable) |
-
-For a serial arm, the DH table is a list of these four numbers per joint. The forward kinematics is the product of the DH transformation matrices.
-
-## A.2 How the Four Geometric Quantities Relate to DH
+## A.2 How our quantities relate to DH
 
 | Hatch quantity | DH analog | Relationship |
 |---|---|---|
 | `axis_gap(i)` | `a` (link length) | Perpendicular distance between axes i and i+1. Same value, different name. |
 | `axis_twist(i)` | `α` (link twist) | Angle between axes i and i+1. Same value, different name. |
-| `axis_shift(i)` | `d` (link offset) | Distance along axis i to the common perpendicular with axis i+1. Same value for joints 1, 2, 3, 5, 6. **Different for joint 4** (see A.4). |
+| `axis_shift(i)` | `d` (link offset) | Distance along axis i to the common perpendicular. Origin-dependent. |
 | `joint_angle(i)` | `θ` (joint variable) | The joint's rotation. Same value. |
+| `wrist_normal_offset` | **no direct DH analog** | DH `d₄` happens to equal it for these arms, but only because of DH's frame placement (see A.4). The geometric quantity is the plane-to-J5-axis distance. |
 
-For most joints, the mapping is a renaming. The four quantities Hatch uses are the same physical information DH encodes.
+## A.3 Why Hatch does not use DH
 
-## A.3 Why Hatch Does Not Use DH
+1. **DH is lossy for the general case.** The DH convention assumes the joint frames are placed canonically; the placement is not unique and is ambiguous when two consecutive axes are parallel.
+2. **URDF gives more information.** A URDF joint origin is a full 6-DOF transform. DH compresses it into four scalars.
+3. **DH requires a convention choice the solver does not need.** Hatch works directly with the joint axes as lines in space.
 
-Three reasons:
+## A.4 The joint-4 offset: DH `d₄` vs. `wrist_normal_offset`
 
-**1. DH is lossy for the general case.** The DH convention assumes the joint frames are placed in a canonical way — the Z axis along the joint axis, the X axis along the common perpendicular to the next axis. This placement is possible for any serial arm, but it is not unique, and it becomes ambiguous when two consecutive axes are parallel (the common perpendicular is not unique).
+In the standard UR DH table, `d₄` is labelled "the wrist offset." For UR10, `d₄ = 0.163941 m`. The extraction reports `wrist_normal_offset = 0.163941 m`. **They are numerically equal** — but for a frame-placement reason, not a geometric one.
 
-**2. URDF gives more information.** A URDF joint origin is a full 6-DOF transform. DH compresses that transform into four scalars by assuming the frame placement. The compression loses information that the solver may need.
+The geometric quantity is the **perpendicular distance from the arm plane to J5's axis**. For these arms, DH's frame placement happens to make `d₄` equal to it. The solver uses `wrist_normal_offset`, computed from the axes as lines. The equality is a coincidence of frame placement, not an identity. For an arm whose DH frames are placed differently, `d₄` might not equal `wrist_normal_offset`.
 
-**3. DH requires a convention choice that the solver does not need.** The DH parameters depend on where the frames are placed. Hatch works directly with the joint axes as lines in space, so it does not need to choose a frame placement.
-
-## A.4 The Joint 4 Offset: DH `d₄` vs. Geometric `wrist_offset`
-
-The most important difference between DH and Hatch's geometric quantities is at **joint 4**.
-
-In the standard UR DH table, `d₄` is labelled "the wrist offset." For UR10, `d₄ = 0.163941 m`. But the extraction code reports `wrist_offset = 0.1157 m`.
-
-Why the difference? **Frame convention.** The DH `d₄` is measured along the J3 axis (in the DH frame placement), not along the J4 axis. The geometric `wrist_offset` is the **perpendicular distance from the J4 axis to P5**, which is a different quantity.
-
-The solver uses the **geometric** value (0.1157 m for UR10), because the tangency condition in Part III is about the perpendicular distance from J4's axis to P5, not about a distance along J3's axis.
-
-**This is why Hatch works from geometry, not DH.** The DH `d₄` is correct for the DH frames, but it is not the quantity the tangency condition needs. The solver would produce wrong answers if it used the DH value. It uses the geometric value, computed from the axes as lines in space.
+**`axis_shift(3)` is not `wrist_normal_offset` either.** For UR10, `axis_shift(3) = 0.0` while `wrist_normal_offset = 0.163941`; for FR5, `axis_shift(3) = 0.1021 = wrist_normal_offset`. The difference is the placement of J4's origin along its axis: UR places it at the far end of A–B, FR at A. **The algorithm uses `wrist_normal_offset`, never `axis_shift(3)`** — which is why it is immune to the origin placement.
 
 ## A.5 Summary
 
-For the reader who knows DH: the four geometric quantities are the same physical information, renamed. For most joints, the values match. At joint 4, they differ because of the frame convention. Hatch uses the geometric value because that is what the tangency condition requires. The DH value is correct for DH frames but wrong for this solver.
+For the reader who knows DH: the four axis quantities are the same physical information, renamed. At joint 4, DH's `d₄` coincides numerically with `wrist_normal_offset` for these arms, but the geometric quantity is the plane-to-J5-axis distance, and the solver uses it. DH is not used anywhere in the derivation.
 
 ---
 
-# Appendix B: What Hatch Refuses to Do
+# Appendix B — What Hatch Refuses to Do
 
-## B.1 The Supported Class
+## B.1 The supported class
 
-Hatch's analytical IK solver applies to **arm-plane 6R arms with intersecting wrist axes**. Precisely:
+Hatch's analytical IK solver applies to **arm-plane 6R arms with intersecting wrist axes**:
 
-1. **J2 and J3 are parallel** (`axis_twist(1) ≈ 0` or `≈ π`). This is what makes the upper arm and forearm move in a single plane — the arm plane. Without it, there is no arm plane, and the tangency construction fails.
+1. **Six revolute joints.** Not 5, not 7.
+2. **J5 and J6 intersect** (within tolerance). This is what gives the wrist a center P5.
+3. **J4 ⊥ J5, J5 ⊥ J6, J4 ∥ J6** (within tolerance).
+4. **If `wrist_normal_offset > 0`: J4's axis is horizontal.** (The projection condition for θ₁.)
+5. **The arm chain is in the arm plane** — J2 and J3 are parallel in the general sense (same or opposite direction), and the arm plane is well-defined.
 
-2. **J5 and J6 intersect** (`distance between axes[4] and axes[5] < tol`). This is what gives the wrist a well-defined center P5. Without it, P5 does not exist, and the wrist cannot be decoupled from the arm.
+Robots in this class: UR10, UR5, FR5, Elfin E15 Pro, and most industrial 6-axis arms. The class covers both spherical wrists (`wrist_normal_offset = 0`) and offset wrists (`wrist_normal_offset ≠ 0`).
 
-3. **The arm has exactly 6 revolute joints.** Not 5, not 7. The counting argument (6 DOF = 6 joints) is what makes the problem solvable analytically.
+## B.2 The refusal policy
 
-Robots in this class: UR10, UR5, FR5, Elfin E15 Pro, and most industrial 6-axis arms. The class covers both spherical wrists (`wrist_offset = 0`) and offset wrists (`wrist_offset ≠ 0`).
+If a robot violates any condition, Hatch **refuses loudly**. It does not approximate the geometry to fit the solver, fall back to a numerical solver silently, or return a solution that is "close" but not exact.
 
-## B.2 The Refusal Policy
-
-If a robot violates any of the three conditions, Hatch **refuses loudly**. It does not:
-
-- Approximate the geometry to fit the solver.
-- Fall back to a numerical solver silently.
-- Return a solution that is "close" but not exact.
-
-The refusal is a **RuntimeError** with a message that states the violation:
+The refusal is a `RuntimeError` with a message that states the violation and the measured value:
 
 ```
-Unsupported arm geometry: J2 and J3 are not parallel
-(axis_twist(1) = 0.523 rad, expected 0 or π).
-The analytical solver requires an arm-plane 6R arm.
+Unsupported arm geometry: J4 and J5 are not perpendicular
+(axis_twist(3) = 0.523 rad, expected π/2 within 1.0e-04).
+The analytical solver requires perpendicular wrist axes.
 ```
 
-The message names the violated condition and the measured value. The caller knows exactly what is wrong and can decide what to do — use a different solver, refuse the robot, or investigate the URDF.
+The message names the violated condition and the measured value. The caller knows exactly what is wrong.
 
-## B.3 Why Refuse Instead of Approximate
+## B.3 Why refuse instead of approximate
 
-**Because a plausible-looking wrong answer is worse than no answer.**
-
-If the solver approximated a non-arm-plane robot, it would produce joint angles that place the flange near the target but not exactly at it. The error might be small for some poses and large for others. The caller would have no way to know which. In a safety-critical context — which is the context Hatch is designed for — that is unacceptable.
+**Because a plausible-looking wrong answer is worse than no answer.** If the solver approximated a non-class robot, it would produce joint angles that place the flange near the target but not exactly at it. The error might be small for some poses and large for others. The caller would have no way to know which. In a safety-critical context, that is unacceptable.
 
 The refusal is the safe behavior. It says: "This robot is not in the class I can solve. I will not guess."
 
-## B.4 What Is Not in the Class
+## B.4 What is not in the class
 
-**Robots with skew J2 and J3.** Some painting robots and welding robots use non-parallel shoulder-elbow axes for cable routing or structural reasons.
-
-**Robots with non-intersecting J5 and J6.** Some collaborative robots and some 7-DOF arms have wrist geometries where J5 and J6 do not share a point.
-
-**7-DOF arms.** Redundant arms have more than 6 joints. Hatch does not support them in v1.0.0.
-
-**Parallel robots, delta robots, SCARA arms.** Different kinematic structures entirely.
+- **Robots with skew J2 and J3.** Some painting and welding robots use non-parallel shoulder-elbow axes.
+- **Robots with non-intersecting J5 and J6.** Some collaborative robots and some 7-DOF arms.
+- **7-DOF arms.** Redundant arms have more than 6 joints.
+- **Parallel robots, delta robots, SCARA arms.** Different kinematic structures entirely.
 
 For all of these, Hatch refuses. The word is **unified**, not **universal**. Unified across the supported class — spherical and offset wrists, UR and FR and Elfin — not universal across all robots.
 
-## B.5 What Happens to the Caller
+---
 
-When the solver refuses, the caller has options:
+# Appendix C — Code Obligations
 
-1. **Use a different solver.** A numerical IK solver can handle a wider class of robots, at the cost of speed and determinism. Hatch does not ship one, but the interface allows one to be attached.
+The extraction and solver code on disk does not yet match this document. The gaps, for the next session:
 
-2. **Refuse the robot.** If the application requires the analytical solver, the robot must be in the supported class. The refusal is a signal that the robot is not suitable.
+**Extraction (`geometric_extraction.py`):**
 
-3. **Investigate the URDF.** Sometimes the violation is a URDF error, not a real geometric feature. The message names the measured value, so the caller can check whether the URDF is correct.
+1. **`axis_gap`, `axis_twist`, `axis_shift` indexing.** The code uses 0-based indexing; this document uses 1-based (matching joint numbers). Change `axis_gap(i)` to the gap between J`i` and J`i+1`, for i = 1..5.
+2. **`wrist_offset` rename.** The code's `wrist_offset` is `|BC|`; this document calls that `wrist_radial_offset`, and reserves `wrist_offset` for `|AC|`. Add `wrist_radial_offset` and `wrist_offset` as derived properties.
+3. **`elbow_to_wrist`.** Add a method returning `|A − J3_origin|`, where A = B projected onto the arm plane along the normal.
+4. **Class check.** Add the conditional J4-horizontal check (only when `wrist_normal_offset > 0`). The current check requires J4 ∥ J2 unconditionally, which fails for Elfin; Elfin should pass.
+5. **`describe()`.** Print `wrist_normal_offset`, `wrist_radial_offset`, `wrist_offset` side by side, with the triangle's meaning.
 
-The refusal is not a dead end. It is a clear signal about what the robot is and what the solver can do.
+**Solver (`unified_ik_solver.py`):**
+
+1. **θ₁.** Use `wrist_normal_offset` (not the old `wrist_offset`), and return all four solutions (both `±α` and both `+π` branches).
+2. **θ₅.** Use `wrist_normal_offset` in the lateral offset; `flange_offset` in the denominator.
+3. **θ₂, θ₃.** Use `axis_gap(2)` (1-based) and `elbow_to_wrist`; target A (the projection of B).
+4. **θ₄, θ₆.** Replace the ZYZ-only path with the origin-included Paden-Kahan form; ZYZ is the `A[:,2] ∥ ẑ` limit.
+5. **Tags.** Return `(shoulder, elbow, wrist)` tags on every solution; select by continuity, not proximity.
+
+**Tests:**
+
+1. **Round-trip.** `q_true → FK → IK → set containing q_true` for all three arms, with enough random poses to exercise both wrist branches and the singularities.
+2. **Triangle identity.** For each arm: `wrist_offset² = wrist_normal_offset² + wrist_radial_offset²`.
+3. **Origin-trap regression.** Confirm `axis_shift(3)` differs from `wrist_normal_offset` for UR10 and equals it for FR5 — documenting the trap, not relying on it.
+
+---
+
+*Hatch (孵) 🐣 — built to understand, built to see.*
+*The offset wrist is the general case; the spherical wrist is the value at zero.*
+*No DH symbols. No branches. The geometry is what it is.*

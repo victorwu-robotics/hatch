@@ -1069,7 +1069,7 @@ if not (lower ≤ θ ≤ upper):
 | `wrist_offset` (`\|AC\|`) | 0.200657 |
 | `flange_offset` | 0.092200 |
 | `axis_gap(2)` (upper arm) | 0.612000 |
-| `elbow_to_wrist` (J3→A) | 0.606457 |
+| `elbow_to_wrist` (J3→A) | 0.572300 |
 | J4 axis direction | `(0, −1, 0)` — horizontal ✓ |
 
 **Target** (in true-root frame): `P_flange = (0.5, 0.3, 0.8)`, `R_flange = identity`.
@@ -1099,7 +1099,7 @@ if not (lower ≤ θ ≤ upper):
 | `wrist_offset` | 0.144319 |
 | `flange_offset` | 0.100000 |
 | `axis_gap(2)` | 0.425000 |
-| `elbow_to_wrist` | 0.420549 |
+| `elbow_to_wrist` | 0.395010 |
 | J4 axis direction | `(0, −1, −4e-6)` — horizontal ✓ |
 
 **Same target, same algorithm.** The values differ; the steps are identical. The wrist inversion uses the third-column method (`A[:,2]` not along ẑ).
@@ -1213,7 +1213,19 @@ In the standard UR DH table, `d₄` is labelled "the wrist offset." For UR10, `d
 
 The geometric quantity is the **perpendicular distance from the arm plane to J5's axis**. For these arms, DH's frame placement happens to make `d₄` equal to it. The solver uses `wrist_normal_offset`, computed from the axes as lines. The equality is a coincidence of frame placement, not an identity. For an arm whose DH frames are placed differently, `d₄` might not equal `wrist_normal_offset`.
 
-**`axis_shift(3)` is not `wrist_normal_offset` either.** For UR10, `axis_shift(3) = 0.0` while `wrist_normal_offset = 0.163941`; for FR5, `axis_shift(3) = 0.1021 = wrist_normal_offset`. The difference is the placement of J4's origin along its axis: UR places it at the far end of A–B, FR at A. **The algorithm uses `wrist_normal_offset`, never `axis_shift(3)`** — which is why it is immune to the origin placement.
+**`axis_shift` is not `wrist_normal_offset` either — at any index.** The `axis_shift(i)` quantity is the signed distance along joint `i`'s axis between the feet of the common perpendiculars with joints `i-1` and `i+1`. It is origin-dependent: it is measured from joint `i`'s origin, and the URDF may place that origin anywhere along the axis. `wrist_normal_offset`, by contrast, is computed from axis intersections and is origin-independent.
+
+The two differ, and the numbers make the difference visible:
+
+| Arm | `wrist_normal_offset` | `axis_shift(3)` (along J3) | `axis_shift(4)` (along J4) |
+|---|---|---|---|
+| UR10 | 0.163941 | 0.163941 | 0.000000 |
+| FR5 | 0.102100 | 0.000000 | 0.102100 |
+| Elfin | 0.000002 | 0.000000 | 0.570000 |
+
+For UR10, `axis_shift(3)` happens to equal `wrist_normal_offset` — a coincidence of J3's origin placement and the geometry. For FR5, `axis_shift(3)` is 0.0, and the "along J4" quantity `axis_shift(4)` is 0.1021 — close to `wrist_normal_offset` but at a different index. **The three quantities are distinct, and their numerical coincidences depend on where the URDF places the joint origins.**
+
+**The algorithm uses `wrist_normal_offset`, never `axis_shift(i)`** — which is why it is immune to the origin placement, and why it gives the same answer for UR10 and FR5 (the same geometric quantity, computed from the axes as lines, independent of where the origins sit).
 
 ## A.5 Summary
 

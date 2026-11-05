@@ -63,13 +63,42 @@ a scalar; |BC| and |AC| are consequences of |AB| and the position of C.
 
 Derived lengths the solver uses
 -------------------------------
-    elbow_to_wrist()   — distance from J3's axis to A (the wrist root,
-                         where J4's axis meets the arm plane). This is
-                         the forearm length in the law of cosines. NOT
-                         axis_gap(3), and NOT the physical forearm link.
+    elbow_to_wrist(A)  — distance from J3's axis to A, the wrist root:
+                         the point where J4's axis meets the arm plane.
+                         This IS the forearm length in the law of
+                         cosines (Part 7.4). A is the arm chain's target
+                         and is pose-dependent — compute it with
+                         wrist_root(p5, z_j5, theta1). With no
+                         argument, the zero-pose A is used (a fixed
+                         property of the arm, for describe()).
+
+                         NOT axis_gap(3) (the J3–J4 perpendicular
+                         distance), and NOT the physical forearm link.
 
     flange_offset      — distance from the wrist center to the flange
                          (d6 in conventional notation).
+
+The arm chain's target: A, not Q
+--------------------------------
+A is the wrist root — where J4's axis meets the arm plane. It is the
+end of the forearm and the target of the arm chain.
+
+A is NOT P5's projection onto the arm plane. Call that Q. They differ
+by |AQ| = wrist_radial_offset, along J5's axis: A = Q − wrist_radial_
+offset · ẑ_J5. (Q = P5's foot on the plane; A = B's foot, with B on
+J4's axis.) The distinction is invisible for a spherical wrist
+(wrist_radial_offset = 0, so A = Q = P5) and essential for an offset
+wrist.
+
+A is computable before the arm chain, from the flange pose and θ₁
+alone, because θ₅ is known first (Part 6): θ₅ fixes J5's axis (Part
+6.10), J5's axis fixes B = P5 − wrist_radial_offset · ẑ_J5, and B
+fixes A = B − wrist_normal_offset · n̂. See wrist_root(p5, z_j5,
+theta1) and j5_axis(z_flange, theta1, theta5, flip).
+
+A previous draft of this module called the target Q and added a
+separate forearm_length(Q). That was an error: Q is not the arm
+chain's end. There is one forearm length, and it is |A − J3_origin|.
 
 Origin-independence
 -------------------
@@ -310,17 +339,131 @@ class ArmGeometry:
     # Derived lengths the arm chain uses
     # ------------------------------------------------------------------
 
-    def elbow_to_wrist(self) -> float:
+    def arm_plane_normal(self, theta1: float) -> np.ndarray:
         """
-        Distance from J3's axis to A (the wrist root).
+        n̂ = (−sin θ₁, cos θ₁, 0) — the arm plane's unit normal, in the
+        true-root frame. Horizontal, perpendicular to the arm-plane line.
 
-        This is the forearm length in the law of cosines (Part 7). It is
-        NOT axis_gap(3): the latter is the perpendicular distance between
-        J3 and J4 axes, which coincides with elbow_to_wrist only for a
-        spherical wrist. For an offset wrist, they differ, and the law
-        of cosines uses this distance.
+        Part 6.4 and Part 7.2 of docs/unified_IK.md.
         """
-        return float(np.linalg.norm(self.wrist_root() - self.axes[2].point))
+        return np.array([-np.sin(theta1), np.cos(theta1), 0.0])
+
+    def j5_axis(self,
+                z_flange: np.ndarray,
+                theta1: float,
+                theta5: float,
+                flip: bool = False) -> np.ndarray:
+        """
+        J5's axis direction ẑ_J5, from the flange's Z axis, θ₁, and θ₅.
+
+        Constraints (Part 6.10):
+          - ẑ_J5 is a unit vector;
+          - ẑ_J5 · n̂ = 0              (J5 ⟂ J4, and J4 ∥ n̂);
+          - ẑ_J5 · ẑ_flange = cos θ₅  (θ₅ is the angle between J5's Z
+                                       and J6's Z, and J6's Z is the
+                                       flange's Z).
+
+        Construction: build an orthonormal basis {e₁, e₂} of the plane
+        perpendicular to n̂, with e₁ along ẑ_flange's in-plane component.
+        Then ẑ_J5 = a·e₁ + b·e₂ with a = cos θ₅ / |ẑ_flange's in-plane
+        component| and b = ±√(1−a²). The two signs of b are the two
+        wrist configurations (flip / no-flip).
+
+        Args:
+            z_flange: the flange's Z axis (J6's axis), in the true-root
+                      frame. Need not be unit length.
+            theta1: the base rotation, in radians.
+            theta5: the wrist tilt, in radians (from Part 6).
+            flip: selects the sign of b. Which sign corresponds to the
+                  no-flip configuration is a frame convention, pinned by
+                  the FK test (see docs/unified_IK.md Part 6.10 and the
+                  check_extraction.py sample). Do not assume this
+                  default is the convention until the FK run confirms it.
+
+        Raises:
+            ValueError: if ẑ_flange is parallel to n̂ (the c ≈ 0
+                singularity, Part 8.7) or if |cos θ₅| exceeds the
+                in-plane component of ẑ_flange (θ₅ unreachable for this
+                flange orientation). Both are refused loudly; the
+                solver documents its convention for the former.
+        """
+        n = self.arm_plane_normal(theta1)
+        zf = z_flange / np.linalg.norm(z_flange)
+
+        # e₁: ẑ_flange's component in the plane perpendicular to n̂.
+        in_plane = zf - float(np.dot(zf, n)) * n
+        c = float(np.linalg.norm(in_plane))
+        if c < _ANGLE_TOL:
+            raise ValueError(
+                "ẑ_flange is parallel to the arm-plane normal: the "
+                "construction of ẑ_J5 (Part 6.10) is degenerate. "
+                "The solver handles this with a documented convention; "
+                "see docs/unified_IK.md Part 8.7."
+            )
+        e1 = in_plane / c
+        e2 = np.cross(n, e1)
+
+        a = float(np.cos(theta5)) / c
+        if abs(a) > 1.0 + _ANGLE_TOL:
+            raise ValueError(
+                f"|cos θ₅| / |ẑ_flange's in-plane component| = "
+                f"{abs(a):.6f} > 1: θ₅ = {theta5:.6f} rad is "
+                f"unreachable for this flange orientation."
+            )
+        a = float(np.clip(a, -1.0, 1.0))
+        b = np.sqrt(max(0.0, 1.0 - a * a))
+        if flip:
+            b = -b
+        return a * e1 + b * e2
+
+    def wrist_root_target(self,
+                          p5: np.ndarray,
+                          z_j5: np.ndarray,
+                          theta1: float) -> np.ndarray:
+        """
+        A = the wrist root for a given target: B projected onto the arm
+        plane. This is the arm chain's target.
+
+        B = P5 − wrist_radial_offset · ẑ_J5   (along J5's axis, from C to B)
+        A = B − wrist_normal_offset · n̂        (B projected onto the plane)
+
+        Requires θ₅ (via ẑ_J5 from j5_axis), θ₁ (via n̂), and P5 — all
+        known before the arm chain. Part 7.1–7.2.
+
+        Note: |A − Q| = wrist_radial_offset · |ẑ_J5| = wrist_radial_offset,
+        where Q = P5 − wrist_normal_offset · n̂ is P5's projection. A is
+        the arm chain's end; Q is not.
+        """
+        n = self.arm_plane_normal(theta1)
+        B = p5 - self.wrist_radial_offset * z_j5
+        return B - self.wrist_normal_offset * n
+
+    def elbow_to_wrist(self, A: Optional[np.ndarray] = None) -> float:
+        """
+        |A − J3_origin| — the forearm length in the law of cosines
+        (Part 7.4).
+
+        A is the wrist root — the arm chain's target (see
+        wrist_root_target()). If A is None, the zero-pose wrist root is
+        used (a fixed property of the arm; useful for describe()).
+
+        Args:
+            A: the target wrist root, in the true-root frame, on the
+               arm plane. Compute it with wrist_root_target(p5, z_j5,
+               theta1). If None, the zero-pose wrist_root() is used.
+
+        Returns:
+            |A − J3_origin|, in metres.
+
+        NOT axis_gap(3) — the latter is the perpendicular distance
+        between J3 and J4 axes. For a spherical wrist
+        (wrist_radial_offset = 0), A = Q = P5, and the distinction
+        between this and a "forearm length to P5" vanishes; for an
+        offset wrist, A ≠ Q = P5, and this is the length the law of
+        cosines uses.
+        """
+        target = self.wrist_root() if A is None else A
+        return float(np.linalg.norm(target - self.axes[2].point))
 
     # ------------------------------------------------------------------
     # Axis quantities, 1-based indexing.
@@ -535,7 +678,7 @@ class ArmGeometry:
     # Display
     # ------------------------------------------------------------------
 
-    def describe(self) -> str:
+    def describe(self, A: Optional[np.ndarray] = None) -> str:
         """Human-readable summary. Useful in tests and logs."""
         lines = ["ArmGeometry:"]
         for i, ax in enumerate(self.axes):
@@ -555,7 +698,16 @@ class ArmGeometry:
                      f"[hypotenuse; A to C]")
         lines.append("")
         lines.append(f"  wrist_root A: {self.wrist_root().round(6)}")
-        lines.append(f"  elbow_to_wrist (J3->A): {self.elbow_to_wrist():.6f}")
+        lines.append(f"  elbow_to_wrist (J3->A, zero pose): "
+                     f"{self.elbow_to_wrist():.6f}  "
+                     f"[law-of-cosines length at the zero pose]")
+        if A is not None:
+            lines.append(f"  elbow_to_wrist (J3->A, target):    "
+                         f"{self.elbow_to_wrist(A):.6f}  "
+                         f"[the target's forearm length]")
+        else:
+            lines.append("  elbow_to_wrist (J3->A, target):    "
+                         "[not shown — no target A supplied]")
         lines.append(f"  flange_offset: {self.flange_offset:.6f}")
         lines.append(f"  axis_gap(2) (J2->J3, upper arm): {self.axis_gap(2):.6f}")
         lines.append(f"  axis_gap(3) (J3->J4): {self.axis_gap(3):.6f}")

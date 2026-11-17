@@ -38,6 +38,7 @@ closed-form solver can do better than ~1e-3 rad.
 
 import argparse
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -226,6 +227,7 @@ def verify(name, urdf, n_poses, show_branches):
 
 
 def verify_refusal(tmpdir):
+    """Build a PUMA-style shoulder offset in a scratch dir, never in the repo."""
     print("=" * 74)
     print("Refusal: an out-of-class arm must fail loudly, not approximately")
     print("=" * 74)
@@ -257,7 +259,6 @@ def main():
     ap.add_argument("--urdf", help="verify an arbitrary URDF instead")
     ap.add_argument("--name", default="CustomArm")
     ap.add_argument("--show-branches", action="store_true")
-    ap.add_argument("--tmpdir", default=".")
     a = ap.parse_args()
 
     print(f"numpy {np.__version__}   python {sys.version.split()[0]}\n")
@@ -268,7 +269,8 @@ def main():
             if a.arm and name != a.arm:
                 continue
             verify(name, path, a.poses, a.show_branches)
-        verify_refusal(a.tmpdir)
+        with tempfile.TemporaryDirectory(prefix="hatch-ik-") as td:
+            verify_refusal(td)
 
     print("=" * 74)
     if _failures:

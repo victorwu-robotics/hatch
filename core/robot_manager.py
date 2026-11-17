@@ -74,6 +74,9 @@ class RobotManager:
 
         # Current robot state
         self.current_asset_id: Optional[str] = None
+        # Why IK is unavailable for the current arm, if it is. Set when the
+        # unified solver refuses the arm; None when IK is attached.
+        self.ik_unavailable_reason: Optional[str] = None
         self.current_kinematic_model = None
         self.current_mode = Mode.SIMULATE_LOCAL
         self.is_connected = False
@@ -305,20 +308,32 @@ class RobotManager:
             return None
 
     def _attach_ik_solver(self, model):
-        """Attach IK solver to the kinematic model."""
+        """
+        Attach the unified analytical IK solver to the kinematic model.
+
+        An arm outside the supported class is refused, loudly, with the
+        violated condition and its measured value. Nothing is substituted:
+        the model is left without an IK solver, and callers see an explicit
+        failure rather than a plausible-looking joint vector.
+        """
+        from core.kinematics.geometric_extraction import UnsupportedArmError
         try:
             from core.kinematics.ik_solver import IKSolver
             ik_solver = IKSolver(model)
-            model.set_ik_solver(ik_solver)
-            if ik_solver is not None:
-                logger.debug("[ROB MANAGER]ik_solver is not None.")
-                logger.info("IK solver attached")
-            else:
-                logger.debug("[ROB MANAGER]ik_solver is None.")
-        except ImportError:
-            logger.info("IK solver not available (missing dependencies)")
+        except ImportError as e:
+            logger.error("IK solver unavailable, missing dependency: %s", e)
+            return
+        except UnsupportedArmError as e:
+            logger.error("IK refused: this arm is outside the supported class.\n%s", e)
+            self.ik_unavailable_reason = str(e)
+            return
         except Exception as e:
-            logger.warning(f"Could not attach IK solver: {e}")
+            logger.error("Could not attach IK solver: %s", e, exc_info=True)
+            self.ik_unavailable_reason = str(e)
+            return
+        model.set_ik_solver(ik_solver)
+        self.ik_unavailable_reason = None
+        logger.info("IK solver attached (unified analytical)")
 
     def _register_initial_transforms(self, asset_id: str, model):
         """

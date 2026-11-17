@@ -234,6 +234,7 @@ class UnifiedIKSolver:
         self._Ro = [T[:3, :3].copy() for T in self._origin]
         self._to = [T[:3, 3].copy() for T in self._origin]
         self._place_cache = {}
+        self._tags_cache = {}
         self._I3 = np.eye(3)
         self._K, self._KK = [], []
         for a in self._axis_local:
@@ -565,6 +566,12 @@ class UnifiedIKSolver:
                                  s.tags(), s.fk_pos_error, s.fk_rot_error)
             solutions = kept
 
+        # Every solution's tags are known exactly, so register them. During
+        # a Cartesian jog the next call's reference is one of these vectors,
+        # which turns _tags_of from a second full solve into a dict lookup.
+        for s in solutions:
+            self._tags_cache[tuple(float(v) for v in s.q)] = s.tags()
+
         self.diagnostics = {
             "n_solutions": len(solutions),
             "rejected_fk": rejected_fk,
@@ -874,10 +881,24 @@ class UnifiedIKSolver:
         return out
 
     def _tags_of(self, q: np.ndarray) -> Optional[Tuple[str, str, str]]:
-        """The configuration tags of a known joint vector, by re-solving."""
+        """
+        The configuration tags of a known joint vector, by re-solving.
+
+        Memoised: during a Cartesian jog the reference is the vector
+        returned on the previous call, so without a cache every jog step
+        would pay for two full solves instead of one.
+        """
+        key = tuple(float(v) for v in q)
+        if key in self._tags_cache:
+            return self._tags_cache[key]
+        tags = None
         Tf = self.fk(q)
         for s in self.solve(Tf, q_reference=q, respect_limits=False):
             d = np.arctan2(np.sin(s.q - q), np.cos(s.q - q))
             if np.max(np.abs(d)) < 1e-4:
-                return s.tags()
-        return None
+                tags = s.tags()
+                break
+        if len(self._tags_cache) > 64:
+            self._tags_cache.clear()
+        self._tags_cache[key] = tags
+        return tags

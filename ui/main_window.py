@@ -266,8 +266,7 @@ def main():
     )
 
     # Set DEBUG for IK solver modules
-    logging.getLogger('core.kinematics.ur_ik_solver').setLevel(logging.DEBUG)
-    logging.getLogger('core.kinematics.offset_wrist_ik_solver').setLevel(logging.DEBUG)
+    logging.getLogger('core.kinematics.unified_ik_solver').setLevel(logging.DEBUG)
     logging.getLogger('core.kinematics.ik_solver').setLevel(logging.DEBUG)
     
     # Silence noisy loggers

@@ -1,3 +1,17 @@
+> **⚠️ SUPERSEDED — see [`HANDOFF-3.md`](HANDOFF-3.md).**
+>
+> This document's two "unresolved" problems are **solved and verified**:
+> θ₅ is `cos θ₅ = dot(â₆, â₄)`, and the arm chain's target is
+> `A = P5 − ρ·â₄ − δ·â₅`. The fixes proposed below are wrong — the `lat`-based
+> θ₅ formula has a guard that can never fail, and the `A = P05_x·cosθ₁ + …`
+> route is the DH approach the project forbids.
+>
+> Its acceptance target (`max residual < 1e-6` on all three arms) is
+> **unreachable** on FR5 and Elfin: their URDFs carry 3.7e-6 rad axis tilt.
+> `check_solver.py` also calls an abolished API and crashes.
+>
+> Kept as a record of the reasoning, not as instructions.
+
 Here is a comprehensive Handoff document summarizing our journey, the corrections made, the breakthroughs achieved, and the exact state of the unconventional unified IK solver.
 
 You can save this as `docs/HANDOFF.md` to bring a fresh AI up to speed in a new session.

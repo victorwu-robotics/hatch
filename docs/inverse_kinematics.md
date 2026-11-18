@@ -2,6 +2,16 @@
 layout: default
 title: Inverse Kinematics in Hatch
 ---
+
+> **⚠️ PARTLY SUPERSEDED — see [`unified_IK.md`](unified_IK.md) and [`HANDOFF-3.md`](HANDOFF-3.md).**
+>
+> This guide derives IK for a **spherical wrist only**. Hatch now has one
+> analytical solver covering offset and spherical wrists by the same
+> derivation, where the spherical case is simply the value at δ = 0 rather
+> than a separate method. For the implemented geometry, read `unified_IK.md`.
+>
+> Kept for its pedagogical introduction, not as the current specification.
+
 # Inverse Kinematics in Hatch (孵) 🐣
 
 ## A Guide to Understanding and Implementing 6-DOF Spherical Wrist IK

@@ -283,22 +283,46 @@ and every arm silently fell through to the numerical solver.
 |---|---|
 | `docs/HANDOFF-2.md` | superseded by this file; its §3 problems are solved, its §5 target unreachable |
 | `docs/inverse_kinematics.md` | teaches **spherical-wrist-only** IK; contradicts the unified solver. Kept for pedagogy only |
-| `core/kinematics/numerical_ik_solver.py` | refused; see §7 |
+### 8.1 Deleted — commit `6be51c4`, 13 files, 3,411 lines
+
+Gone from the tree; recoverable from history only. Do not resurrect any of them.
+
+| artifact | why it went |
+|---|---|
+| `core/kinematics/numerical_ik_solver.py` | refused; see §7. Unsafe, not merely imprecise |
 | `core/kinematics/ur_ik_solver.py` | arm-specific, hardcoded DH |
 | `core/kinematics/offset_wrist_ik_solver.py` | wrapper over the above |
 | `core/kinematics/analytical_ik_solver.py` | Elfin-specific, hardcoded ZYZ Euler |
 | `core/kinematics/solver_v2.py`, `unified_ik_solver_backup.py` | pre-correction derivation |
-| `check_solver.py`, `mini_solver_check.py` (root) | call the abolished `forearm_to_root` API; **crash if run** |
+| `core/kinematics/dh_extract.py` | superseded by `geometric_extraction.py` |
 | `core/kinematics/ik_test.py`, `sph_theta_1_test.py` | pre-existing collection errors (broken import; obsolete `package_dirs=` kwarg) |
+| `core/kinematics/fk_test.py` | DH-comparison diagnostic; its only caller was a commented-out block |
+| `tests/test_analytical_ik.py`, `phi_0_diag.py`, `test_solver_v2.py` | diagnostics for the abolished solvers; would have become broken importers |
 
-None of these are imported by `core/`, `ui/`, `viz/` or `drivers/` any more —
-verified by grep. They are candidates for deletion (~1,900 lines), pending
-maintainer confirmation.
+Verified with all 13 removed: `verify_ik.py` 31 checks pass, 119 tests pass,
+adapter imports clean. `core/kinematics/` is now **7 files** — the 5-file working
+set (§1) plus the two test modules.
 
-**Naming trap:** `ur_ik_solver.py` and `ik_solver.py` are easy to confuse.
-Restoring the wrong one produces `IK failed (local IK (error))` in the Cartesian
-panel. The correct adapter hashes to
-`b18261f8d03137cf9be3734841b7e66002673047` and contains `UnifiedIKSolver`.
+The only live-code reference was `robot_manager` → `fk_test`, and it sat inside a
+`'''…'''` string, confirmed by AST rather than by grep. That block was labelled
+*"Remove once the unified solver is in place"*; it has now been removed, with the
+executable AST verified unchanged.
+
+### 8.2 Still on disk, still broken
+
+`check_solver.py` and `mini_solver_check.py` (repo root) were written against an
+older API and **crash if run**: they call `get_true_root()` on an `ArmGeometry`,
+but that method belongs to `KinematicModel` (`kinematic_model.py:390`), so they
+fail with `AttributeError` before reaching their next obsolete access,
+`solver.forearm_to_root`. Left in place pending a decision; they are diagnostics,
+not part of any import graph.
+
+**Naming trap:** `ur_ik_solver.py` and `ik_solver.py` were easy to confuse, and
+restoring the wrong one produced a silent `IK failed (local IK (error))` in the
+Cartesian panel. The first is now deleted, but the trap survives in history — if
+you ever `git checkout` an old commit's kinematics folder, check which one you
+got. The correct adapter contains `UnifiedIKSolver`. As of `32295be` that failure
+mode is no longer silent: `SimulatedRobot` logs the exception type and traceback.
 
 ---
 

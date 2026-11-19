@@ -132,9 +132,14 @@ class SimulatedRobot(RobotInterface):
             try:
                 q_solution = self._model.solve_ik_for_tcp(pose, q_current)
                 ik_source = "local IK"
-            except Exception:
+            except Exception as e:
+                # Never swallow this silently: an exception here is a
+                # different failure from an unreachable target, and the
+                # traceback is the only thing that tells them apart.
+                logger.error("Local IK raised %s: %s", type(e).__name__, e,
+                             exc_info=True)
                 q_solution = None
-                ik_source = "local IK (error)"
+                ik_source = f"local IK (error: {type(e).__name__}: {e})"
 
         if q_solution is None:
             self._channel.publish(

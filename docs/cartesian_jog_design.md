@@ -1,7 +1,11 @@
 # Cartesian Jog Control — Design Note
 
-**Status: PROPOSAL. Semantics agreed with the maintainer; no code written yet.**
-Drafted against `main @ 9c8797f`. Nothing here is implemented.
+**Status: IMPLEMENTED.** Semantics agreed with the maintainer, then built.
+Drafted against `main @ 9c8797f`; the panel rewrite lands on top of `6353827`.
+Run by the maintainer against the visualizer, and covered by
+`ui/panels/test_cartesian_control_panel.py` (58 tests, headless).
+The findings below describe the **previous** panel and are kept as the record of
+why the change was made.
 
 Scope: `ui/panels/cartesian_control_panel.py` and the two contracts it touches
 (`CARTESIAN_COMMAND`, `RobotInterface.move_pose`). Not a motion-planning document —
@@ -253,10 +257,20 @@ trajectories, feedrates; perception-derived geometry; `core/motion/`.
 
 ## 15. Open decisions
 
-1. Refusal policy: rollback, or loud divergence indicator? (§9)
-2. Default jog full-scale for position and orientation. (§7)
-3. Keep or drop the unused `frame` argument in `CARTESIAN_COMMAND` / `move_pose`. (§13)
-4. Wheel idle timeout before recentring. (§11)
+Three of the four were settled by the implementation; the values below are what
+the code does, not a proposal.
+
+1. ~~Refusal policy~~ — **loud indicator, no rollback.** A refusal sets the status
+   line and colours the target readout; the target is never silently rewound. (§9)
+2. ~~Default jog full-scale~~ — position **10% of the URDF-derived reach**,
+   orientation **±30°**. Both are user-adjustable. (§7)
+3. **Still open:** keep or drop the unused `frame` argument in `CARTESIAN_COMMAND` /
+   `move_pose`. It is still accepted and still ignored. (§13)
+4. ~~Wheel idle timeout~~ — **500 ms** before the handle recentres. (§11)
+
+Also still open, and not addressed by this change: the panel builds **base**-frame
+poses while `solve_ik_for_tcp` expects **world**. They coincide on all three arms
+today, so the defect is latent (§13).
 
 ---
 

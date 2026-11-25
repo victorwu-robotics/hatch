@@ -426,15 +426,32 @@ seconds. Not done yet.
 
 **The test suite needs `pytest`, and `requirements.txt` does not list it** — not
 among the 90 pins either. Installing from that file therefore leaves you unable to
-run the tests. The two modules are pytest-style functions with fixtures, so
+run the tests. The modules are pytest-style functions with fixtures, so
 `python -m unittest` cannot collect them (it reports import errors, not tests).
 
 ```bash
-pip install pytest numpy      # the kernel + tests need nothing else
+pip install pytest numpy scipy   # the kernel, the panel tests, nothing else
 python verify_ik.py                                                   # 31 checks
 python -m pytest core/kinematics/test_unified_ik_solver.py \
-                 core/kinematics/test_ik_solver.py -q     # 119 passed, 1 skipped
+                 core/kinematics/test_ik_solver.py \
+                 ui/panels/test_cartesian_control_panel.py -q
+                                        # 177 passed, 3 skipped
 ```
+
+`ui/panels/test_cartesian_control_panel.py` is headless like the kernel tests: it
+reads the panel source with `ast` and binds the methods to stubs, so it imports no
+Qt and needs no display. Two tests at the bottom do use real Qt, to pin the signal
+behaviour the jog design depends on (a wheel notch emits `valueChanged` only, never
+`sliderPressed`/`sliderReleased` — hence the idle timer rather than spring-back on
+release). They skip when Qt is unavailable.
+
+**Do not guard those with `pytest.importorskip`.** Since pytest 9.1 its default
+`exc_type` is `ModuleNotFoundError`, so an *installed* PyQt5 whose runtime libraries
+are missing (`ImportError: libGL.so.1`, the normal case on a headless box) is
+re-raised and the test **fails instead of skipping**. `exc_type=ImportError` fixes
+it but only exists from pytest 8.2, and this repo pins no pytest version. A plain
+`try: import … except ImportError: pytest.skip(...)` is correct on every version.
+Verified in three environments: no PyQt5, PyQt5 without runtime libs, full Qt.
 
 Run from the repo root. `numpy` is pinned to 1.26.4 but 2.2.6 is verified working
 on Python 3.12 — the pin is not a constraint the kernel actually needs.

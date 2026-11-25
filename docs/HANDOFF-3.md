@@ -451,7 +451,13 @@ are missing (`ImportError: libGL.so.1`, the normal case on a headless box) is
 re-raised and the test **fails instead of skipping**. `exc_type=ImportError` fixes
 it but only exists from pytest 8.2, and this repo pins no pytest version. A plain
 `try: import … except ImportError: pytest.skip(...)` is correct on every version.
-Verified in three environments: no PyQt5, PyQt5 without runtime libs, full Qt.
+
+Measured, not assumed. The two skip paths were verified in the sandbox (no PyQt5
+installed; PyQt5 installed but `libGL.so.1` missing) — both give 58 passed, 2 skipped.
+The full-Qt path was verified on the maintainer's machine, Python 3.12 / pytest 9.1.1:
+**60 passed**, including both Qt signal tests. The whole suite there is
+**179 passed, 1 skipped**; the one skip is geometric, not environmental — an arm with
+no shoulder hole (`h ~ 0`), so the branch it would exercise does not exist.
 
 Run from the repo root. `numpy` is pinned to 1.26.4 but 2.2.6 is verified working
 on Python 3.12 — the pin is not a constraint the kernel actually needs.

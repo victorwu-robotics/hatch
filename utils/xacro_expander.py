@@ -176,7 +176,7 @@ class XacroExpander:
                     self._evaluated_properties.add(name)
                     made_progress = True
                 else:
-                    evaluated = self._substitute_string(value)
+                    evaluated = self._substitute_string(self._resolve_find(value))
                     if '$' not in evaluated:
                         self._properties[name] = evaluated
                         self._evaluated_properties.add(name)

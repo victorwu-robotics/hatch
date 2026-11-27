@@ -171,12 +171,6 @@ class CartesianControlPanel(QWidget):
         title.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(title)
 
-        # IK mode indicator
-        self.ik_mode_label = QLabel("IK: unknown")
-        self.ik_mode_label.setAlignment(Qt.AlignCenter)
-        self.ik_mode_label.setStyleSheet("QLabel { color: #888; font-size: 10px; }")
-        main_layout.addWidget(self.ik_mode_label)
-
         # Position Control Group (with integrated readout)
         main_layout.addWidget(self._create_position_group())
 
@@ -949,8 +943,8 @@ class CartesianControlPanel(QWidget):
         if self.target_pose is None:
             return
 
-        # Note: frame argument is kept for logging but unused downstream
-        # (move_pose ignores it; solve_ik_for_tcp expects world frame)
+        # target_pose is in base_link, which is not world when the arm is
+        # mounted on something. move_pose honours 'frame' and converts.
         self._motion_in_flight = True
         self.state_channel.publish(
             EventType.CARTESIAN_COMMAND,
@@ -972,6 +966,12 @@ class CartesianControlPanel(QWidget):
             self.target_pose = tcp_pose.copy()
             self._last_achieved_pose = tcp_pose.copy()
             self._update_all_sliders_from_target()
+            # The sliders are not the readout. Both numeric displays must be
+            # refreshed here too: they are otherwise written only on
+            # ROBOT_STATE, and a tab switch causes no motion, so the Target
+            # box would keep the previous pose and look like a pending move.
+            self._update_current_display()
+            self._update_target_display()
             self.status_label.setText("Target reset to current")
             QTimer.singleShot(1000, lambda: self.status_label.setText(
                 "Auto-move enabled (scroll, drag, or click buttons)"))
@@ -1192,13 +1192,14 @@ class CartesianControlPanel(QWidget):
     # =================================================================
 
     def _on_mode_switched(self, event):
+        # No IK-source indicator here. Which solver runs is a deterministic
+        # function of connection state (command_handler upgrades to
+        # SIMULATE_REAL_IK on connect and downgrades on disconnect), so a label
+        # repeating it adds nothing. Whether the arm will physically move is
+        # shown by the Mode selector. See docs/HANDOFF-3.md, open items: when
+        # controller IK becomes reachable, surface the condition that matters
+        # instead -- that it does not honour frame='base' on a mounted arm.
         mode = event.data.get('mode', '')
-        mode_display = {
-            'simulate_local': 'IK: Local (simulated)',
-            'simulate_real_ik': 'IK: Real robot solver',
-            'real': 'IK: Real robot solver',
-        }
-        self.ik_mode_label.setText(mode_display.get(mode, f'IK: {mode}'))
 
         if mode == "real" and self.robot_manager:
             real_robot = getattr(self.robot_manager, '_real_robot', None)

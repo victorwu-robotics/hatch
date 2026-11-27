@@ -677,3 +677,58 @@ def test_qt_handle_drag_emits_press_and_release():
     QTest.mouseRelease(s, Qt.LeftButton, Qt.NoModifier, c)
     assert seen["pressed"] == 1
     assert seen["released"] == 1
+
+
+# ----------------------------------------------------------------------
+# Defect -- a tab switch left a stale Target readout on screen
+# ----------------------------------------------------------------------
+
+class _Model:
+    """Minimal stand-in: the panel only asks the model for its TCP pose."""
+    def __init__(self, T): self._T = T.copy()
+    def get_tcp_pose(self): return self._T.copy()
+
+
+def test_reset_target_refreshes_both_numeric_readouts():
+    """
+    Switching joint -> Cartesian must not leave a stale Target on screen.
+
+    Measured on the maintainer's machine: the Target box read
+    (-0.653, 0.256, 1.122) while the arm sat at (-0.714, 0.158, 0.613), and the
+    per-axis slider labels were already correct. _reset_target refreshed the
+    sliders but not the numeric readouts, which are otherwise written only on
+    ROBOT_STATE -- and a tab switch causes no motion, so no event arrives. The
+    box kept its old contents until the first jog.
+
+    A student reading Target != Current would reasonably believe a move was
+    pending and go looking for a way to complete it.
+    """
+    achieved = np.eye(4)
+    achieved[:3, :3] = R.from_euler(
+        'xyz', (177.8, 3.6, 89.9), degrees=True).as_matrix()
+    achieved[:3, 3] = [-0.7144, 0.1581, 0.6134]
+    s = make_panel(model=_Model(achieved))
+
+    stale = achieved.copy()
+    stale[:3, 3] = [-0.653, 0.256, 1.122]
+    # Rotate it too. Without this the RPY half of the check would pass even
+    # unfixed, and the test would be half degenerate.
+    stale[:3, :3] = stale[:3, :3] @ R.from_euler(
+        'xyz', (30, 20, -40), degrees=True).as_matrix()
+    s.target_pose = stale
+    s._last_achieved_pose = achieved.copy()
+    s._update_current_display()
+    s._update_target_display()
+
+    # Precondition: the readouts really do disagree, or this proves nothing.
+    assert [w.text for w in s.pos_target_vals] != [w.text for w in s.pos_current_vals]
+    assert s.orient_target_rpy.text != s.orient_current_rpy.text
+
+    # Exactly what motion_container._on_mode_changed calls on the switch.
+    s._reset_target()
+
+    assert [w.text for w in s.pos_target_vals] == [w.text for w in s.pos_current_vals]
+    assert s.orient_target_rpy.text == s.orient_current_rpy.text
+    assert [w.text for w in s.pos_target_vals] == ['-0.714', '0.158', '0.613']
+    # And the reset must not have commanded anything.
+    assert s.state_channel.published == []

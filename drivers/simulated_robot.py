@@ -60,6 +60,14 @@ class SimulatedRobot(RobotInterface):
 
         logger.info("SimulatedRobot initialized")
 
+    def _pose_in_world(self, pose, frame, q_current):
+        if frame == "world":
+            return pose
+        q = (q_current if q_current is not None
+             else self._model.get_current_joint_positions())
+        T_world_base = self._model.compute_fk(q)[self._model.get_true_base()]
+        return T_world_base @ pose
+
     # =================================================================
     # Mode and Model Configuration
     # =================================================================
@@ -122,15 +130,27 @@ class SimulatedRobot(RobotInterface):
             logger.warning("move_pose called but no kinematic model set")
             return False
 
+        if frame not in ("base", "world"):
+            raise ValueError(
+                f"move_pose: unknown frame {frame!r}; expected 'base' or 'world'")
+
         q_current = self._joint_positions
 
         # Choose IK source
         if self._use_real_ik and self._real_robot and self._real_robot.is_connected():
+            # The controller's own IK expects the controller base frame, which
+            # is not base_link. That contract is unresolved, so this path is
+            # left unchanged rather than guessed at -- and says so.
+            if frame == "base":
+                logger.warning(
+                    "move_pose: real-controller IK does not yet honour "
+                    "frame='base'; pose passed through unchanged")
             q_solution = self._real_robot.solve_ik(pose, q_current)
             ik_source = "real robot IK"
         else:
             try:
-                q_solution = self._model.solve_ik_for_tcp(pose, q_current)
+                target_world = self._pose_in_world(pose, frame, q_current)
+                q_solution = self._model.solve_ik_for_tcp(target_world, q_current)
                 ik_source = "local IK"
             except Exception as e:
                 # Never swallow this silently: an exception here is a

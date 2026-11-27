@@ -447,9 +447,14 @@ Hatch is an honest platform. These areas are not yet addressed and users should 
 - No point cloud processing
 - No sensor fusion
 - Camera extrinsics are assumed to match the URDF definition — there is no way to refine them through calibration
-- The URDF specifies approximate sensor positions; calibration would provide exact positions but there is no mechanism to override URDF transforms with calibrated values
+- The URDF specifies approximate sensor positions. A mechanism to refine the tool's working point does exist: `KinematicModel.set_tool_transform`, honoured by the IK adapter and covered by a test with a bent torch. What is missing is the calibration that produces the value, its persistence, and any UI to set or inspect it — `set_tool_transform` is called nowhere in application code, only by that test. So in practice the TCP is the flange: with a 382 mm torch, a 1° orientation jog moves the tip 6.667 mm while the panel reports the flange.
+- No equivalent refinement exists for camera extrinsics.
 
 **What this means for users:** Sensors can be visualized if their mount points are correctly specified in the URDF. However, for applications requiring precise spatial accuracy (pick-and-place, inspection, assembly), the lack of calibration means sensor data may be offset from the robot's true coordinate frame. Calibration is a planned area of development and a significant engineering effort.
+
+The designed approach — the measurement funnel, its accuracy budgets, and the
+linear calibration shared by tool, hand-eye and touch localisation — is recorded
+in `sensing_funnel_design.md`.
 
 ---
 

@@ -1,5 +1,9 @@
 Hatch (孵) Architecture Document
 
+> **Superseded.** This is the first architecture document, kept for the record.
+> The current one is [`architecture.md`](architecture.md). Where the two
+> disagree, `architecture.md` governs.
+
 ---
 
 ## Prologue: On Understanding

@@ -553,10 +553,28 @@ spatial accuracy, pre-calibrate your URDF transforms before loading.
 
 ### Testing
 
-No automated tests exist. The `TransformRegistry`, `StateChannel`, and
-`KinematicModel` are particularly testable — they have clear inputs
-and outputs with no external dependencies. Tests will be added as the
-platform stabilizes.
+Automated tests cover the kinematic kernel, the simulated driver and the
+Cartesian panel: 229 tests, runnable headlessly with numpy, scipy and pytest.
+
+```bash
+python -m pytest core/kinematics drivers ui/panels -q
+```
+
+Measured: 228 passed, 1 skipped where PyQt5 is available; 226 passed, 3 skipped
+where it is not. The panel tests read the source with `ast` and bind its methods
+to stubs, so they need no display; two Qt-signal tests skip without PyQt5, and
+one IK test skips on an arm with no shoulder hole.
+
+Not covered: the joint panel, `TransformRegistry`, and the visualizer.
+`core/world_state/test_state_channel.py` exists but does not import — it
+references a `StateChangedEvent` that no longer exists.
+
+Running bare `pytest` at the repository root does not work: seven modules fail
+to collect and an eighth errors at setup. Three are vendored ROS description
+tests under `assets/`; two are stale repo tests (`test_state_channel.py`,
+`test_preprocessor.py`); two need optional dependencies (`sympy`, `cv2`); and
+`wrist_discret_test.py` is a scratch script whose helper `test_arm(name, ...)`
+pytest mistakes for a test. Collection must be scoped; see HANDOFF-3.
 
 ---
 
